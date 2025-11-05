@@ -220,7 +220,6 @@
         let selfieStream = null;
         let isSelfieFrozen = false;
         let isSelfieActive = false;
-        let isSelfieTouching = false;
 
         function showError(message) {
             errorMessage.textContent = message;
@@ -521,29 +520,16 @@
             
             if (isSelfieFrozen) {
                 resetSelfieCamera();
-            } else {
-                // Start camera if not active
-                if (!isSelfieActive) {
-                    await openSelfieCamera();
-                    // Wait a moment for camera to initialize
-                    await new Promise(resolve => setTimeout(resolve, 200));
-                }
-                isSelfieTouching = true;
             }
-        });
 
-        selfieCameraHalf.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            
-            if (isSelfieTouching && !isSelfieFrozen && isSelfieActive) {
+            if (!isSelfieActive) {
+                await openSelfieCamera();
+                await new Promise(resolve => setTimeout(resolve, 200));
+            }
+
+            if (isSelfieActive && !isSelfieFrozen) {
                 captureSelfiePhoto();
             }
-            isSelfieTouching = false;
-        });
-
-        selfieCameraHalf.addEventListener('touchcancel', (e) => {
-            e.preventDefault();
-            isSelfieTouching = false;
         });
 
         selfieCameraHalf.addEventListener('touchmove', (e) => {
