@@ -35,6 +35,9 @@
             overflow: hidden;
             background: #000;
             border: 3px solid rgba(255, 255, 255, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .camera-half.upper {
@@ -45,12 +48,36 @@
             border-top-width: 1.5px;
         }
 
+        .placeholder-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 72px;
+            font-weight: 300;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            z-index: 5;
+            pointer-events: none;
+        }
+
+        .placeholder-text.hidden {
+            display: none;
+        }
+
         .video-element {
             width: 100%;
             height: 100%;
             object-fit: cover;
-            display: block;
+            display: none;
             transform-origin: center center;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        .video-element.active {
+            display: block;
         }
 
         .captured-photo {
@@ -77,6 +104,11 @@
             height: 80px;
             pointer-events: none;
             z-index: 10;
+            display: none;
+        }
+
+        .crosshair.active {
+            display: block;
         }
 
         .crosshair::before,
@@ -124,13 +156,15 @@
     <div class="camera-container">
         <!-- Upper half: Back camera with zoom -->
         <div class="camera-half upper" id="backCameraHalf">
+            <div class="placeholder-text" id="backPlaceholder">You</div>
             <video id="backVideoElement" class="video-element" autoplay playsinline></video>
             <img id="backCapturedPhoto" class="captured-photo" alt="Back camera photo">
-            <div class="crosshair"></div>
+            <div class="crosshair" id="backCrosshair"></div>
         </div>
 
         <!-- Lower half: Selfie camera -->
         <div class="camera-half lower" id="selfieCameraHalf">
+            <div class="placeholder-text" id="selfiePlaceholder">Me</div>
             <video id="selfieVideoElement" class="video-element" autoplay playsinline></video>
             <img id="selfieCapturedPhoto" class="captured-photo" alt="Selfie photo">
         </div>
@@ -143,11 +177,14 @@
         const backVideoElement = document.getElementById('backVideoElement');
         const backCapturedPhoto = document.getElementById('backCapturedPhoto');
         const backCameraHalf = document.getElementById('backCameraHalf');
+        const backPlaceholder = document.getElementById('backPlaceholder');
+        const backCrosshair = document.getElementById('backCrosshair');
         
         // Selfie camera elements
         const selfieVideoElement = document.getElementById('selfieVideoElement');
         const selfieCapturedPhoto = document.getElementById('selfieCapturedPhoto');
         const selfieCameraHalf = document.getElementById('selfieCameraHalf');
+        const selfiePlaceholder = document.getElementById('selfiePlaceholder');
         
         const errorMessage = document.getElementById('errorMessage');
         
@@ -158,10 +195,12 @@
         let touchStartTime = null;
         let currentZoom = 1;
         let isBackFrozen = false;
+        let isBackActive = false;
 
         // Selfie camera state
         let selfieStream = null;
         let isSelfieFrozen = false;
+        let isSelfieActive = false;
         let isSelfieTouching = false;
 
         function showError(message) {
@@ -181,10 +220,41 @@
             return true;
         }
 
+        function stopAllCameras() {
+            // Stop back camera
+            if (backStream) {
+                backStream.getTracks().forEach(track => track.stop());
+                backStream = null;
+            }
+            backVideoElement.srcObject = null;
+            backVideoElement.classList.remove('active');
+            backCrosshair.classList.remove('active');
+            isBackActive = false;
+            
+            // Stop selfie camera
+            if (selfieStream) {
+                selfieStream.getTracks().forEach(track => track.stop());
+                selfieStream = null;
+            }
+            selfieVideoElement.srcObject = null;
+            selfieVideoElement.classList.remove('active');
+            isSelfieActive = false;
+            
+            // Stop zoom animation
+            if (zoomAnimationId) {
+                cancelAnimationFrame(zoomAnimationId);
+                zoomAnimationId = null;
+            }
+            isZooming = false;
+        }
+
         async function openBackCamera() {
             if (!checkCameraSupport()) {
                 return;
             }
+
+            // Stop any other active camera
+            stopAllCameras();
 
             try {
                 backStream = await navigator.mediaDevices.getUserMedia({
@@ -196,6 +266,9 @@
                 });
 
                 backVideoElement.srcObject = backStream;
+                backVideoElement.classList.add('active');
+                backCrosshair.classList.add('active');
+                isBackActive = true;
                 
             } catch (error) {
                 console.error('Error accessing back camera:', error);
@@ -210,6 +283,9 @@
                             video: { facingMode: 'environment' } 
                         });
                         backVideoElement.srcObject = backStream;
+                        backVideoElement.classList.add('active');
+                        backCrosshair.classList.add('active');
+                        isBackActive = true;
                     } catch (retryError) {
                         showError('Failed to access back camera.');
                     }
@@ -222,6 +298,9 @@
                 return;
             }
 
+            // Stop any other active camera
+            stopAllCameras();
+
             try {
                 selfieStream = await navigator.mediaDevices.getUserMedia({
                     video: {
@@ -232,22 +311,52 @@
                 });
 
                 selfieVideoElement.srcObject = selfieStream;
+                selfieVideoElement.classList.add('active');
+                isSelfieActive = true;
                 
             } catch (error) {
                 console.error('Error accessing selfie camera:', error);
                 
-                if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-                    showError('Selfie camera access was denied.');
-                } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
-                    showError('No selfie camera found.');
-                } else {
+                try {
+                    const devices = await navigator.mediaDevices.enumerateDevices();
+                    const videoDevices = devices.filter(device => device.kind === 'videoinput');
+                    
+                    if (videoDevices.length > 1) {
+                        const backTrack = backStream?.getVideoTracks()[0];
+                        const backDeviceId = backTrack?.getSettings().deviceId;
+                        
+                        const frontDevice = videoDevices.find(device => 
+                            device.deviceId && device.deviceId !== backDeviceId
+                        );
+                        
+                        if (frontDevice && frontDevice.deviceId) {
+                            selfieStream = await navigator.mediaDevices.getUserMedia({
+                                video: { deviceId: { exact: frontDevice.deviceId } }
+                            });
+                            selfieVideoElement.srcObject = selfieStream;
+                            selfieVideoElement.classList.add('active');
+                            isSelfieActive = true;
+                            return;
+                        }
+                    }
+                    
+                    selfieStream = await navigator.mediaDevices.getUserMedia({ 
+                        video: { facingMode: 'user' } 
+                    });
+                    selfieVideoElement.srcObject = selfieStream;
+                    selfieVideoElement.classList.add('active');
+                    isSelfieActive = true;
+                    
+                } catch (retryError) {
+                    console.error('Retry failed:', retryError);
                     try {
-                        selfieStream = await navigator.mediaDevices.getUserMedia({ 
-                            video: { facingMode: 'user' } 
-                        });
+                        selfieStream = await navigator.mediaDevices.getUserMedia({ video: true });
                         selfieVideoElement.srcObject = selfieStream;
-                    } catch (retryError) {
-                        showError('Failed to access selfie camera.');
+                        selfieVideoElement.classList.add('active');
+                        isSelfieActive = true;
+                    } catch (finalError) {
+                        console.error('Final attempt failed:', finalError);
+                        showError('Selfie camera: ' + (finalError.message || 'Unable to access front camera.'));
                     }
                 }
             }
@@ -255,7 +364,7 @@
 
         // Back camera zoom functions
         function startZoom() {
-            if (isZooming || isBackFrozen) return;
+            if (isZooming || isBackFrozen || !isBackActive) return;
             
             isZooming = true;
             touchStartTime = Date.now();
@@ -294,7 +403,7 @@
         }
 
         function captureBackPhoto() {
-            if (!backStream) return;
+            if (!backStream || !isBackActive) return;
 
             const videoWidth = backVideoElement.videoWidth;
             const videoHeight = backVideoElement.videoHeight;
@@ -322,6 +431,11 @@
             backCapturedPhoto.style.transform = 'scale(1)';
             backCapturedPhoto.classList.add('active');
             backVideoElement.style.display = 'none';
+            backPlaceholder.classList.add('hidden');
+            backCrosshair.classList.remove('active');
+            
+            // Stop camera
+            stopAllCameras();
             
             isBackFrozen = true;
         }
@@ -333,6 +447,7 @@
             backVideoElement.style.display = 'block';
             backVideoElement.style.transition = 'transform 0.3s ease-out';
             backVideoElement.style.transform = 'scale(1)';
+            backPlaceholder.classList.remove('hidden');
             currentZoom = 1;
             isBackFrozen = false;
             isZooming = false;
@@ -345,7 +460,7 @@
 
         // Selfie camera functions
         function captureSelfiePhoto() {
-            if (!selfieStream) return;
+            if (!selfieStream || !isSelfieActive) return;
 
             const halfHeight = window.innerHeight / 2;
             const canvas = document.createElement('canvas');
@@ -360,6 +475,10 @@
             selfieCapturedPhoto.src = photoDataUrl;
             selfieCapturedPhoto.classList.add('active');
             selfieVideoElement.style.display = 'none';
+            selfiePlaceholder.classList.add('hidden');
+            
+            // Stop camera
+            stopAllCameras();
             
             isSelfieFrozen = true;
         }
@@ -369,17 +488,23 @@
             
             selfieCapturedPhoto.classList.remove('active');
             selfieVideoElement.style.display = 'block';
+            selfiePlaceholder.classList.remove('hidden');
             isSelfieFrozen = false;
         }
 
         // Touch event handlers for back camera
-        backCameraHalf.addEventListener('touchstart', (e) => {
+        backCameraHalf.addEventListener('touchstart', async (e) => {
             e.preventDefault();
             
             if (isBackFrozen) {
                 resetBackCamera();
-                setTimeout(() => startZoom(), 50);
             } else {
+                // Start camera if not active
+                if (!isBackActive) {
+                    await openBackCamera();
+                    // Wait a moment for camera to initialize
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                }
                 startZoom();
             }
         });
@@ -387,7 +512,7 @@
         backCameraHalf.addEventListener('touchend', (e) => {
             e.preventDefault();
             
-            if (!isBackFrozen) {
+            if (!isBackFrozen && isBackActive) {
                 stopBackZoom();
             }
         });
@@ -395,7 +520,7 @@
         backCameraHalf.addEventListener('touchcancel', (e) => {
             e.preventDefault();
             
-            if (!isBackFrozen) {
+            if (!isBackFrozen && isBackActive) {
                 stopBackZoom();
             }
         });
@@ -405,12 +530,18 @@
         });
 
         // Touch event handlers for selfie camera
-        selfieCameraHalf.addEventListener('touchstart', (e) => {
+        selfieCameraHalf.addEventListener('touchstart', async (e) => {
             e.preventDefault();
             
             if (isSelfieFrozen) {
                 resetSelfieCamera();
             } else {
+                // Start camera if not active
+                if (!isSelfieActive) {
+                    await openSelfieCamera();
+                    // Wait a moment for camera to initialize
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                }
                 isSelfieTouching = true;
             }
         });
@@ -418,7 +549,7 @@
         selfieCameraHalf.addEventListener('touchend', (e) => {
             e.preventDefault();
             
-            if (isSelfieTouching && !isSelfieFrozen) {
+            if (isSelfieTouching && !isSelfieFrozen && isSelfieActive) {
                 captureSelfiePhoto();
             }
             isSelfieTouching = false;
@@ -433,20 +564,9 @@
             e.preventDefault();
         });
 
-        // Auto-open cameras on page load
-        window.addEventListener('load', () => {
-            openBackCamera();
-            openSelfieCamera();
-        });
-
         // Cleanup when page is closed
         window.addEventListener('beforeunload', () => {
-            if (backStream) {
-                backStream.getTracks().forEach(track => track.stop());
-            }
-            if (selfieStream) {
-                selfieStream.getTracks().forEach(track => track.stop());
-            }
+            stopAllCameras();
         });
     </script>
 </body>
