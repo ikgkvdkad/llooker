@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Photo Capture</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 800px;
+            width: 100%;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+
+        .camera-section {
+            margin-bottom: 30px;
+        }
+
+        #videoElement {
+            width: 100%;
+            max-width: 100%;
+            border-radius: 10px;
+            display: none;
+            background: #000;
+        }
+
+        #videoElement.active {
+            display: block;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 20px;
+        }
+
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+        }
+
+        #openCameraBtn {
+            background: #667eea;
+            color: white;
+        }
+
+        #openCameraBtn:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        #captureBtn {
+            background: #48bb78;
+            color: white;
+            display: none;
+        }
+
+        #captureBtn.active {
+            display: block;
+        }
+
+        #captureBtn:hover {
+            background: #38a169;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(72, 187, 120, 0.4);
+        }
+
+        #stopCameraBtn {
+            background: #f56565;
+            color: white;
+            display: none;
+        }
+
+        #stopCameraBtn.active {
+            display: block;
+        }
+
+        #stopCameraBtn:hover {
+            background: #e53e3e;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(245, 101, 101, 0.4);
+        }
+
+        #downloadBtn {
+            background: #ed8936;
+            color: white;
+            display: none;
+        }
+
+        #downloadBtn.active {
+            display: block;
+        }
+
+        #downloadBtn:hover {
+            background: #dd6b20;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(237, 137, 54, 0.4);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .photo-section {
+            margin-top: 30px;
+            text-align: center;
+        }
+
+        #capturedPhoto {
+            max-width: 100%;
+            border-radius: 10px;
+            display: none;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        #capturedPhoto.active {
+            display: block;
+            margin: 0 auto;
+        }
+
+        .error-message {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            display: none;
+            text-align: center;
+            font-weight: 500;
+        }
+
+        .error-message.active {
+            display: block;
+        }
+
+        .status-message {
+            text-align: center;
+            margin-top: 15px;
+            color: #666;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📷 Camera Photo Capture</h1>
+        
+        <div class="camera-section">
+            <video id="videoElement" autoplay playsinline></video>
+            
+            <div class="button-group">
+                <button id="openCameraBtn">Open Camera</button>
+                <button id="captureBtn">Capture Photo</button>
+                <button id="stopCameraBtn">Stop Camera</button>
+                <button id="downloadBtn">Download Photo</button>
+            </div>
+        </div>
+
+        <div class="photo-section">
+            <img id="capturedPhoto" alt="Captured photo">
+        </div>
+
+        <div id="errorMessage" class="error-message"></div>
+        <div id="statusMessage" class="status-message"></div>
+    </div>
+
+    <script>
+        const videoElement = document.getElementById('videoElement');
+        const openCameraBtn = document.getElementById('openCameraBtn');
+        const captureBtn = document.getElementById('captureBtn');
+        const stopCameraBtn = document.getElementById('stopCameraBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const capturedPhoto = document.getElementById('capturedPhoto');
+        const errorMessage = document.getElementById('errorMessage');
+        const statusMessage = document.getElementById('statusMessage');
+        
+        let stream = null;
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.classList.add('active');
+            statusMessage.textContent = '';
+        }
+
+        function hideError() {
+            errorMessage.classList.remove('active');
+        }
+
+        function updateStatus(message) {
+            statusMessage.textContent = message;
+            hideError();
+        }
+
+        function checkCameraSupport() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                showError('Camera API is not supported in this browser. Please use a modern browser like Chrome, Firefox, or Safari.');
+                return false;
+            }
+            return true;
+        }
+
+        async function openCamera() {
+            if (!checkCameraSupport()) {
+                return;
+            }
+
+            hideError();
+            updateStatus('Requesting camera access...');
+
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'user', // Use front camera by default, change to 'environment' for back camera
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                });
+
+                videoElement.srcObject = stream;
+                videoElement.classList.add('active');
+                captureBtn.classList.add('active');
+                stopCameraBtn.classList.add('active');
+                openCameraBtn.disabled = true;
+                updateStatus('Camera is ready. Click "Capture Photo" to take a picture.');
+
+            } catch (error) {
+                console.error('Error accessing camera:', error);
+                
+                if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+                    showError('Camera access was denied. Please allow camera permissions and try again.');
+                } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+                    showError('No camera found. Please connect a camera and try again.');
+                } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+                    showError('Camera is already in use by another application. Please close other applications using the camera.');
+                } else if (error.name === 'OverconstrainedError') {
+                    showError('Camera constraints could not be satisfied. Trying with default settings...');
+                    // Retry with simpler constraints
+                    try {
+                        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                        videoElement.srcObject = stream;
+                        videoElement.classList.add('active');
+                        captureBtn.classList.add('active');
+                        stopCameraBtn.classList.add('active');
+                        openCameraBtn.disabled = true;
+                        updateStatus('Camera is ready. Click "Capture Photo" to take a picture.');
+                    } catch (retryError) {
+                        showError('Failed to access camera. Error: ' + retryError.message);
+                    }
+                } else {
+                    showError('Failed to access camera. Error: ' + error.message);
+                }
+            }
+        }
+
+        function capturePhoto() {
+            if (!stream) {
+                showError('Camera is not open. Please open the camera first.');
+                return;
+            }
+
+            hideError();
+
+            const canvas = document.createElement('canvas');
+            canvas.width = videoElement.videoWidth;
+            canvas.height = videoElement.videoHeight;
+            
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+
+            const photoDataUrl = canvas.toDataURL('image/png');
+            capturedPhoto.src = photoDataUrl;
+            capturedPhoto.classList.add('active');
+            downloadBtn.classList.add('active');
+            
+            // Store photo data URL for download
+            capturedPhoto.dataset.photoUrl = photoDataUrl;
+            
+            updateStatus('Photo captured! You can download it or capture another one.');
+        }
+
+        function stopCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+
+            videoElement.srcObject = null;
+            videoElement.classList.remove('active');
+            captureBtn.classList.remove('active');
+            stopCameraBtn.classList.remove('active');
+            openCameraBtn.disabled = false;
+            updateStatus('Camera stopped.');
+        }
+
+        function downloadPhoto() {
+            const photoUrl = capturedPhoto.dataset.photoUrl;
+            if (!photoUrl) {
+                showError('No photo to download. Please capture a photo first.');
+                return;
+            }
+
+            const link = document.createElement('a');
+            link.download = `photo-${Date.now()}.png`;
+            link.href = photoUrl;
+            link.click();
+            updateStatus('Photo downloaded!');
+        }
+
+        // Event listeners
+        openCameraBtn.addEventListener('click', openCamera);
+        captureBtn.addEventListener('click', capturePhoto);
+        stopCameraBtn.addEventListener('click', stopCamera);
+        downloadBtn.addEventListener('click', downloadPhoto);
+
+        // Cleanup when page is closed
+        window.addEventListener('beforeunload', () => {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+        });
+    </script>
+</body>
+</html>
