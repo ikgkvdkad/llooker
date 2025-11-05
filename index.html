@@ -194,14 +194,18 @@
                 
                 const elapsed = Date.now() - touchStartTime;
                 const progress = Math.min(elapsed / 3000, 1); // 3 seconds total
-                currentZoom = 1 + (progress * 2); // 1x to 3x
+                currentZoom = 1 + (progress * 3); // 1x to 4x
                 
                 videoElement.style.transform = `scale(${currentZoom})`;
                 
                 if (progress < 1) {
                     zoomAnimationId = requestAnimationFrame(animateZoom);
                 } else {
-                    isZooming = false;
+                    // At max zoom, ensure currentZoom is exactly 4
+                    currentZoom = 4;
+                    videoElement.style.transform = `scale(4)`;
+                    // Continue animation loop to keep transform updated
+                    zoomAnimationId = requestAnimationFrame(animateZoom);
                 }
             };
             
@@ -209,34 +213,41 @@
         }
 
         function stopZoom() {
-            if (!isZooming) return;
-            
-            isZooming = false;
+            // Always capture, even if not actively zooming (e.g., at max zoom)
             if (zoomAnimationId) {
                 cancelAnimationFrame(zoomAnimationId);
                 zoomAnimationId = null;
             }
             
+            isZooming = false;
             capturePhoto();
         }
 
         function capturePhoto() {
             if (!stream) return;
 
+            // Capture the visible portion at full video resolution
+            // When zoomed to currentZoom, we see 1/currentZoom of the video
+            const videoWidth = videoElement.videoWidth;
+            const videoHeight = videoElement.videoHeight;
+            
+            // Calculate the visible portion based on zoom (in video pixels)
+            const sourceWidth = videoWidth / currentZoom;
+            const sourceHeight = videoHeight / currentZoom;
+            const sourceX = (videoWidth - sourceWidth) / 2;
+            const sourceY = (videoHeight - sourceHeight) / 2;
+            
+            // Create canvas at screen size to maintain aspect ratio
+            const screenWidth = window.innerWidth;
+            const screenHeight = window.innerHeight;
             const canvas = document.createElement('canvas');
-            canvas.width = videoElement.videoWidth;
-            canvas.height = videoElement.videoHeight;
+            canvas.width = screenWidth;
+            canvas.height = screenHeight;
             
             const ctx = canvas.getContext('2d');
             
-            // Calculate the crop area based on current zoom
-            const scale = currentZoom;
-            const sourceWidth = canvas.width / scale;
-            const sourceHeight = canvas.height / scale;
-            const sourceX = (canvas.width - sourceWidth) / 2;
-            const sourceY = (canvas.height - sourceHeight) / 2;
-            
-            // Draw the zoomed portion
+            // Draw the visible portion from video, scaled to screen size
+            // This captures exactly what was visible at full quality
             ctx.drawImage(
                 videoElement,
                 sourceX, sourceY, sourceWidth, sourceHeight,
@@ -245,7 +256,8 @@
 
             const photoDataUrl = canvas.toDataURL('image/png');
             capturedPhoto.src = photoDataUrl;
-            capturedPhoto.style.transform = `scale(${currentZoom})`;
+            // Display at 1x scale - it matches exactly what was shown
+            capturedPhoto.style.transform = 'scale(1)';
             capturedPhoto.classList.add('active');
             videoElement.style.display = 'none';
             
