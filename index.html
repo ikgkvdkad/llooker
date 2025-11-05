@@ -22,14 +22,30 @@
         }
 
         .camera-container {
-            position: relative;
+            display: flex;
+            flex-direction: column;
             width: 100vw;
             height: 100vh;
-            overflow: hidden;
-            background: #000;
         }
 
-        #videoElement {
+        .camera-half {
+            position: relative;
+            width: 100%;
+            height: 50%;
+            overflow: hidden;
+            background: #000;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .camera-half.upper {
+            border-bottom-width: 1.5px;
+        }
+
+        .camera-half.lower {
+            border-top-width: 1.5px;
+        }
+
+        .video-element {
             width: 100%;
             height: 100%;
             object-fit: cover;
@@ -37,7 +53,7 @@
             transform-origin: center center;
         }
 
-        #capturedPhoto {
+        .captured-photo {
             width: 100%;
             height: 100%;
             object-fit: cover;
@@ -48,7 +64,7 @@
             transform-origin: center center;
         }
 
-        #capturedPhoto.active {
+        .captured-photo.active {
             display: block;
         }
 
@@ -106,24 +122,47 @@
 </head>
 <body>
     <div class="camera-container">
-        <video id="videoElement" autoplay playsinline></video>
-        <img id="capturedPhoto" alt="Captured photo">
-        <div class="crosshair"></div>
+        <!-- Upper half: Back camera with zoom -->
+        <div class="camera-half upper" id="backCameraHalf">
+            <video id="backVideoElement" class="video-element" autoplay playsinline></video>
+            <img id="backCapturedPhoto" class="captured-photo" alt="Back camera photo">
+            <div class="crosshair"></div>
+        </div>
+
+        <!-- Lower half: Selfie camera -->
+        <div class="camera-half lower" id="selfieCameraHalf">
+            <video id="selfieVideoElement" class="video-element" autoplay playsinline></video>
+            <img id="selfieCapturedPhoto" class="captured-photo" alt="Selfie photo">
+        </div>
+
         <div id="errorMessage" class="error-message"></div>
     </div>
 
     <script>
-        const videoElement = document.getElementById('videoElement');
-        const capturedPhoto = document.getElementById('capturedPhoto');
-        const errorMessage = document.getElementById('errorMessage');
-        const cameraContainer = document.querySelector('.camera-container');
+        // Back camera elements
+        const backVideoElement = document.getElementById('backVideoElement');
+        const backCapturedPhoto = document.getElementById('backCapturedPhoto');
+        const backCameraHalf = document.getElementById('backCameraHalf');
         
-        let stream = null;
+        // Selfie camera elements
+        const selfieVideoElement = document.getElementById('selfieVideoElement');
+        const selfieCapturedPhoto = document.getElementById('selfieCapturedPhoto');
+        const selfieCameraHalf = document.getElementById('selfieCameraHalf');
+        
+        const errorMessage = document.getElementById('errorMessage');
+        
+        // Back camera state
+        let backStream = null;
         let isZooming = false;
         let zoomAnimationId = null;
         let touchStartTime = null;
         let currentZoom = 1;
-        let isFrozen = false;
+        let isBackFrozen = false;
+
+        // Selfie camera state
+        let selfieStream = null;
+        let isSelfieFrozen = false;
+        let isSelfieTouching = false;
 
         function showError(message) {
             errorMessage.textContent = message;
@@ -142,15 +181,13 @@
             return true;
         }
 
-        async function openCamera() {
+        async function openBackCamera() {
             if (!checkCameraSupport()) {
                 return;
             }
 
-            hideError();
-
             try {
-                stream = await navigator.mediaDevices.getUserMedia({
+                backStream = await navigator.mediaDevices.getUserMedia({
                     video: {
                         facingMode: 'environment',
                         width: { ideal: 1920 },
@@ -158,36 +195,72 @@
                     }
                 });
 
-                videoElement.srcObject = stream;
+                backVideoElement.srcObject = backStream;
                 
             } catch (error) {
-                console.error('Error accessing camera:', error);
+                console.error('Error accessing back camera:', error);
                 
                 if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-                    showError('Camera access was denied. Please allow camera permissions.');
+                    showError('Back camera access was denied.');
                 } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
-                    showError('No camera found.');
-                } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
-                    showError('Camera is already in use by another application.');
+                    showError('No back camera found.');
                 } else {
-                    // Retry with simpler constraints
                     try {
-                        stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                        videoElement.srcObject = stream;
+                        backStream = await navigator.mediaDevices.getUserMedia({ 
+                            video: { facingMode: 'environment' } 
+                        });
+                        backVideoElement.srcObject = backStream;
                     } catch (retryError) {
-                        showError('Failed to access camera.');
+                        showError('Failed to access back camera.');
                     }
                 }
             }
         }
 
+        async function openSelfieCamera() {
+            if (!checkCameraSupport()) {
+                return;
+            }
+
+            try {
+                selfieStream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'user',
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    }
+                });
+
+                selfieVideoElement.srcObject = selfieStream;
+                
+            } catch (error) {
+                console.error('Error accessing selfie camera:', error);
+                
+                if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+                    showError('Selfie camera access was denied.');
+                } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+                    showError('No selfie camera found.');
+                } else {
+                    try {
+                        selfieStream = await navigator.mediaDevices.getUserMedia({ 
+                            video: { facingMode: 'user' } 
+                        });
+                        selfieVideoElement.srcObject = selfieStream;
+                    } catch (retryError) {
+                        showError('Failed to access selfie camera.');
+                    }
+                }
+            }
+        }
+
+        // Back camera zoom functions
         function startZoom() {
-            if (isZooming || isFrozen) return;
+            if (isZooming || isBackFrozen) return;
             
             isZooming = true;
             touchStartTime = Date.now();
             currentZoom = 1;
-            videoElement.style.transition = 'none';
+            backVideoElement.style.transition = 'none';
             
             const animateZoom = () => {
                 if (!isZooming) return;
@@ -196,15 +269,13 @@
                 const progress = Math.min(elapsed / 3000, 1); // 3 seconds total
                 currentZoom = 1 + (progress * 3); // 1x to 4x
                 
-                videoElement.style.transform = `scale(${currentZoom})`;
+                backVideoElement.style.transform = `scale(${currentZoom})`;
                 
                 if (progress < 1) {
                     zoomAnimationId = requestAnimationFrame(animateZoom);
                 } else {
-                    // At max zoom, ensure currentZoom is exactly 4
                     currentZoom = 4;
-                    videoElement.style.transform = `scale(4)`;
-                    // Continue animation loop to keep transform updated
+                    backVideoElement.style.transform = `scale(4)`;
                     zoomAnimationId = requestAnimationFrame(animateZoom);
                 }
             };
@@ -212,67 +283,58 @@
             animateZoom();
         }
 
-        function stopZoom() {
-            // Always capture, even if not actively zooming (e.g., at max zoom)
+        function stopBackZoom() {
             if (zoomAnimationId) {
                 cancelAnimationFrame(zoomAnimationId);
                 zoomAnimationId = null;
             }
             
             isZooming = false;
-            capturePhoto();
+            captureBackPhoto();
         }
 
-        function capturePhoto() {
-            if (!stream) return;
+        function captureBackPhoto() {
+            if (!backStream) return;
 
-            // Capture the visible portion at full video resolution
-            // When zoomed to currentZoom, we see 1/currentZoom of the video
-            const videoWidth = videoElement.videoWidth;
-            const videoHeight = videoElement.videoHeight;
+            const videoWidth = backVideoElement.videoWidth;
+            const videoHeight = backVideoElement.videoHeight;
             
-            // Calculate the visible portion based on zoom (in video pixels)
             const sourceWidth = videoWidth / currentZoom;
             const sourceHeight = videoHeight / currentZoom;
             const sourceX = (videoWidth - sourceWidth) / 2;
             const sourceY = (videoHeight - sourceHeight) / 2;
             
-            // Create canvas at screen size to maintain aspect ratio
-            const screenWidth = window.innerWidth;
-            const screenHeight = window.innerHeight;
+            const halfHeight = window.innerHeight / 2;
             const canvas = document.createElement('canvas');
-            canvas.width = screenWidth;
-            canvas.height = screenHeight;
+            canvas.width = window.innerWidth;
+            canvas.height = halfHeight;
             
             const ctx = canvas.getContext('2d');
             
-            // Draw the visible portion from video, scaled to screen size
-            // This captures exactly what was visible at full quality
             ctx.drawImage(
-                videoElement,
+                backVideoElement,
                 sourceX, sourceY, sourceWidth, sourceHeight,
                 0, 0, canvas.width, canvas.height
             );
 
             const photoDataUrl = canvas.toDataURL('image/png');
-            capturedPhoto.src = photoDataUrl;
-            // Display at 1x scale - it matches exactly what was shown
-            capturedPhoto.style.transform = 'scale(1)';
-            capturedPhoto.classList.add('active');
-            videoElement.style.display = 'none';
+            backCapturedPhoto.src = photoDataUrl;
+            backCapturedPhoto.style.transform = 'scale(1)';
+            backCapturedPhoto.classList.add('active');
+            backVideoElement.style.display = 'none';
             
-            isFrozen = true;
+            isBackFrozen = true;
         }
 
-        function resetCamera() {
-            if (!isFrozen) return;
+        function resetBackCamera() {
+            if (!isBackFrozen) return;
             
-            capturedPhoto.classList.remove('active');
-            videoElement.style.display = 'block';
-            videoElement.style.transition = 'transform 0.3s ease-out';
-            videoElement.style.transform = 'scale(1)';
+            backCapturedPhoto.classList.remove('active');
+            backVideoElement.style.display = 'block';
+            backVideoElement.style.transition = 'transform 0.3s ease-out';
+            backVideoElement.style.transform = 'scale(1)';
             currentZoom = 1;
-            isFrozen = false;
+            isBackFrozen = false;
             isZooming = false;
             
             if (zoomAnimationId) {
@@ -281,49 +343,109 @@
             }
         }
 
-        // Touch event handlers
-        cameraContainer.addEventListener('touchstart', (e) => {
+        // Selfie camera functions
+        function captureSelfiePhoto() {
+            if (!selfieStream) return;
+
+            const halfHeight = window.innerHeight / 2;
+            const canvas = document.createElement('canvas');
+            canvas.width = window.innerWidth;
+            canvas.height = halfHeight;
+            
+            const ctx = canvas.getContext('2d');
+            
+            ctx.drawImage(selfieVideoElement, 0, 0, canvas.width, canvas.height);
+
+            const photoDataUrl = canvas.toDataURL('image/png');
+            selfieCapturedPhoto.src = photoDataUrl;
+            selfieCapturedPhoto.classList.add('active');
+            selfieVideoElement.style.display = 'none';
+            
+            isSelfieFrozen = true;
+        }
+
+        function resetSelfieCamera() {
+            if (!isSelfieFrozen) return;
+            
+            selfieCapturedPhoto.classList.remove('active');
+            selfieVideoElement.style.display = 'block';
+            isSelfieFrozen = false;
+        }
+
+        // Touch event handlers for back camera
+        backCameraHalf.addEventListener('touchstart', (e) => {
             e.preventDefault();
             
-            if (isFrozen) {
-                resetCamera();
-                // Start zooming immediately after reset
+            if (isBackFrozen) {
+                resetBackCamera();
                 setTimeout(() => startZoom(), 50);
             } else {
                 startZoom();
             }
         });
 
-        cameraContainer.addEventListener('touchend', (e) => {
+        backCameraHalf.addEventListener('touchend', (e) => {
             e.preventDefault();
             
-            if (!isFrozen) {
-                stopZoom();
+            if (!isBackFrozen) {
+                stopBackZoom();
             }
         });
 
-        cameraContainer.addEventListener('touchcancel', (e) => {
+        backCameraHalf.addEventListener('touchcancel', (e) => {
             e.preventDefault();
             
-            if (!isFrozen) {
-                stopZoom();
+            if (!isBackFrozen) {
+                stopBackZoom();
             }
         });
 
-        // Prevent default touch behaviors
-        cameraContainer.addEventListener('touchmove', (e) => {
+        backCameraHalf.addEventListener('touchmove', (e) => {
             e.preventDefault();
         });
 
-        // Auto-open camera on page load
+        // Touch event handlers for selfie camera
+        selfieCameraHalf.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            
+            if (isSelfieFrozen) {
+                resetSelfieCamera();
+            } else {
+                isSelfieTouching = true;
+            }
+        });
+
+        selfieCameraHalf.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            
+            if (isSelfieTouching && !isSelfieFrozen) {
+                captureSelfiePhoto();
+            }
+            isSelfieTouching = false;
+        });
+
+        selfieCameraHalf.addEventListener('touchcancel', (e) => {
+            e.preventDefault();
+            isSelfieTouching = false;
+        });
+
+        selfieCameraHalf.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+        });
+
+        // Auto-open cameras on page load
         window.addEventListener('load', () => {
-            openCamera();
+            openBackCamera();
+            openSelfieCamera();
         });
 
         // Cleanup when page is closed
         window.addEventListener('beforeunload', () => {
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
+            if (backStream) {
+                backStream.getTracks().forEach(track => track.stop());
+            }
+            if (selfieStream) {
+                selfieStream.getTracks().forEach(track => track.stop());
             }
         });
     </script>
