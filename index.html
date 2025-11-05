@@ -269,6 +269,8 @@
                 backVideoElement.classList.add('active');
                 backCrosshair.classList.add('active');
                 isBackActive = true;
+                // Hide placeholder once camera is active
+                backPlaceholder.classList.add('hidden');
                 
             } catch (error) {
                 console.error('Error accessing back camera:', error);
@@ -286,6 +288,7 @@
                         backVideoElement.classList.add('active');
                         backCrosshair.classList.add('active');
                         isBackActive = true;
+                        backPlaceholder.classList.add('hidden');
                     } catch (retryError) {
                         showError('Failed to access back camera.');
                     }
@@ -312,7 +315,11 @@
 
                 selfieVideoElement.srcObject = selfieStream;
                 selfieVideoElement.classList.add('active');
+                // Zoom out selfie camera as far as possible
+                selfieVideoElement.style.transform = 'scale(0.5)';
                 isSelfieActive = true;
+                // Hide placeholder once camera is active
+                selfiePlaceholder.classList.add('hidden');
                 
             } catch (error) {
                 console.error('Error accessing selfie camera:', error);
@@ -335,7 +342,9 @@
                             });
                             selfieVideoElement.srcObject = selfieStream;
                             selfieVideoElement.classList.add('active');
+                            selfieVideoElement.style.transform = 'scale(0.5)';
                             isSelfieActive = true;
+                            selfiePlaceholder.classList.add('hidden');
                             return;
                         }
                     }
@@ -345,7 +354,9 @@
                     });
                     selfieVideoElement.srcObject = selfieStream;
                     selfieVideoElement.classList.add('active');
+                    selfieVideoElement.style.transform = 'scale(0.5)';
                     isSelfieActive = true;
+                    selfiePlaceholder.classList.add('hidden');
                     
                 } catch (retryError) {
                     console.error('Retry failed:', retryError);
@@ -353,7 +364,9 @@
                         selfieStream = await navigator.mediaDevices.getUserMedia({ video: true });
                         selfieVideoElement.srcObject = selfieStream;
                         selfieVideoElement.classList.add('active');
+                        selfieVideoElement.style.transform = 'scale(0.5)';
                         isSelfieActive = true;
+                        selfiePlaceholder.classList.add('hidden');
                     } catch (finalError) {
                         console.error('Final attempt failed:', finalError);
                         showError('Selfie camera: ' + (finalError.message || 'Unable to access front camera.'));
@@ -407,19 +420,38 @@
 
             const videoWidth = backVideoElement.videoWidth;
             const videoHeight = backVideoElement.videoHeight;
+            const videoAspect = videoWidth / videoHeight;
             
+            // Calculate visible area based on zoom
             const sourceWidth = videoWidth / currentZoom;
             const sourceHeight = videoHeight / currentZoom;
             const sourceX = (videoWidth - sourceWidth) / 2;
             const sourceY = (videoHeight - sourceHeight) / 2;
             
-            const halfHeight = window.innerHeight / 2;
+            // Get container dimensions
+            const containerWidth = window.innerWidth;
+            const containerHeight = window.innerHeight / 2;
+            const containerAspect = containerWidth / containerHeight;
+            
+            // Calculate canvas dimensions to match video aspect ratio
+            let canvasWidth, canvasHeight;
+            if (videoAspect > containerAspect) {
+                // Video is wider - fit to width
+                canvasWidth = containerWidth;
+                canvasHeight = containerWidth / videoAspect;
+            } else {
+                // Video is taller - fit to height
+                canvasHeight = containerHeight;
+                canvasWidth = containerHeight * videoAspect;
+            }
+            
             const canvas = document.createElement('canvas');
-            canvas.width = window.innerWidth;
-            canvas.height = halfHeight;
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
             
             const ctx = canvas.getContext('2d');
             
+            // Draw the visible portion maintaining aspect ratio
             ctx.drawImage(
                 backVideoElement,
                 sourceX, sourceY, sourceWidth, sourceHeight,
@@ -447,7 +479,7 @@
             backVideoElement.style.display = 'block';
             backVideoElement.style.transition = 'transform 0.3s ease-out';
             backVideoElement.style.transform = 'scale(1)';
-            backPlaceholder.classList.remove('hidden');
+            // Don't show placeholder again - it's only shown initially
             currentZoom = 1;
             isBackFrozen = false;
             isZooming = false;
@@ -462,17 +494,44 @@
         function captureSelfiePhoto() {
             if (!selfieStream || !isSelfieActive) return;
 
-            const halfHeight = window.innerHeight / 2;
+            const videoWidth = selfieVideoElement.videoWidth;
+            const videoHeight = selfieVideoElement.videoHeight;
+            const videoAspect = videoWidth / videoHeight;
+            
+            // Get container dimensions
+            const containerWidth = window.innerWidth;
+            const containerHeight = window.innerHeight / 2;
+            const containerAspect = containerWidth / containerHeight;
+            
+            // Calculate canvas dimensions to match video aspect ratio
+            let canvasWidth, canvasHeight;
+            if (videoAspect > containerAspect) {
+                // Video is wider - fit to width
+                canvasWidth = containerWidth;
+                canvasHeight = containerWidth / videoAspect;
+            } else {
+                // Video is taller - fit to height
+                canvasHeight = containerHeight;
+                canvasWidth = containerHeight * videoAspect;
+            }
+            
             const canvas = document.createElement('canvas');
-            canvas.width = window.innerWidth;
-            canvas.height = halfHeight;
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
             
             const ctx = canvas.getContext('2d');
             
-            ctx.drawImage(selfieVideoElement, 0, 0, canvas.width, canvas.height);
+            // Draw the full video frame (the scale(0.5) transform is just for display)
+            // Capture the full frame to maintain aspect ratio
+            ctx.drawImage(
+                selfieVideoElement,
+                0, 0, videoWidth, videoHeight,
+                0, 0, canvas.width, canvas.height
+            );
 
             const photoDataUrl = canvas.toDataURL('image/png');
             selfieCapturedPhoto.src = photoDataUrl;
+            selfieCapturedPhoto.style.transform = 'scale(1)';
             selfieCapturedPhoto.classList.add('active');
             selfieVideoElement.style.display = 'none';
             selfiePlaceholder.classList.add('hidden');
@@ -488,7 +547,9 @@
             
             selfieCapturedPhoto.classList.remove('active');
             selfieVideoElement.style.display = 'block';
-            selfiePlaceholder.classList.remove('hidden');
+            // Restore zoom out transform
+            selfieVideoElement.style.transform = 'scale(0.5)';
+            // Don't show placeholder again - it's only shown initially
             isSelfieFrozen = false;
         }
 
