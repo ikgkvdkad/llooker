@@ -80,30 +80,52 @@
             display: block;
         }
 
-        .captured-photo {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            display: none;
-            position: absolute;
+        .video-element.fullscreen {
+            position: fixed;
             top: 0;
             left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1000;
+        }
+
+        .captured-photo {
+            display: none;
+            position: absolute;
             transform-origin: center center;
+            object-fit: contain;
         }
 
         .captured-photo.active {
             display: block;
         }
 
+        /* Portrait aspect ratio - height fills half screen, centered with black bars */
+        #backCapturedPhoto {
+            height: 50vh;
+            width: auto;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        #selfieCapturedPhoto {
+            height: 50vh;
+            width: auto;
+            top: 50vh;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
         .crosshair {
-            position: absolute;
+            position: fixed;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
             width: 80px;
             height: 80px;
             pointer-events: none;
-            z-index: 10;
+            z-index: 1001;
             display: none;
         }
 
@@ -258,6 +280,7 @@
 
                 backVideoElement.srcObject = backStream;
                 backVideoElement.classList.add('active');
+                backVideoElement.classList.add('fullscreen');
                 backVideoElement.style.transform = `scale(${currentZoom})`;
                 backCrosshair.classList.add('active');
                 isBackActive = true;
@@ -278,6 +301,7 @@
                         });
                         backVideoElement.srcObject = backStream;
                         backVideoElement.classList.add('active');
+                        backVideoElement.classList.add('fullscreen');
                         backVideoElement.style.transform = `scale(${currentZoom})`;
                         backCrosshair.classList.add('active');
                         isBackActive = true;
@@ -308,7 +332,7 @@
 
                 selfieVideoElement.srcObject = selfieStream;
                 selfieVideoElement.classList.add('active');
-                // No transform - let object-fit: cover fill the screen
+                selfieVideoElement.classList.add('fullscreen');
                 isSelfieActive = true;
                 // Hide placeholder once camera is active
                 selfiePlaceholder.classList.add('hidden');
@@ -334,6 +358,7 @@
                             });
                             selfieVideoElement.srcObject = selfieStream;
                             selfieVideoElement.classList.add('active');
+                            selfieVideoElement.classList.add('fullscreen');
                             isSelfieActive = true;
                             selfiePlaceholder.classList.add('hidden');
                             return;
@@ -345,6 +370,7 @@
                     });
                     selfieVideoElement.srcObject = selfieStream;
                     selfieVideoElement.classList.add('active');
+                    selfieVideoElement.classList.add('fullscreen');
                     isSelfieActive = true;
                     selfiePlaceholder.classList.add('hidden');
                     
@@ -354,6 +380,7 @@
                         selfieStream = await navigator.mediaDevices.getUserMedia({ video: true });
                         selfieVideoElement.srcObject = selfieStream;
                         selfieVideoElement.classList.add('active');
+                        selfieVideoElement.classList.add('fullscreen');
                         isSelfieActive = true;
                         selfiePlaceholder.classList.add('hidden');
                     } catch (finalError) {
@@ -371,6 +398,7 @@
 
             const videoWidth = backVideoElement.videoWidth;
             const videoHeight = backVideoElement.videoHeight;
+            const videoAspect = videoWidth / videoHeight;
             
             // Calculate visible area based on constant zoom
             const sourceWidth = videoWidth / currentZoom;
@@ -378,17 +406,17 @@
             const sourceX = (videoWidth - sourceWidth) / 2;
             const sourceY = (videoHeight - sourceHeight) / 2;
             
-            // Get container dimensions - fill the half screen completely
-            const containerWidth = window.innerWidth;
-            const containerHeight = window.innerHeight / 2;
+            // Target height is half screen (portrait orientation)
+            const targetHeight = window.innerHeight / 2;
+            const targetWidth = targetHeight * videoAspect;
             
             const canvas = document.createElement('canvas');
-            canvas.width = containerWidth;
-            canvas.height = containerHeight;
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
             
             const ctx = canvas.getContext('2d');
             
-            // Fill the canvas completely, drawing the zoomed portion
+            // Draw the zoomed portion maintaining aspect ratio
             ctx.drawImage(
                 backVideoElement,
                 sourceX, sourceY, sourceWidth, sourceHeight,
@@ -398,7 +426,8 @@
             const photoDataUrl = canvas.toDataURL('image/png');
             backCapturedPhoto.src = photoDataUrl;
             backCapturedPhoto.classList.add('active');
-            backVideoElement.style.display = 'none';
+            backVideoElement.classList.remove('active');
+            backVideoElement.classList.remove('fullscreen');
             backPlaceholder.classList.add('hidden');
             backCrosshair.classList.remove('active');
             
@@ -412,7 +441,6 @@
             if (!isBackFrozen) return;
             
             backCapturedPhoto.classList.remove('active');
-            backVideoElement.style.display = 'block';
             backVideoElement.style.transform = `scale(${currentZoom})`;
             // Don't show placeholder again - it's only shown initially
             isBackFrozen = false;
@@ -424,18 +452,19 @@
 
             const videoWidth = selfieVideoElement.videoWidth;
             const videoHeight = selfieVideoElement.videoHeight;
+            const videoAspect = videoWidth / videoHeight;
             
-            // Get container dimensions - fill the half screen completely
-            const containerWidth = window.innerWidth;
-            const containerHeight = window.innerHeight / 2;
+            // Target height is half screen (portrait orientation)
+            const targetHeight = window.innerHeight / 2;
+            const targetWidth = targetHeight * videoAspect;
             
             const canvas = document.createElement('canvas');
-            canvas.width = containerWidth;
-            canvas.height = containerHeight;
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
             
             const ctx = canvas.getContext('2d');
             
-            // Fill the canvas completely with the full video frame
+            // Draw the full video frame maintaining aspect ratio
             ctx.drawImage(
                 selfieVideoElement,
                 0, 0, videoWidth, videoHeight,
@@ -445,7 +474,8 @@
             const photoDataUrl = canvas.toDataURL('image/png');
             selfieCapturedPhoto.src = photoDataUrl;
             selfieCapturedPhoto.classList.add('active');
-            selfieVideoElement.style.display = 'none';
+            selfieVideoElement.classList.remove('active');
+            selfieVideoElement.classList.remove('fullscreen');
             selfiePlaceholder.classList.add('hidden');
             
             // Stop camera
@@ -458,7 +488,6 @@
             if (!isSelfieFrozen) return;
             
             selfieCapturedPhoto.classList.remove('active');
-            selfieVideoElement.style.display = 'block';
             // Don't show placeholder again - it's only shown initially
             isSelfieFrozen = false;
         }
