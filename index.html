@@ -237,7 +237,7 @@
         updateCameraHalfAspect('selfie', DEFAULT_SELFIE_ASPECT);
         
         // Back camera state
-        const BACK_TARGET_ZOOM = 2;
+        const BACK_TARGET_ZOOM = 3;
         const SELFIE_ZOOM_MODE = 'min';
 
         let backStream = null;
@@ -374,8 +374,8 @@
         async function activateBackStream(stream) {
             const zoomResult = await applyZoomSetting(stream, BACK_TARGET_ZOOM);
             if (!zoomResult.success) {
-                stopStream(stream);
-                  showError('Back camera (requires 2x zoom): ' + zoomResult.reason);
+                  stopStream(stream);
+                    showError('Back camera (requires 3x zoom): ' + zoomResult.reason);
                 return false;
             }
 
@@ -391,9 +391,9 @@
                 ]);
 
                 if (!zoomSettled.success) {
-                    stopStream(stream);
-                    backVideoElement.srcObject = null;
-                      showError('Back camera (requires 2x zoom): ' + zoomSettled.reason);
+                      stopStream(stream);
+                      backVideoElement.srcObject = null;
+                        showError('Back camera (requires 3x zoom): ' + zoomSettled.reason);
                     return false;
                 }
 
@@ -402,9 +402,9 @@
                     : (typeof track.getSettings === 'function' ? track.getSettings().zoom : undefined);
 
                 if (typeof verifiedZoom === 'number' && Math.abs(verifiedZoom - BACK_TARGET_ZOOM) > 0.05) {
-                    stopStream(stream);
-                    backVideoElement.srcObject = null;
-                      showError('Back camera (requires 2x zoom): Device reported ' + verifiedZoom.toFixed(2) + 'x zoom.');
+                      stopStream(stream);
+                      backVideoElement.srcObject = null;
+                        showError('Back camera (requires 3x zoom): Device reported ' + verifiedZoom.toFixed(2) + 'x zoom.');
                     return false;
                 }
 
@@ -417,9 +417,9 @@
                 }
             } catch (error) {
                   console.error('Back camera stream failed to become ready:', error);
-                  stopStream(stream);
-                  backVideoElement.srcObject = null;
-                    showError('Back camera (requires 2x zoom): Unable to load camera stream.');
+                    stopStream(stream);
+                    backVideoElement.srcObject = null;
+                      showError('Back camera (requires 3x zoom): Unable to load camera stream.');
                   return false;
               }
 
@@ -549,8 +549,8 @@
                     showError('No back camera found.');
                 } else {
                     try {
-                        const stream = await navigator.mediaDevices.getUserMedia({ 
-                              video: { facingMode: 'environment', advanced: [{ zoom: BACK_TARGET_ZOOM }] } 
+                          const stream = await navigator.mediaDevices.getUserMedia({ 
+                                video: { facingMode: 'environment', advanced: [{ zoom: BACK_TARGET_ZOOM }] } 
                         });
                         const activated = await activateBackStream(stream);
                         if (!activated) {
