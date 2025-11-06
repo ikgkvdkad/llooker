@@ -31,14 +31,14 @@
         .camera-row {
             display: flex;
             width: 100%;
-            height: 50vh;
             background: #000;
+            align-items: flex-start;
         }
 
         .camera-half {
             position: relative;
             width: 50%;
-            height: 100%;
+            aspect-ratio: var(--camera-aspect, 3 / 4);
             overflow: hidden;
             background: #000;
             border: 3px solid rgba(255, 255, 255, 0.3);
@@ -100,7 +100,7 @@
             display: none;
             position: absolute;
             transform-origin: center center;
-            object-fit: contain;
+            object-fit: cover;
             width: 100%;
             height: 100%;
             top: 0;
@@ -205,6 +205,28 @@
         const selfiePlaceholder = document.getElementById('selfiePlaceholder');
         
         const errorMessage = document.getElementById('errorMessage');
+
+        const cameraLayoutState = {
+            back: { element: backCameraHalf, aspectRatio: null },
+            selfie: { element: selfieCameraHalf, aspectRatio: null }
+        };
+
+        function updateCameraHalfAspect(side, aspectRatio) {
+            const state = cameraLayoutState[side];
+            if (!state || !state.element) {
+                return;
+            }
+
+            if (typeof aspectRatio === 'number' && isFinite(aspectRatio) && aspectRatio > 0) {
+                state.aspectRatio = aspectRatio;
+                state.element.dataset.cameraAspect = aspectRatio.toString();
+                state.element.style.setProperty('--camera-aspect', aspectRatio);
+            } else {
+                state.aspectRatio = null;
+                delete state.element.dataset.cameraAspect;
+                state.element.style.removeProperty('--camera-aspect');
+            }
+        }
         
         // Back camera state
         const BACK_TARGET_ZOOM = 3;
@@ -354,30 +376,38 @@
               backStream = stream;
               backVideoElement.srcObject = backStream;
 
-              try {
-                  const [zoomSettled] = await Promise.all([
-                      waitForZoomToSettle(track, BACK_TARGET_ZOOM),
-                      waitForVideoMetadata(backVideoElement)
-                  ]);
+            try {
+                const [zoomSettled] = await Promise.all([
+                    waitForZoomToSettle(track, BACK_TARGET_ZOOM),
+                    waitForVideoMetadata(backVideoElement)
+                ]);
 
-                  if (!zoomSettled.success) {
-                      stopStream(stream);
-                      backVideoElement.srcObject = null;
-                      showError('Back camera (requires 3x zoom): ' + zoomSettled.reason);
-                      return false;
-                  }
+                if (!zoomSettled.success) {
+                    stopStream(stream);
+                    backVideoElement.srcObject = null;
+                    showError('Back camera (requires 3x zoom): ' + zoomSettled.reason);
+                    return false;
+                }
 
-                  const verifiedZoom = typeof zoomSettled.appliedZoom === 'number'
-                      ? zoomSettled.appliedZoom
-                      : (typeof track.getSettings === 'function' ? track.getSettings().zoom : undefined);
+                const verifiedZoom = typeof zoomSettled.appliedZoom === 'number'
+                    ? zoomSettled.appliedZoom
+                    : (typeof track.getSettings === 'function' ? track.getSettings().zoom : undefined);
 
-                  if (typeof verifiedZoom === 'number' && Math.abs(verifiedZoom - BACK_TARGET_ZOOM) > 0.05) {
-                      stopStream(stream);
-                      backVideoElement.srcObject = null;
-                      showError('Back camera (requires 3x zoom): Device reported ' + verifiedZoom.toFixed(2) + 'x zoom.');
-                      return false;
-                  }
-              } catch (error) {
+                if (typeof verifiedZoom === 'number' && Math.abs(verifiedZoom - BACK_TARGET_ZOOM) > 0.05) {
+                    stopStream(stream);
+                    backVideoElement.srcObject = null;
+                    showError('Back camera (requires 3x zoom): Device reported ' + verifiedZoom.toFixed(2) + 'x zoom.');
+                    return false;
+                }
+
+                const videoWidth = backVideoElement.videoWidth;
+                const videoHeight = backVideoElement.videoHeight;
+                if (videoWidth && videoHeight) {
+                    updateCameraHalfAspect('back', videoWidth / videoHeight);
+                } else {
+                    console.warn('Back camera metadata unavailable after initialization.');
+                }
+            } catch (error) {
                   console.error('Back camera stream failed to become ready:', error);
                   stopStream(stream);
                   backVideoElement.srcObject = null;
@@ -416,6 +446,25 @@
                 showError('Selfie camera: ' + zoomResult.reason);
                 return false;
             }
+
+              try {
+                  await waitForVideoMetadata(selfieVideoElement);
+              } catch (error) {
+                  console.error('Selfie camera stream failed to become ready:', error);
+                  stopStream(selfieStream);
+                  selfieStream = null;
+                  selfieVideoElement.srcObject = null;
+                  showError('Selfie camera: Unable to load camera stream.');
+                  return false;
+              }
+
+              const videoWidth = selfieVideoElement.videoWidth;
+              const videoHeight = selfieVideoElement.videoHeight;
+              if (videoWidth && videoHeight) {
+                  updateCameraHalfAspect('selfie', videoWidth / videoHeight);
+              } else {
+                  console.warn('Selfie camera metadata unavailable after initialization.');
+              }
 
             hideError();
             selfieVideoElement.classList.add('active');
@@ -585,19 +634,20 @@
 
             const videoWidth = backVideoElement.videoWidth;
             const videoHeight = backVideoElement.videoHeight;
-            const videoAspect = videoWidth / videoHeight;
-            
-            // Target height is half screen (portrait orientation)
-            const targetHeight = window.innerHeight / 2;
-            const targetWidth = targetHeight * videoAspect;
-            
+
+            if (!videoWidth || !videoHeight) {
+                console.warn('Back camera metadata unavailable; capture skipped.');
+                return;
+            }
+
+            updateCameraHalfAspect('back', videoWidth / videoHeight);
+
             const canvas = document.createElement('canvas');
-            canvas.width = targetWidth;
-            canvas.height = targetHeight;
-            
+            canvas.width = videoWidth;
+            canvas.height = videoHeight;
+
             const ctx = canvas.getContext('2d');
-            
-            // Draw the zoomed frame directly from the video
+
             ctx.drawImage(
                 backVideoElement,
                 0, 0, videoWidth, videoHeight,
@@ -631,19 +681,19 @@
 
             const videoWidth = selfieVideoElement.videoWidth;
             const videoHeight = selfieVideoElement.videoHeight;
-            const videoAspect = videoWidth / videoHeight;
-            
-            // Target height is half screen (portrait orientation)
-            const targetHeight = window.innerHeight / 2;
-            const targetWidth = targetHeight * videoAspect;
-            
+            if (!videoWidth || !videoHeight) {
+                console.warn('Selfie camera metadata unavailable; capture skipped.');
+                return;
+            }
+
+            updateCameraHalfAspect('selfie', videoWidth / videoHeight);
+
             const canvas = document.createElement('canvas');
-            canvas.width = targetWidth;
-            canvas.height = targetHeight;
-            
+            canvas.width = videoWidth;
+            canvas.height = videoHeight;
+
             const ctx = canvas.getContext('2d');
-            
-            // Draw the full video frame maintaining aspect ratio
+
             ctx.drawImage(
                 selfieVideoElement,
                 0, 0, videoWidth, videoHeight,
