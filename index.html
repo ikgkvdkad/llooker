@@ -219,7 +219,7 @@
         const errorMessage = document.getElementById('errorMessage');
         
         // Back camera state
-        const BACK_TARGET_ZOOM = 2;
+        const BACK_TARGET_ZOOM = 3;
         const SELFIE_ZOOM_MODE = 'min';
 
         let backStream = null;
@@ -307,7 +307,7 @@
                 stopStream(backStream);
                 backStream = null;
                 backVideoElement.srcObject = null;
-                showError('Back camera: ' + zoomResult.reason);
+                showError('Back camera (requires 3x zoom): ' + zoomResult.reason);
                 return false;
             }
 
