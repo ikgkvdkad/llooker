@@ -38,7 +38,7 @@
         .camera-half {
             position: relative;
             width: 50%;
-            aspect-ratio: var(--camera-aspect, 3 / 4);
+            aspect-ratio: var(--camera-aspect, 16 / 9);
             overflow: hidden;
             background: #000;
             border: 3px solid rgba(255, 255, 255, 0.3);
@@ -206,6 +206,9 @@
         
         const errorMessage = document.getElementById('errorMessage');
 
+        const DEFAULT_BACK_ASPECT = 16 / 9;
+        const DEFAULT_SELFIE_ASPECT = 16 / 9;
+
         const cameraLayoutState = {
             back: { element: backCameraHalf, aspectRatio: null },
             selfie: { element: selfieCameraHalf, aspectRatio: null }
@@ -227,6 +230,9 @@
                 state.element.style.removeProperty('--camera-aspect');
             }
         }
+
+        updateCameraHalfAspect('back', DEFAULT_BACK_ASPECT);
+        updateCameraHalfAspect('selfie', DEFAULT_SELFIE_ASPECT);
         
         // Back camera state
         const BACK_TARGET_ZOOM = 3;
