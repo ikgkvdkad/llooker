@@ -250,6 +250,10 @@
         let isSelfieFrozen = false;
         let isSelfieActive = false;
 
+        let isOpeningBackCamera = false;
+        let isOpeningSelfieCamera = false;
+        const CAMERA_RELEASE_TIMEOUT_MS = 500;
+
         function showError(message) {
             errorMessage.textContent = message;
             errorMessage.classList.add('active');
@@ -264,6 +268,47 @@
                 return;
             }
             stream.getTracks().forEach(track => track.stop());
+        }
+
+        function waitForTrackToEnd(track, timeoutMs = CAMERA_RELEASE_TIMEOUT_MS) {
+            if (!track || track.readyState === 'ended') {
+                return Promise.resolve();
+            }
+
+            return new Promise(resolve => {
+                const cleanup = () => {
+                    track.removeEventListener('ended', handleEnded);
+                    window.clearTimeout(timerId);
+                    resolve();
+                };
+
+                const handleEnded = () => {
+                    cleanup();
+                };
+
+                const timerId = window.setTimeout(cleanup, timeoutMs);
+                track.addEventListener('ended', handleEnded, { once: true });
+            });
+        }
+
+        async function stopAllCamerasAndWait(timeoutMs = CAMERA_RELEASE_TIMEOUT_MS) {
+            const tracks = [];
+
+            if (backStream) {
+                tracks.push(...backStream.getTracks());
+            }
+
+            if (selfieStream) {
+                tracks.push(...selfieStream.getTracks());
+            }
+
+            stopAllCameras();
+
+            if (!tracks.length) {
+                return;
+            }
+
+            await Promise.all(tracks.map(track => waitForTrackToEnd(track, timeoutMs)));
         }
 
         async function applyZoomSetting(stream, targetZoom) {
@@ -519,119 +564,166 @@
         }
 
         async function openBackCamera() {
-            if (!checkCameraSupport()) {
+            if (isOpeningBackCamera) {
+                console.warn('Back camera start request ignored: initialization already in progress.');
                 return;
             }
 
-            // Stop any other active camera
-            stopAllCameras();
+            isOpeningBackCamera = true;
+
+            if (!checkCameraSupport()) {
+                isOpeningBackCamera = false;
+                return;
+            }
 
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: {
-                        facingMode: 'environment',
-                        width: { ideal: 1920 },
-                        height: { ideal: 1080 },
-                          advanced: [{ zoom: BACK_TARGET_ZOOM }]
-                    }
-                });
-                const activated = await activateBackStream(stream);
-                if (!activated) {
-                    return;
-                }
-                
-            } catch (error) {
-                console.error('Error accessing back camera:', error);
-                
-                if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-                    showError('Back camera access was denied.');
-                } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
-                    showError('No back camera found.');
-                } else {
-                    try {
-                          const stream = await navigator.mediaDevices.getUserMedia({ 
-                                video: { facingMode: 'environment', advanced: [{ zoom: BACK_TARGET_ZOOM }] } 
-                        });
-                        const activated = await activateBackStream(stream);
-                        if (!activated) {
-                            return;
+                await stopAllCamerasAndWait();
+
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        video: {
+                            facingMode: 'environment',
+                            width: { ideal: 1920 },
+                            height: { ideal: 1080 },
+                              advanced: [{ zoom: BACK_TARGET_ZOOM }]
                         }
-                    } catch (retryError) {
-                        showError('Failed to access back camera.');
+                    });
+                    const activated = await activateBackStream(stream);
+                    if (!activated) {
+                        return;
+                    }
+                    
+                } catch (error) {
+                    console.error('Error accessing back camera:', error);
+                    
+                    if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+                        showError('Back camera access was denied.');
+                    } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+                        showError('No back camera found.');
+                    } else {
+                        try {
+                              const stream = await navigator.mediaDevices.getUserMedia({ 
+                                    video: { facingMode: 'environment', advanced: [{ zoom: BACK_TARGET_ZOOM }] } 
+                            });
+                            const activated = await activateBackStream(stream);
+                            if (!activated) {
+                                return;
+                            }
+                        } catch (retryError) {
+                            showError('Failed to access back camera.');
+                        }
                     }
                 }
+            } finally {
+                isOpeningBackCamera = false;
             }
         }
 
         async function openSelfieCamera() {
-            if (!checkCameraSupport()) {
+            if (isOpeningSelfieCamera) {
+                console.warn('Selfie camera start request ignored: initialization already in progress.');
                 return;
             }
 
-            // Stop any other active camera
-            stopAllCameras();
+            isOpeningSelfieCamera = true;
+
+            if (!checkCameraSupport()) {
+                isOpeningSelfieCamera = false;
+                return;
+            }
 
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: {
-                        facingMode: 'user',
-                        width: { ideal: 1920 },
-                        height: { ideal: 1080 }
-                    }
-                });
-                const activated = await activateSelfieStream(stream);
-                if (!activated) {
-                    return;
-                }
-                
-            } catch (error) {
-                console.error('Error accessing selfie camera:', error);
-                
+                await stopAllCamerasAndWait();
+
                 try {
-                    const devices = await navigator.mediaDevices.enumerateDevices();
-                    const videoDevices = devices.filter(device => device.kind === 'videoinput');
-                    
-                    if (videoDevices.length > 1) {
-                        const backTrack = backStream?.getVideoTracks()[0];
-                        const backDeviceId = backTrack?.getSettings().deviceId;
-                        
-                        const frontDevice = videoDevices.find(device => 
-                            device.deviceId && device.deviceId !== backDeviceId
-                        );
-                        
-                        if (frontDevice && frontDevice.deviceId) {
-                            const stream = await navigator.mediaDevices.getUserMedia({
-                                video: { deviceId: { exact: frontDevice.deviceId } }
-                            });
-                            const activated = await activateSelfieStream(stream);
-                            if (!activated) {
-                                return;
-                            }
-                            return;
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        video: {
+                            facingMode: 'user',
+                            width: { ideal: 1920 },
+                            height: { ideal: 1080 }
                         }
-                    }
-                    
-                    const stream = await navigator.mediaDevices.getUserMedia({ 
-                        video: { facingMode: 'user' } 
                     });
                     const activated = await activateSelfieStream(stream);
                     if (!activated) {
                         return;
                     }
                     
-                } catch (retryError) {
-                    console.error('Retry failed:', retryError);
+                } catch (error) {
+                    console.error('Error accessing selfie camera:', error);
+
+                    const errorMessageText = error?.message || '';
+                    const shouldRetryAfterRelease = error?.name === 'NotReadableError'
+                        || /could not start video source/i.test(errorMessageText);
+
+                    if (shouldRetryAfterRelease) {
+                        await stopAllCamerasAndWait();
+                        await new Promise(resolve => setTimeout(resolve, 150));
+
+                        try {
+                            const retryStream = await navigator.mediaDevices.getUserMedia({
+                                video: {
+                                    facingMode: 'user',
+                                    width: { ideal: 1920 },
+                                    height: { ideal: 1080 }
+                                }
+                            });
+                            const activated = await activateSelfieStream(retryStream);
+                            if (activated) {
+                                return;
+                            }
+                        } catch (retryError) {
+                            console.error('Selfie camera retry after release failed:', retryError);
+                        }
+                    }
+                    
                     try {
-                        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                        const devices = await navigator.mediaDevices.enumerateDevices();
+                        const videoDevices = devices.filter(device => device.kind === 'videoinput');
+                        
+                        if (videoDevices.length > 1) {
+                            const backTrack = backStream?.getVideoTracks()[0];
+                            const backDeviceId = backTrack?.getSettings().deviceId;
+                            
+                            const frontDevice = videoDevices.find(device => 
+                                device.deviceId && device.deviceId !== backDeviceId
+                            );
+                            
+                            if (frontDevice && frontDevice.deviceId) {
+                                const stream = await navigator.mediaDevices.getUserMedia({
+                                    video: { deviceId: { exact: frontDevice.deviceId } }
+                                });
+                                const activated = await activateSelfieStream(stream);
+                                if (!activated) {
+                                    return;
+                                }
+                                return;
+                            }
+                        }
+                        
+                        const stream = await navigator.mediaDevices.getUserMedia({ 
+                            video: { facingMode: 'user' } 
+                        });
                         const activated = await activateSelfieStream(stream);
                         if (!activated) {
                             return;
                         }
-                    } catch (finalError) {
-                        console.error('Final attempt failed:', finalError);
-                        showError('Selfie camera: ' + (finalError.message || 'Unable to access front camera.'));
+                        
+                    } catch (retryError) {
+                        console.error('Retry failed:', retryError);
+                        try {
+                            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                            const activated = await activateSelfieStream(stream);
+                            if (!activated) {
+                                return;
+                            }
+                        } catch (finalError) {
+                            console.error('Final attempt failed:', finalError);
+                            showError('Selfie camera: ' + (finalError.message || 'Unable to access front camera.'));
+                        }
                     }
                 }
+            } finally {
+                isOpeningSelfieCamera = false;
             }
         }
 
