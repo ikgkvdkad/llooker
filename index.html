@@ -172,16 +172,16 @@
 </head>
 <body>
     <div class="camera-container">
-        <div class="camera-row">
-            <div class="camera-half left" id="backCameraHalf">
-                <div class="placeholder-text" id="backPlaceholder">Me</div>
+            <div class="camera-row">
+                <div class="camera-half left" id="backCameraHalf">
+                    <div class="placeholder-text" id="backPlaceholder">You</div>
                 <video id="backVideoElement" class="video-element" autoplay playsinline></video>
                 <img id="backCapturedPhoto" class="captured-photo" alt="Back camera photo">
                 <div class="crosshair" id="backCrosshair"></div>
             </div>
 
-            <div class="camera-half right" id="selfieCameraHalf">
-                <div class="placeholder-text" id="selfiePlaceholder">You</div>
+                <div class="camera-half right" id="selfieCameraHalf">
+                    <div class="placeholder-text" id="selfiePlaceholder">Me</div>
                 <video id="selfieVideoElement" class="video-element" autoplay playsinline></video>
                 <img id="selfieCapturedPhoto" class="captured-photo" alt="Selfie photo">
             </div>
@@ -738,7 +738,7 @@
                 await openBackCamera();
                 await new Promise(resolve => setTimeout(resolve, 200));
             } else if (!isBackActive) {
-                // If showing "You", start camera
+                // If showing "You" placeholder, start camera
                 await openBackCamera();
                 await new Promise(resolve => setTimeout(resolve, 200));
             } else {
