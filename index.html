@@ -221,6 +221,9 @@
         // Back camera state
         const BACK_TARGET_ZOOM = 3;
         const SELFIE_ZOOM_MODE = 'min';
+        const ZOOM_CONFIRMATION_ATTEMPTS = 3;
+        const ZOOM_CONFIRMATION_DELAY_MS = 120;
+        const ZOOM_ACCEPTABLE_DELTA = 0.05;
 
         let backStream = null;
         let isBackFrozen = false;
@@ -245,6 +248,10 @@
                 return;
             }
             stream.getTracks().forEach(track => track.stop());
+        }
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
         }
 
         async function applyZoomSetting(stream, targetZoom) {
@@ -298,18 +305,82 @@
             }
         }
 
+          async function confirmZoomSettled(stream, expectedZoom) {
+              const track = stream?.getVideoTracks()[0];
+
+              if (!track) {
+                  return { success: false, reason: 'No video track available to verify zoom.' };
+              }
+
+              if (typeof track.getSettings !== 'function') {
+                  return { success: false, reason: 'Unable to verify zoom on this device.' };
+              }
+
+              for (let attempt = 0; attempt < ZOOM_CONFIRMATION_ATTEMPTS; attempt++) {
+                  const settings = track.getSettings();
+                  const currentZoom = settings?.zoom;
+
+                  if (typeof currentZoom === 'number' && typeof expectedZoom === 'number') {
+                      if (Math.abs(currentZoom - expectedZoom) <= ZOOM_ACCEPTABLE_DELTA) {
+                          return { success: true, confirmedZoom: currentZoom };
+                      }
+                  }
+
+                  await sleep(ZOOM_CONFIRMATION_DELAY_MS);
+              }
+
+              const finalSettings = track.getSettings();
+              const reportedZoom = finalSettings?.zoom;
+
+              if (typeof reportedZoom === 'number' && typeof expectedZoom === 'number') {
+                  return { success: false, reason: `Camera reported ${reportedZoom.toFixed(2)}x instead of ${expectedZoom.toFixed(2)}x.` };
+              }
+
+              return { success: false, reason: 'Camera did not report a zoom value for verification.' };
+          }
+
+          function waitForVideoMetadata(videoElement) {
+              if (!videoElement) {
+                  return Promise.resolve();
+              }
+
+              if (videoElement.readyState >= HTMLMediaElement.HAVE_METADATA) {
+                  return Promise.resolve();
+              }
+
+              return new Promise(resolve => {
+                  const handleLoadedMetadata = () => {
+                      videoElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
+                      resolve();
+                  };
+
+                  videoElement.addEventListener('loadedmetadata', handleLoadedMetadata, { once: true });
+              });
+          }
+
         async function activateBackStream(stream) {
             backStream = stream;
-            backVideoElement.srcObject = backStream;
 
             const zoomResult = await applyZoomSetting(backStream, BACK_TARGET_ZOOM);
             if (!zoomResult.success) {
                 stopStream(backStream);
                 backStream = null;
-                backVideoElement.srcObject = null;
                 showError('Back camera (requires 3x zoom): ' + zoomResult.reason);
                 return false;
             }
+
+            const expectedZoom = typeof zoomResult.appliedZoom === 'number' ? zoomResult.appliedZoom : BACK_TARGET_ZOOM;
+            const verificationResult = await confirmZoomSettled(backStream, expectedZoom);
+            if (!verificationResult.success) {
+                stopStream(backStream);
+                backStream = null;
+                showError('Back camera (requires 3x zoom): ' + verificationResult.reason);
+                console.warn('Back camera zoom verification failed:', verificationResult.reason);
+                return false;
+            }
+
+            backVideoElement.srcObject = backStream;
+            await waitForVideoMetadata(backVideoElement);
 
             hideError();
             backVideoElement.classList.add('active');
