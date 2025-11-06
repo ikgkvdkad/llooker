@@ -237,7 +237,7 @@
         updateCameraHalfAspect('selfie', DEFAULT_SELFIE_ASPECT);
         
         // Back camera state
-        const BACK_TARGET_ZOOM = 3;
+        const BACK_TARGET_ZOOM = 2;
         const SELFIE_ZOOM_MODE = 'min';
 
         let backStream = null;
@@ -375,7 +375,7 @@
             const zoomResult = await applyZoomSetting(stream, BACK_TARGET_ZOOM);
             if (!zoomResult.success) {
                 stopStream(stream);
-                showError('Back camera (requires 3x zoom): ' + zoomResult.reason);
+                  showError('Back camera (requires 2x zoom): ' + zoomResult.reason);
                 return false;
             }
 
@@ -393,7 +393,7 @@
                 if (!zoomSettled.success) {
                     stopStream(stream);
                     backVideoElement.srcObject = null;
-                    showError('Back camera (requires 3x zoom): ' + zoomSettled.reason);
+                      showError('Back camera (requires 2x zoom): ' + zoomSettled.reason);
                     return false;
                 }
 
@@ -404,7 +404,7 @@
                 if (typeof verifiedZoom === 'number' && Math.abs(verifiedZoom - BACK_TARGET_ZOOM) > 0.05) {
                     stopStream(stream);
                     backVideoElement.srcObject = null;
-                    showError('Back camera (requires 3x zoom): Device reported ' + verifiedZoom.toFixed(2) + 'x zoom.');
+                      showError('Back camera (requires 2x zoom): Device reported ' + verifiedZoom.toFixed(2) + 'x zoom.');
                     return false;
                 }
 
@@ -419,7 +419,7 @@
                   console.error('Back camera stream failed to become ready:', error);
                   stopStream(stream);
                   backVideoElement.srcObject = null;
-                  showError('Back camera (requires 3x zoom): Unable to load camera stream.');
+                    showError('Back camera (requires 2x zoom): Unable to load camera stream.');
                   return false;
               }
 
@@ -532,7 +532,7 @@
                         facingMode: 'environment',
                         width: { ideal: 1920 },
                         height: { ideal: 1080 },
-                        advanced: [{ zoom: BACK_TARGET_ZOOM }]
+                          advanced: [{ zoom: BACK_TARGET_ZOOM }]
                     }
                 });
                 const activated = await activateBackStream(stream);
@@ -550,7 +550,7 @@
                 } else {
                     try {
                         const stream = await navigator.mediaDevices.getUserMedia({ 
-                            video: { facingMode: 'environment', advanced: [{ zoom: BACK_TARGET_ZOOM }] } 
+                              video: { facingMode: 'environment', advanced: [{ zoom: BACK_TARGET_ZOOM }] } 
                         });
                         const activated = await activateBackStream(stream);
                         if (!activated) {
