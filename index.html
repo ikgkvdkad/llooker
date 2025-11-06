@@ -219,8 +219,10 @@
         const errorMessage = document.getElementById('errorMessage');
         
         // Back camera state
+        const BACK_TARGET_ZOOM = 2;
+        const SELFIE_ZOOM_MODE = 'min';
+
         let backStream = null;
-        let currentZoom = 2; // Constant medium zoom
         let isBackFrozen = false;
         let isBackActive = false;
 
@@ -238,6 +240,109 @@
             errorMessage.classList.remove('active');
         }
 
+        function stopStream(stream) {
+            if (!stream) {
+                return;
+            }
+            stream.getTracks().forEach(track => track.stop());
+        }
+
+        async function applyZoomSetting(stream, targetZoom) {
+            const track = stream?.getVideoTracks()[0];
+
+            if (!track) {
+                return { success: false, reason: 'No video track available.' };
+            }
+
+            if (typeof track.getCapabilities !== 'function') {
+                return { success: false, reason: 'Zoom capability is not available on this device.' };
+            }
+
+            const capabilities = track.getCapabilities();
+            if (!capabilities || !capabilities.zoom) {
+                return { success: false, reason: 'Zoom control is not supported for this camera.' };
+            }
+
+            const { min, max } = capabilities.zoom;
+
+            if (typeof min !== 'number' || typeof max !== 'number') {
+                return { success: false, reason: 'Zoom range information is unavailable for this camera.' };
+            }
+
+            let desiredZoom;
+
+            if (targetZoom === 'min') {
+                desiredZoom = min;
+            } else if (targetZoom === 'max') {
+                desiredZoom = max;
+            } else if (typeof targetZoom === 'number') {
+                desiredZoom = Math.min(max, Math.max(min, targetZoom));
+                if (targetZoom > max + 1e-3) {
+                    return { success: false, reason: `Requested zoom ${targetZoom}x exceeds supported maximum ${max.toFixed(2)}x.` };
+                }
+            } else {
+                return { success: false, reason: 'Invalid zoom configuration requested.' };
+            }
+
+            try {
+                await track.applyConstraints({ advanced: [{ zoom: desiredZoom }] });
+                return { success: true, appliedZoom: desiredZoom };
+            } catch (primaryError) {
+                try {
+                    await track.applyConstraints({ zoom: desiredZoom });
+                    return { success: true, appliedZoom: desiredZoom };
+                } catch (secondaryError) {
+                    const fallbackError = secondaryError || primaryError;
+                    return { success: false, reason: fallbackError?.message || 'Unable to adjust zoom for this camera.' };
+                }
+            }
+        }
+
+        async function activateBackStream(stream) {
+            backStream = stream;
+            backVideoElement.srcObject = backStream;
+
+            const zoomResult = await applyZoomSetting(backStream, BACK_TARGET_ZOOM);
+            if (!zoomResult.success) {
+                stopStream(backStream);
+                backStream = null;
+                backVideoElement.srcObject = null;
+                showError('Back camera: ' + zoomResult.reason);
+                return false;
+            }
+
+            hideError();
+            backVideoElement.classList.add('active');
+            backVideoElement.classList.add('fullscreen');
+            backCrosshair.classList.add('active');
+            isBackActive = true;
+            backPlaceholder.classList.add('hidden');
+
+            return true;
+        }
+
+        async function activateSelfieStream(stream) {
+            selfieStream = stream;
+            selfieVideoElement.srcObject = selfieStream;
+
+            const zoomResult = await applyZoomSetting(selfieStream, SELFIE_ZOOM_MODE);
+            if (!zoomResult.success) {
+                stopStream(selfieStream);
+                selfieStream = null;
+                selfieVideoElement.srcObject = null;
+                showError('Selfie camera: ' + zoomResult.reason);
+                return false;
+            }
+
+            hideError();
+            selfieVideoElement.classList.add('active');
+            selfieVideoElement.classList.add('fullscreen');
+            isSelfieActive = true;
+            selfiePlaceholder.classList.add('hidden');
+
+            return true;
+        }
+
         function checkCameraSupport() {
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 showError('Camera API is not supported in this browser.');
@@ -249,7 +354,7 @@
         function stopAllCameras() {
             // Stop back camera
             if (backStream) {
-                backStream.getTracks().forEach(track => track.stop());
+                stopStream(backStream);
                 backStream = null;
             }
             backVideoElement.srcObject = null;
@@ -259,7 +364,7 @@
             
             // Stop selfie camera
             if (selfieStream) {
-                selfieStream.getTracks().forEach(track => track.stop());
+                stopStream(selfieStream);
                 selfieStream = null;
             }
             selfieVideoElement.srcObject = null;
@@ -277,22 +382,17 @@
             stopAllCameras();
 
             try {
-                backStream = await navigator.mediaDevices.getUserMedia({
+                const stream = await navigator.mediaDevices.getUserMedia({
                     video: {
                         facingMode: 'environment',
                         width: { ideal: 1920 },
                         height: { ideal: 1080 }
                     }
                 });
-
-                backVideoElement.srcObject = backStream;
-                backVideoElement.classList.add('active');
-                backVideoElement.classList.add('fullscreen');
-                backVideoElement.style.transform = `scale(${currentZoom})`;
-                backCrosshair.classList.add('active');
-                isBackActive = true;
-                // Hide placeholder once camera is active
-                backPlaceholder.classList.add('hidden');
+                const activated = await activateBackStream(stream);
+                if (!activated) {
+                    return;
+                }
                 
             } catch (error) {
                 console.error('Error accessing back camera:', error);
@@ -303,16 +403,13 @@
                     showError('No back camera found.');
                 } else {
                     try {
-                        backStream = await navigator.mediaDevices.getUserMedia({ 
+                        const stream = await navigator.mediaDevices.getUserMedia({ 
                             video: { facingMode: 'environment' } 
                         });
-                        backVideoElement.srcObject = backStream;
-                        backVideoElement.classList.add('active');
-                        backVideoElement.classList.add('fullscreen');
-                        backVideoElement.style.transform = `scale(${currentZoom})`;
-                        backCrosshair.classList.add('active');
-                        isBackActive = true;
-                        backPlaceholder.classList.add('hidden');
+                        const activated = await activateBackStream(stream);
+                        if (!activated) {
+                            return;
+                        }
                     } catch (retryError) {
                         showError('Failed to access back camera.');
                     }
@@ -329,20 +426,17 @@
             stopAllCameras();
 
             try {
-                selfieStream = await navigator.mediaDevices.getUserMedia({
+                const stream = await navigator.mediaDevices.getUserMedia({
                     video: {
                         facingMode: 'user',
                         width: { ideal: 1920 },
                         height: { ideal: 1080 }
                     }
                 });
-
-                selfieVideoElement.srcObject = selfieStream;
-                selfieVideoElement.classList.add('active');
-                selfieVideoElement.classList.add('fullscreen');
-                isSelfieActive = true;
-                // Hide placeholder once camera is active
-                selfiePlaceholder.classList.add('hidden');
+                const activated = await activateSelfieStream(stream);
+                if (!activated) {
+                    return;
+                }
                 
             } catch (error) {
                 console.error('Error accessing selfie camera:', error);
@@ -360,36 +454,33 @@
                         );
                         
                         if (frontDevice && frontDevice.deviceId) {
-                            selfieStream = await navigator.mediaDevices.getUserMedia({
+                            const stream = await navigator.mediaDevices.getUserMedia({
                                 video: { deviceId: { exact: frontDevice.deviceId } }
                             });
-                            selfieVideoElement.srcObject = selfieStream;
-                            selfieVideoElement.classList.add('active');
-                            selfieVideoElement.classList.add('fullscreen');
-                            isSelfieActive = true;
-                            selfiePlaceholder.classList.add('hidden');
+                            const activated = await activateSelfieStream(stream);
+                            if (!activated) {
+                                return;
+                            }
                             return;
                         }
                     }
                     
-                    selfieStream = await navigator.mediaDevices.getUserMedia({ 
+                    const stream = await navigator.mediaDevices.getUserMedia({ 
                         video: { facingMode: 'user' } 
                     });
-                    selfieVideoElement.srcObject = selfieStream;
-                    selfieVideoElement.classList.add('active');
-                    selfieVideoElement.classList.add('fullscreen');
-                    isSelfieActive = true;
-                    selfiePlaceholder.classList.add('hidden');
+                    const activated = await activateSelfieStream(stream);
+                    if (!activated) {
+                        return;
+                    }
                     
                 } catch (retryError) {
                     console.error('Retry failed:', retryError);
                     try {
-                        selfieStream = await navigator.mediaDevices.getUserMedia({ video: true });
-                        selfieVideoElement.srcObject = selfieStream;
-                        selfieVideoElement.classList.add('active');
-                        selfieVideoElement.classList.add('fullscreen');
-                        isSelfieActive = true;
-                        selfiePlaceholder.classList.add('hidden');
+                        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                        const activated = await activateSelfieStream(stream);
+                        if (!activated) {
+                            return;
+                        }
                     } catch (finalError) {
                         console.error('Final attempt failed:', finalError);
                         showError('Selfie camera: ' + (finalError.message || 'Unable to access front camera.'));
@@ -407,12 +498,6 @@
             const videoHeight = backVideoElement.videoHeight;
             const videoAspect = videoWidth / videoHeight;
             
-            // Calculate visible area based on constant zoom
-            const sourceWidth = videoWidth / currentZoom;
-            const sourceHeight = videoHeight / currentZoom;
-            const sourceX = (videoWidth - sourceWidth) / 2;
-            const sourceY = (videoHeight - sourceHeight) / 2;
-            
             // Target height is half screen (portrait orientation)
             const targetHeight = window.innerHeight / 2;
             const targetWidth = targetHeight * videoAspect;
@@ -423,10 +508,10 @@
             
             const ctx = canvas.getContext('2d');
             
-            // Draw the zoomed portion maintaining aspect ratio
+            // Draw the zoomed frame directly from the video
             ctx.drawImage(
                 backVideoElement,
-                sourceX, sourceY, sourceWidth, sourceHeight,
+                0, 0, videoWidth, videoHeight,
                 0, 0, canvas.width, canvas.height
             );
 
@@ -448,7 +533,6 @@
             if (!isBackFrozen) return;
             
             backCapturedPhoto.classList.remove('active');
-            backVideoElement.style.transform = `scale(${currentZoom})`;
             // Don't show placeholder again - it's only shown initially
             isBackFrozen = false;
         }
