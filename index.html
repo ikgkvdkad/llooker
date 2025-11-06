@@ -30,6 +30,7 @@
 
         .camera-row {
             display: flex;
+            flex-direction: column;
             width: 100%;
             background: #000;
             align-items: flex-start;
@@ -37,22 +38,24 @@
 
         .camera-half {
             position: relative;
-            width: 50%;
+            width: 100%;
             aspect-ratio: var(--camera-aspect, 16 / 9);
             overflow: hidden;
             background: #000;
             border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top-width: 3px;
+            border-bottom-width: 3px;
             display: flex;
             align-items: center;
             justify-content: center;
         }
 
         .camera-half.left {
-            border-right-width: 1.5px;
+            border-bottom-width: 1.5px;
         }
 
         .camera-half.right {
-            border-left-width: 1.5px;
+            border-top-width: 1.5px;
         }
 
         .camera-filler {
