@@ -231,38 +231,6 @@
             }
         }
 
-        function determineTrackAspectRatio(stream, label) {
-            const track = stream?.getVideoTracks?.()[0];
-            if (!track) {
-                console.warn(`${label}: no video track available for aspect ratio detection.`);
-                return null;
-            }
-
-            if (typeof track.getSettings !== 'function') {
-                console.warn(`${label}: track settings unavailable; cannot determine aspect ratio.`);
-                return null;
-            }
-
-            const settings = track.getSettings();
-            if (!settings || typeof settings !== 'object') {
-                console.warn(`${label}: track did not provide settings; cannot determine aspect ratio.`);
-                return null;
-            }
-
-            const { aspectRatio, width, height } = settings;
-
-            if (typeof aspectRatio === 'number' && isFinite(aspectRatio) && aspectRatio > 0) {
-                return aspectRatio;
-            }
-
-            if (typeof width === 'number' && typeof height === 'number' && isFinite(width) && isFinite(height) && height > 0) {
-                return width / height;
-            }
-
-            console.warn(`${label}: track settings missing aspect ratio, width, or height; cannot determine aspect ratio.`);
-            return null;
-        }
-
         updateCameraHalfAspect('back', DEFAULT_BACK_ASPECT);
         updateCameraHalfAspect('selfie', DEFAULT_SELFIE_ASPECT);
         
@@ -411,15 +379,8 @@
 
             const track = stream.getVideoTracks()[0];
 
-                backStream = stream;
-                backVideoElement.srcObject = backStream;
-
-              const initialAspect = determineTrackAspectRatio(backStream, 'Back camera');
-              if (initialAspect) {
-                  updateCameraHalfAspect('back', initialAspect);
-              } else {
-                  console.warn('Back camera: using default aspect ratio until metadata is available.');
-              }
+              backStream = stream;
+              backVideoElement.srcObject = backStream;
 
             try {
                 const [zoomSettled] = await Promise.all([
@@ -445,19 +406,13 @@
                     return false;
                 }
 
-                  const videoWidth = backVideoElement.videoWidth;
-                  const videoHeight = backVideoElement.videoHeight;
-                  if (videoWidth && videoHeight) {
-                      updateCameraHalfAspect('back', videoWidth / videoHeight);
-                  } else {
-                      console.warn('Back camera metadata unavailable after initialization; falling back to track settings.');
-                      const fallbackAspect = determineTrackAspectRatio(backStream, 'Back camera (metadata fallback)');
-                      if (fallbackAspect) {
-                          updateCameraHalfAspect('back', fallbackAspect);
-                      } else {
-                          console.warn('Back camera: no aspect ratio data available; default layout remains.');
-                      }
-                  }
+                const videoWidth = backVideoElement.videoWidth;
+                const videoHeight = backVideoElement.videoHeight;
+                if (videoWidth && videoHeight) {
+                    updateCameraHalfAspect('back', videoWidth / videoHeight);
+                } else {
+                    console.warn('Back camera metadata unavailable after initialization.');
+                }
             } catch (error) {
                   console.error('Back camera stream failed to become ready:', error);
                   stopStream(stream);
@@ -486,15 +441,8 @@
         }
 
         async function activateSelfieStream(stream) {
-              selfieStream = stream;
-              selfieVideoElement.srcObject = selfieStream;
-
-              const initialAspect = determineTrackAspectRatio(selfieStream, 'Selfie camera');
-              if (initialAspect) {
-                  updateCameraHalfAspect('selfie', initialAspect);
-              } else {
-                  console.warn('Selfie camera: using default aspect ratio until metadata is available.');
-              }
+            selfieStream = stream;
+            selfieVideoElement.srcObject = selfieStream;
 
             const zoomResult = await applyZoomSetting(selfieStream, SELFIE_ZOOM_MODE);
             if (!zoomResult.success) {
@@ -516,19 +464,13 @@
                   return false;
               }
 
-                const videoWidth = selfieVideoElement.videoWidth;
-                const videoHeight = selfieVideoElement.videoHeight;
-                if (videoWidth && videoHeight) {
-                    updateCameraHalfAspect('selfie', videoWidth / videoHeight);
-                } else {
-                    console.warn('Selfie camera metadata unavailable after initialization; falling back to track settings.');
-                    const fallbackAspect = determineTrackAspectRatio(selfieStream, 'Selfie camera (metadata fallback)');
-                    if (fallbackAspect) {
-                        updateCameraHalfAspect('selfie', fallbackAspect);
-                    } else {
-                        console.warn('Selfie camera: no aspect ratio data available; default layout remains.');
-                    }
-                }
+              const videoWidth = selfieVideoElement.videoWidth;
+              const videoHeight = selfieVideoElement.videoHeight;
+              if (videoWidth && videoHeight) {
+                  updateCameraHalfAspect('selfie', videoWidth / videoHeight);
+              } else {
+                  console.warn('Selfie camera metadata unavailable after initialization.');
+              }
 
             hideError();
             selfieVideoElement.classList.add('active');
