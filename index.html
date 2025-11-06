@@ -32,13 +32,15 @@
             display: flex;
             width: 100%;
             background: #000;
-            align-items: flex-start;
+            align-items: stretch;
+            flex: 0 0 50vh;
+            height: 50vh;
         }
 
         .camera-half {
             position: relative;
             width: 50%;
-            aspect-ratio: var(--camera-aspect, 16 / 9);
+            height: 100%;
             overflow: hidden;
             background: #000;
             border: 3px solid rgba(255, 255, 255, 0.3);
@@ -172,14 +174,14 @@
     <div class="camera-container">
         <div class="camera-row">
             <div class="camera-half left" id="backCameraHalf">
-                <div class="placeholder-text" id="backPlaceholder">You</div>
+                <div class="placeholder-text" id="backPlaceholder">Me</div>
                 <video id="backVideoElement" class="video-element" autoplay playsinline></video>
                 <img id="backCapturedPhoto" class="captured-photo" alt="Back camera photo">
                 <div class="crosshair" id="backCrosshair"></div>
             </div>
 
             <div class="camera-half right" id="selfieCameraHalf">
-                <div class="placeholder-text" id="selfiePlaceholder">Me</div>
+                <div class="placeholder-text" id="selfiePlaceholder">You</div>
                 <video id="selfieVideoElement" class="video-element" autoplay playsinline></video>
                 <img id="selfieCapturedPhoto" class="captured-photo" alt="Selfie photo">
             </div>
