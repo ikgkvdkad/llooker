@@ -88,6 +88,11 @@
             display: block;
         }
 
+        .camera-half.initializing .video-element.active,
+        .camera-half.initializing .crosshair.active {
+            visibility: hidden;
+        }
+
         .video-element.fullscreen {
             position: fixed;
             top: 0;
@@ -224,7 +229,8 @@
 
         let backStream = null;
         let isBackFrozen = false;
-        let isBackActive = false;
+          let isBackActive = false;
+          let backInitializationTimeoutId = null;
 
         // Selfie camera state
         let selfieStream = null;
@@ -397,11 +403,21 @@
               }
 
             hideError();
-            backVideoElement.classList.add('active');
-            backVideoElement.classList.add('fullscreen');
-            backCrosshair.classList.add('active');
+              backCameraHalf.classList.add('initializing');
+              backVideoElement.classList.add('active');
+              backVideoElement.classList.add('fullscreen');
+              backCrosshair.classList.add('active');
             isBackActive = true;
             backPlaceholder.classList.add('hidden');
+
+              if (backInitializationTimeoutId !== null) {
+                  clearTimeout(backInitializationTimeoutId);
+              }
+
+              backInitializationTimeoutId = window.setTimeout(() => {
+                  backCameraHalf.classList.remove('initializing');
+                  backInitializationTimeoutId = null;
+              }, 1000);
 
             return true;
         }
@@ -445,7 +461,13 @@
             backVideoElement.srcObject = null;
             backVideoElement.classList.remove('active');
             backCrosshair.classList.remove('active');
+              backCameraHalf.classList.remove('initializing');
             isBackActive = false;
+
+              if (backInitializationTimeoutId !== null) {
+                  clearTimeout(backInitializationTimeoutId);
+                  backInitializationTimeoutId = null;
+              }
             
             // Stop selfie camera
             if (selfieStream) {
