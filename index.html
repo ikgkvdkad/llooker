@@ -299,17 +299,30 @@
         }
 
         async function activateBackStream(stream) {
-            backStream = stream;
-            backVideoElement.srcObject = backStream;
-
-            const zoomResult = await applyZoomSetting(backStream, BACK_TARGET_ZOOM);
+            const zoomResult = await applyZoomSetting(stream, BACK_TARGET_ZOOM);
             if (!zoomResult.success) {
-                stopStream(backStream);
-                backStream = null;
-                backVideoElement.srcObject = null;
+                stopStream(stream);
                 showError('Back camera (requires 3x zoom): ' + zoomResult.reason);
                 return false;
             }
+
+            const track = stream.getVideoTracks()[0];
+            let appliedZoom = zoomResult.appliedZoom;
+            if (track && typeof track.getSettings === 'function') {
+                const settings = track.getSettings();
+                if (typeof settings.zoom === 'number') {
+                    appliedZoom = settings.zoom;
+                }
+            }
+
+            if (typeof appliedZoom === 'number' && Math.abs(appliedZoom - BACK_TARGET_ZOOM) > 0.05) {
+                stopStream(stream);
+                showError('Back camera (requires 3x zoom): Device reported ' + appliedZoom.toFixed(2) + 'x zoom.');
+                return false;
+            }
+
+            backStream = stream;
+            backVideoElement.srcObject = backStream;
 
             hideError();
             backVideoElement.classList.add('active');
@@ -386,7 +399,8 @@
                     video: {
                         facingMode: 'environment',
                         width: { ideal: 1920 },
-                        height: { ideal: 1080 }
+                        height: { ideal: 1080 },
+                        advanced: [{ zoom: BACK_TARGET_ZOOM }]
                     }
                 });
                 const activated = await activateBackStream(stream);
@@ -404,7 +418,7 @@
                 } else {
                     try {
                         const stream = await navigator.mediaDevices.getUserMedia({ 
-                            video: { facingMode: 'environment' } 
+                            video: { facingMode: 'environment', advanced: [{ zoom: BACK_TARGET_ZOOM }] } 
                         });
                         const activated = await activateBackStream(stream);
                         if (!activated) {
