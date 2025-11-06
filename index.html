@@ -298,6 +298,60 @@
             }
         }
 
+          async function waitForZoomToSettle(track, targetZoom, tolerance = 0.05, timeoutMs = 1500) {
+              if (!track || typeof track.getSettings !== 'function') {
+                  return { success: false, reason: 'Zoom settings cannot be read for this camera.' };
+              }
+
+              if (typeof targetZoom !== 'number') {
+                  return { success: false, reason: 'Invalid target zoom provided.' };
+              }
+
+              const startTime = performance.now();
+
+              while (performance.now() - startTime < timeoutMs) {
+                  const settings = track.getSettings();
+                  if (settings && typeof settings.zoom === 'number') {
+                      const currentZoom = settings.zoom;
+                      if (Math.abs(currentZoom - targetZoom) <= tolerance) {
+                          return { success: true, appliedZoom: currentZoom };
+                      }
+                  }
+                  await new Promise(resolve => setTimeout(resolve, 50));
+              }
+
+              const finalSettings = track.getSettings?.();
+              const reportedZoom = typeof finalSettings?.zoom === 'number'
+                  ? finalSettings.zoom.toFixed(2) + 'x'
+                  : 'an unknown level';
+
+              return {
+                  success: false,
+                  reason: `Camera never reported ${targetZoom.toFixed(2)}x zoom (last reported ${reportedZoom}).`
+              };
+          }
+
+          function waitForVideoMetadata(videoElement) {
+              if (videoElement.readyState >= HTMLMediaElement.HAVE_METADATA) {
+                  return Promise.resolve();
+              }
+
+              return new Promise((resolve, reject) => {
+                  const handleLoaded = () => {
+                      videoElement.removeEventListener('error', handleError);
+                      resolve();
+                  };
+
+                  const handleError = (event) => {
+                      videoElement.removeEventListener('loadedmetadata', handleLoaded);
+                      reject(event?.error || new Error('Failed to load camera metadata.'));
+                  };
+
+                  videoElement.addEventListener('loadedmetadata', handleLoaded, { once: true });
+                  videoElement.addEventListener('error', handleError, { once: true });
+              });
+          }
+
         async function activateBackStream(stream) {
             const zoomResult = await applyZoomSetting(stream, BACK_TARGET_ZOOM);
             if (!zoomResult.success) {
@@ -307,22 +361,40 @@
             }
 
             const track = stream.getVideoTracks()[0];
-            let appliedZoom = zoomResult.appliedZoom;
-            if (track && typeof track.getSettings === 'function') {
-                const settings = track.getSettings();
-                if (typeof settings.zoom === 'number') {
-                    appliedZoom = settings.zoom;
-                }
-            }
 
-            if (typeof appliedZoom === 'number' && Math.abs(appliedZoom - BACK_TARGET_ZOOM) > 0.05) {
-                stopStream(stream);
-                showError('Back camera (requires 3x zoom): Device reported ' + appliedZoom.toFixed(2) + 'x zoom.');
-                return false;
-            }
+              backStream = stream;
+              backVideoElement.srcObject = backStream;
 
-            backStream = stream;
-            backVideoElement.srcObject = backStream;
+              try {
+                  const [zoomSettled] = await Promise.all([
+                      waitForZoomToSettle(track, BACK_TARGET_ZOOM),
+                      waitForVideoMetadata(backVideoElement)
+                  ]);
+
+                  if (!zoomSettled.success) {
+                      stopStream(stream);
+                      backVideoElement.srcObject = null;
+                      showError('Back camera (requires 3x zoom): ' + zoomSettled.reason);
+                      return false;
+                  }
+
+                  const verifiedZoom = typeof zoomSettled.appliedZoom === 'number'
+                      ? zoomSettled.appliedZoom
+                      : (typeof track.getSettings === 'function' ? track.getSettings().zoom : undefined);
+
+                  if (typeof verifiedZoom === 'number' && Math.abs(verifiedZoom - BACK_TARGET_ZOOM) > 0.05) {
+                      stopStream(stream);
+                      backVideoElement.srcObject = null;
+                      showError('Back camera (requires 3x zoom): Device reported ' + verifiedZoom.toFixed(2) + 'x zoom.');
+                      return false;
+                  }
+              } catch (error) {
+                  console.error('Back camera stream failed to become ready:', error);
+                  stopStream(stream);
+                  backVideoElement.srcObject = null;
+                  showError('Back camera (requires 3x zoom): Unable to load camera stream.');
+                  return false;
+              }
 
             hideError();
             backVideoElement.classList.add('active');
