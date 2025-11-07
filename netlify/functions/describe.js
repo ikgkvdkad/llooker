@@ -41,8 +41,8 @@ exports.handler = async (event, context) => {
               {
                 type: 'text',
                 text: role === 'you' 
-                  ? 'Provide a detailed visual description. List each heading below and fill it with specific observations you can see. Do not guess or state the person\'s identity.\nTarget Overview: [overall appearance, approximate age range if evident, hair style/length/color]\nClothing & Accessories: [layers, colors, notable items such as hats, glasses, bags]\nPosture & Build: [stance, body orientation, build descriptors]\nSurroundings & Lighting: [location clues, lighting conditions, nearby objects]\nDistinctive Cues: [visible features that would help distinguish this person in a group]'
-                  : 'Provide a detailed visual description of this selfie. List each heading below and fill it with specific observations you can see. Do not guess or state the person\'s identity.\nSender Overview: [overall appearance, hairstyle, visible facial hair or eyewear]\nClothing & Accessories: [garments, colors, jewelry, tech devices]\nPose & Expression: [posture, framing, gestures, facial expression]\nBackground Context: [environment details, lighting, visible objects]\nDistinctive Cues: [visible features that would help distinguish this person in a group]'
+                  ? 'Give a witness-style description. Focus only on what you can see and do not guess the person\'s identity. Mention perceived gender presentation, notable physical characteristics, clothing items with colors, accessories, and anything else that would help someone pick them out in a crowd.'
+                  : 'Give a witness-style description of this selfie. Focus only on what you can see and do not guess the person\'s identity. Mention perceived gender presentation, notable physical characteristics, clothing items with colors, accessories, and anything else that would help someone pick them out in a crowd.'
               },
               {
                 type: 'image_url',
