@@ -41,8 +41,8 @@ exports.handler = async (event, context) => {
               {
                 type: 'text',
                 text: role === 'you' 
-                  ? 'Describe this person briefly for identification purposes. Focus on visible characteristics like clothing, appearance, and setting.'
-                  : 'Describe this selfie briefly. Focus on the person\'s appearance and any notable features.'
+                  ? 'Provide a detailed, anonymous description of the person so we can route a message appropriately. Focus on clothing, posture, accessories, and surroundings. Do not speculate about identity.'
+                  : 'Provide a detailed description of this selfie for routing a message. Focus on clothing, pose, accessories, and background details without identifying the person.'
               },
               {
                 type: 'image_url',
