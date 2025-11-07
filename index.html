@@ -296,14 +296,80 @@ const photoSlots = {
     back: {
         imageEl: backCapturedPhoto,
         placeholderEl: backPlaceholder,
-        defaultSrc: DEFAULT_IMAGES.back
+        defaultSrc: DEFAULT_IMAGES.back,
+        defaultDescriptionRequested: false
     },
     selfie: {
         imageEl: selfieCapturedPhoto,
         placeholderEl: selfiePlaceholder,
-        defaultSrc: DEFAULT_IMAGES.selfie
+        defaultSrc: DEFAULT_IMAGES.selfie,
+        defaultDescriptionRequested: false
     }
 };
+
+function fetchImageAsDataUrl(src) {
+    return fetch(src, { cache: 'no-cache' })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Failed to fetch image ${src}: HTTP ${response.status}`);
+            }
+            return response.blob();
+        })
+        .then(blob => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        }));
+}
+
+function requestDefaultDescription(side) {
+    const slot = photoSlots[side];
+    if (!slot || slot.defaultDescriptionRequested) {
+        return;
+    }
+
+    const { imageEl, defaultSrc } = slot;
+    if (!imageEl || !defaultSrc) {
+        return;
+    }
+
+    const describe = () => {
+        if (slot.defaultDescriptionRequested) {
+            return;
+        }
+        slot.defaultDescriptionRequested = true;
+        fetchImageAsDataUrl(defaultSrc)
+            .then((dataUrl) => {
+                const role = side === 'back' ? 'you' : 'me';
+                requestDescription(role, dataUrl);
+            })
+            .catch(error => {
+                console.error(`Failed to describe default ${side} image:`, error);
+                slot.defaultDescriptionRequested = false;
+            });
+    };
+
+    if (imageEl.complete && imageEl.naturalWidth > 0) {
+        describe();
+        return;
+    }
+
+    const handleLoad = () => {
+        imageEl.removeEventListener('load', handleLoad);
+        imageEl.removeEventListener('error', handleError);
+        describe();
+    };
+
+    const handleError = (event) => {
+        imageEl.removeEventListener('load', handleLoad);
+        imageEl.removeEventListener('error', handleError);
+        console.error(`Failed to load default ${side} image.`, event?.error || event);
+    };
+
+    imageEl.addEventListener('load', handleLoad, { once: true });
+    imageEl.addEventListener('error', handleError, { once: true });
+}
 
 function showDefaultPhoto(side) {
     const slot = photoSlots[side];
@@ -323,15 +389,18 @@ function showDefaultPhoto(side) {
         if (placeholderEl) {
             placeholderEl.classList.add('hidden');
         }
+        requestDefaultDescription(side);
         return;
     }
 
     imageEl.src = defaultSrc;
     imageEl.dataset.defaultPhoto = 'true';
     imageEl.classList.add('active');
+    slot.defaultDescriptionRequested = false;
     if (placeholderEl) {
         placeholderEl.classList.add('hidden');
     }
+    requestDefaultDescription(side);
 }
 
 function markPhotoCaptured(side) {
@@ -340,6 +409,7 @@ function markPhotoCaptured(side) {
         return;
     }
     delete slot.imageEl.dataset.defaultPhoto;
+    slot.defaultDescriptionRequested = false;
 }
 
 function hideDefaultPhoto(side) {
@@ -351,7 +421,7 @@ function hideDefaultPhoto(side) {
         slot.imageEl.classList.remove('active');
     }
 }
-
+        
         const errorMessage = document.getElementById('errorMessage');
           const youDescriptionPanel = document.getElementById('youDescriptionPanel');
           const meDescriptionPanel = document.getElementById('meDescriptionPanel');
@@ -881,7 +951,7 @@ showDefaultPhoto('selfie');
             if (!isSelfieFrozen) {
                 showDefaultPhoto('selfie');
             }
-
+            
         }
 
         async function openBackCamera() {
@@ -1094,10 +1164,10 @@ showDefaultPhoto('selfie');
             backCrosshair.classList.remove('active');
             
             isBackFrozen = true;
-
+            
             // Stop camera
             stopAllCameras();
-            
+
               requestDescription('you', photoDataUrl);
         }
 
@@ -1143,10 +1213,10 @@ showDefaultPhoto('selfie');
             selfiePlaceholder.classList.add('hidden');
             
             isSelfieFrozen = true;
-
+            
             // Stop camera
             stopAllCameras();
-            
+
               requestDescription('me', photoDataUrl);
         }
 
