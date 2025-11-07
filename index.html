@@ -1055,6 +1055,9 @@
 
           resetDescriptionState('you');
           resetDescriptionState('me');
+
+          // Configure the API endpoint for Netlify Function
+          window.DESCRIPTION_API_URL = '/.netlify/functions/describe';
     </script>
 </body>
 </html>
