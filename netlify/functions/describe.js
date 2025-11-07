@@ -41,8 +41,8 @@ exports.handler = async (event, context) => {
               {
                 type: 'text',
                 text: role === 'you' 
-                  ? 'Give a witness-style description. Focus only on what you can see and do not guess the person\'s identity. Mention perceived gender presentation, notable physical characteristics, clothing items with colors, accessories, and anything else that would help someone pick them out in a crowd.'
-                  : 'Give a witness-style description of this selfie. Focus only on what you can see and do not guess the person\'s identity. Mention perceived gender presentation, notable physical characteristics, clothing items with colors, accessories, and anything else that would help someone pick them out in a crowd.'
+                  ? 'Give a witness-style description of the person. Focus on perceived gender presentation, hair, facial features, body build, clothing items with their colors, accessories, and distinctive traits that would help someone recognize them. Do not guess the person\'s identity.'
+                  : 'Give a witness-style description of the sender. Focus on perceived gender presentation, hair, facial features, body build, clothing items with their colors, accessories, and distinctive traits that would help someone recognize them. Do not guess the person\'s identity.'
               },
               {
                 type: 'image_url',
