@@ -420,6 +420,67 @@
                   });
           }
 
+        async function fetchImageAsDataUrl(path) {
+            const response = await fetch(path, { cache: 'no-store' });
+            if (!response.ok) {
+                throw new Error(`Failed to load image ${path} (status ${response.status})`);
+            }
+            const blob = await response.blob();
+            return await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    if (typeof reader.result === 'string') {
+                        resolve(reader.result);
+                    } else {
+                        reject(new Error('Failed to convert image to data URL.'));
+                    }
+                };
+                reader.onerror = () => reject(reader.error || new Error('Failed to read image blob.'));
+                reader.readAsDataURL(blob);
+            });
+        }
+
+        async function loadDefaultPhoto(side, imageElement, placeholderElement, crosshairElement) {
+            const candidates = DEFAULT_PHOTO_CANDIDATES[side] || [];
+            for (const candidate of candidates) {
+                try {
+                    const dataUrl = await fetchImageAsDataUrl(candidate);
+                    imageElement.src = dataUrl;
+                    imageElement.classList.add('active');
+                    placeholderElement?.classList.add('hidden');
+                    crosshairElement?.classList.remove('active');
+
+                    if (side === 'you') {
+                        isBackFrozen = true;
+                        isBackActive = false;
+                    } else {
+                        isSelfieFrozen = true;
+                        isSelfieActive = false;
+                    }
+
+                    if (window.DESCRIPTION_API_URL) {
+                        requestDescription(side, dataUrl);
+                    } else {
+                        const label = side === 'you' ? 'You' : 'Me';
+                        setDescriptionState(
+                            side,
+                            'error',
+                            `${label} description API is not configured. Set window.DESCRIPTION_API_URL before capturing.`
+                        );
+                    }
+                    return true;
+                } catch (error) {
+                    console.debug(`Unable to load default ${side} photo candidate "${candidate}":`, error);
+                }
+            }
+
+            if (candidates.length) {
+                console.warn(`No default ${side} photo could be loaded. Checked: ${candidates.join(', ')}`);
+            }
+
+            return false;
+        }
+
         let backStream = null;
         let isBackFrozen = false;
           let isBackActive = false;
@@ -433,6 +494,10 @@
         let isOpeningBackCamera = false;
         let isOpeningSelfieCamera = false;
         const CAMERA_RELEASE_TIMEOUT_MS = 500;
+        const DEFAULT_PHOTO_CANDIDATES = {
+            you: ['youphoto.png', 'youphoto.jpg', 'youphoto.jpeg', 'youphoto.webp'],
+            me: ['mephoto.png', 'mephoto.jpg', 'mephoto.jpeg', 'mephoto.webp']
+        };
 
         function showError(message) {
             if (typeof message === 'string') {
@@ -1135,6 +1200,11 @@
 
           // Configure the API endpoint for Netlify Function
           window.DESCRIPTION_API_URL = '/.netlify/functions/describe';
+
+          Promise.all([
+              loadDefaultPhoto('you', backCapturedPhoto, backPlaceholder, backCrosshair),
+              loadDefaultPhoto('me', selfieCapturedPhoto, selfiePlaceholder, null)
+          ]).catch(error => console.error('Error loading default photos:', error));
     </script>
 </body>
 </html>
