@@ -28,13 +28,18 @@
             height: 100vh;
         }
 
-        .camera-row {
+        .camera-row,
+        .description-row {
             display: flex;
             width: 100%;
             background: #000;
             align-items: stretch;
             flex: 0 0 50vh;
             height: 50vh;
+        }
+
+        .description-row {
+            border-top: 1.5px solid rgba(255, 255, 255, 0.3);
         }
 
         .camera-half {
@@ -60,6 +65,65 @@
         .camera-filler {
             flex: 1;
             background: #444;
+        }
+
+        .description-half {
+            position: relative;
+            width: 50%;
+            height: 100%;
+            padding: 36px 32px;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            gap: 16px;
+            background: rgba(0, 0, 0, 0.85);
+            color: rgba(255, 255, 255, 0.9);
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top-width: 1.5px;
+            overflow: hidden;
+        }
+
+        .description-half.left {
+            border-right-width: 1.5px;
+        }
+
+        .description-half.right {
+            border-left-width: 1.5px;
+        }
+
+        .description-title {
+            font-size: 24px;
+            font-weight: 500;
+            letter-spacing: 0.02em;
+        }
+
+        .description-status {
+            font-size: 16px;
+            line-height: 1.4;
+            color: rgba(255, 255, 255, 0.65);
+        }
+
+        .description-content {
+            font-size: 18px;
+            line-height: 1.6;
+            white-space: pre-line;
+            overflow-y: auto;
+            flex: 1 1 auto;
+            padding-right: 8px;
+        }
+
+        .description-half.loading .description-status::before {
+            content: 'Loading… ';
+            font-weight: 400;
+            color: rgba(255, 255, 255, 0.75);
+        }
+
+        .description-half.error .description-status {
+            color: rgba(255, 99, 99, 0.95);
+        }
+
+        .description-half.success .description-status {
+            color: rgba(112, 255, 166, 0.9);
         }
 
         .placeholder-text {
@@ -187,7 +251,18 @@
             </div>
         </div>
 
-        <div class="camera-filler"></div>
+          <div class="description-row">
+              <div class="description-half left" id="youDescriptionPanel">
+                  <div class="description-title">You (Target with Crosshair)</div>
+                  <div class="description-status" id="youDescriptionStatus"></div>
+                  <div class="description-content" id="youDescriptionContent"></div>
+              </div>
+              <div class="description-half right" id="meDescriptionPanel">
+                  <div class="description-title">Me (Sender Selfie)</div>
+                  <div class="description-status" id="meDescriptionStatus"></div>
+                  <div class="description-content" id="meDescriptionContent"></div>
+              </div>
+          </div>
 
         <div id="errorMessage" class="error-message"></div>
     </div>
@@ -207,6 +282,12 @@
         const selfiePlaceholder = document.getElementById('selfiePlaceholder');
         
         const errorMessage = document.getElementById('errorMessage');
+          const youDescriptionPanel = document.getElementById('youDescriptionPanel');
+          const meDescriptionPanel = document.getElementById('meDescriptionPanel');
+          const youDescriptionStatus = document.getElementById('youDescriptionStatus');
+          const youDescriptionContent = document.getElementById('youDescriptionContent');
+          const meDescriptionStatus = document.getElementById('meDescriptionStatus');
+          const meDescriptionContent = document.getElementById('meDescriptionContent');
 
         const DEFAULT_BACK_ASPECT = 16 / 9;
         const DEFAULT_SELFIE_ASPECT = 16 / 9;
@@ -239,6 +320,100 @@
         // Back camera state
         const BACK_TARGET_ZOOM = 3;
         const SELFIE_ZOOM_MODE = 'min';
+          const DESCRIPTION_API_TIMEOUT_MS = 10000;
+          const descriptionState = {
+              you: {
+                  panel: youDescriptionPanel,
+                  statusEl: youDescriptionStatus,
+                  contentEl: youDescriptionContent
+              },
+              me: {
+                  panel: meDescriptionPanel,
+                  statusEl: meDescriptionStatus,
+                  contentEl: meDescriptionContent
+              }
+          };
+
+          function resetDescriptionState(side) {
+              const state = descriptionState[side];
+              if (!state) return;
+              state.panel.classList.remove('loading', 'error', 'success');
+              state.statusEl.textContent = side === 'you'
+                  ? 'Waiting for a You capture. The crosshair marks the intended recipient.'
+                  : 'Waiting for a Me capture. Capture a clear selfie for routing.';
+              state.contentEl.textContent = '';
+          }
+
+          function setDescriptionState(side, status, message, descriptionText = '') {
+              const state = descriptionState[side];
+              if (!state) return;
+              state.panel.classList.remove('loading', 'error', 'success');
+              if (status === 'loading') {
+                  state.panel.classList.add('loading');
+              } else if (status === 'error') {
+                  state.panel.classList.add('error');
+              } else if (status === 'success') {
+                  state.panel.classList.add('success');
+              }
+              if (typeof message === 'string') {
+                  state.statusEl.textContent = message;
+              }
+              state.contentEl.textContent = descriptionText;
+          }
+
+          function requestDescription(side, photoDataUrl) {
+              const state = descriptionState[side];
+              if (!state) {
+                  return;
+              }
+
+              const label = side === 'you' ? 'You' : 'Me';
+
+              if (!window.DESCRIPTION_API_URL) {
+                  setDescriptionState(side, 'error', `${label} description API is not configured. Set window.DESCRIPTION_API_URL before capturing.`);
+                  return;
+              }
+
+              setDescriptionState(side, 'loading', `${label} description requested from server…`);
+
+              const controller = new AbortController();
+              const timeoutId = window.setTimeout(() => controller.abort(), DESCRIPTION_API_TIMEOUT_MS);
+
+              fetch(window.DESCRIPTION_API_URL, {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({
+                      role: side,
+                      image: photoDataUrl
+                  }),
+                  signal: controller.signal
+              })
+                  .then(async response => {
+                      window.clearTimeout(timeoutId);
+                      if (!response.ok) {
+                          const errorText = await response.text().catch(() => '');
+                          throw new Error(errorText || `HTTP ${response.status}`);
+                      }
+                      return response.json();
+                  })
+                  .then(payload => {
+                      const descriptionText = typeof payload?.description === 'string'
+                          ? payload.description.trim()
+                          : '';
+                      if (!descriptionText) {
+                          throw new Error('API response did not include a usable description.');
+                      }
+                      setDescriptionState(side, 'success', `${label} description ready.`, descriptionText);
+                  })
+                  .catch(error => {
+                      const message = error?.name === 'AbortError'
+                          ? `${label} description request timed out after ${Math.round(DESCRIPTION_API_TIMEOUT_MS / 1000)}s.`
+                          : `${label} description failed: ${error?.message || 'Unknown error.'}`;
+                      setDescriptionState(side, 'error', message);
+                  });
+          }
 
         let backStream = null;
         let isBackFrozen = false;
@@ -729,7 +904,7 @@
 
         // Back camera functions
 
-        function captureBackPhoto() {
+          function captureBackPhoto() {
             if (!backStream || !isBackActive) return;
 
             const videoWidth = backVideoElement.videoWidth;
@@ -754,7 +929,7 @@
                 0, 0, canvas.width, canvas.height
             );
 
-            const photoDataUrl = canvas.toDataURL('image/png');
+              const photoDataUrl = canvas.toDataURL('image/png');
             backCapturedPhoto.src = photoDataUrl;
             backCapturedPhoto.classList.add('active');
             backVideoElement.classList.remove('active');
@@ -765,14 +940,17 @@
             stopAllCameras();
             
             isBackFrozen = true;
+
+              requestDescription('you', photoDataUrl);
         }
 
-        function resetBackCamera() {
+          function resetBackCamera() {
             if (!isBackFrozen) return;
             
             backCapturedPhoto.classList.remove('active');
             // Don't show placeholder again - it's only shown initially
             isBackFrozen = false;
+              resetDescriptionState('you');
         }
 
         // Selfie camera functions
@@ -800,7 +978,7 @@
                 0, 0, canvas.width, canvas.height
             );
 
-            const photoDataUrl = canvas.toDataURL('image/png');
+              const photoDataUrl = canvas.toDataURL('image/png');
             selfieCapturedPhoto.src = photoDataUrl;
             selfieCapturedPhoto.classList.add('active');
             selfieVideoElement.classList.remove('active');
@@ -810,14 +988,17 @@
             stopAllCameras();
             
             isSelfieFrozen = true;
+
+              requestDescription('me', photoDataUrl);
         }
 
-        function resetSelfieCamera() {
+          function resetSelfieCamera() {
             if (!isSelfieFrozen) return;
             
             selfieCapturedPhoto.classList.remove('active');
             // Don't show placeholder again - it's only shown initially
             isSelfieFrozen = false;
+              resetDescriptionState('me');
         }
 
         // Touch event handlers for back camera - toggle behavior
@@ -871,6 +1052,9 @@
         window.addEventListener('beforeunload', () => {
             stopAllCameras();
         });
+
+          resetDescriptionState('you');
+          resetDescriptionState('me');
     </script>
 </body>
 </html>
