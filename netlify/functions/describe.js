@@ -41,8 +41,8 @@ exports.handler = async (event, context) => {
               {
                 type: 'text',
                 text: role === 'you' 
-                  ? 'Provide a detailed, anonymous description of the person so we can route a message appropriately. Focus on clothing, posture, accessories, and surroundings. Do not speculate about identity.'
-                  : 'Provide a detailed description of this selfie for routing a message. Focus on clothing, pose, accessories, and background details without identifying the person.'
+                  ? 'Provide a detailed, anonymous description for routing a message. Follow this outline and complete each line with specific observations. Never guess or imply the person\'s identity.\nTarget Overview: [overall appearance, estimated age range if evident without guessing identity, gender presentation if clear, hair style/length/color]\nClothing & Accessories: [layers, colors, notable items such as hats, glasses, bags]\nPosture & Build: [stance, body orientation, build descriptors that avoid identity]\nSurroundings & Lighting: [location clues, lighting conditions, nearby objects or signage]\nDistinctive Cues: [visible details that would help spot this person in a crowd of ~50, excluding identity statements]'
+                  : 'Provide a detailed, anonymous description of the sender\'s selfie for routing a message. Follow this outline and complete each line with specific observations. Never guess or imply the person\'s identity.\nSender Overview: [overall appearance, visible hairstyle, noted facial hair or eyewear without identifying]\nClothing & Accessories: [garments, colors, jewelry, tech devices]\nPose & Expression: [posture, framing, notable gestures or facial expression without identity]\nBackground Context: [environment details, lighting, visible objects or signage]\nDistinctive Cues: [details that would help match this selfie within a group of ~50 people, excluding identity statements]'
               },
               {
                 type: 'image_url',

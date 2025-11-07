@@ -342,7 +342,7 @@ function requestDefaultDescription(side) {
         fetchImageAsDataUrl(defaultSrc)
             .then((dataUrl) => {
                 const role = side === 'back' ? 'you' : 'me';
-                requestDescription(role, dataUrl);
+                enqueueDescription(role, dataUrl);
             })
             .catch(error => {
                 console.error(`Failed to describe default ${side} image:`, error);
@@ -464,7 +464,9 @@ showDefaultPhoto('selfie');
         // Back camera state
         const BACK_TARGET_ZOOM = 3;
         const SELFIE_ZOOM_MODE = 'min';
-          const DESCRIPTION_API_TIMEOUT_MS = 10000;
+          const DESCRIPTION_API_TIMEOUT_MS = 25000;
+          const descriptionQueue = [];
+          let isDescriptionInFlight = false;
           const descriptionState = {
               you: {
                   panel: youDescriptionPanel,
@@ -505,17 +507,43 @@ showDefaultPhoto('selfie');
               state.contentEl.textContent = descriptionText;
           }
 
+          function enqueueDescription(side, photoDataUrl) {
+              descriptionQueue.push({ side, photoDataUrl });
+              processDescriptionQueue();
+          }
+
+          function processDescriptionQueue() {
+              if (isDescriptionInFlight) {
+                  return;
+              }
+
+              const next = descriptionQueue.shift();
+              if (!next) {
+                  return;
+              }
+
+              isDescriptionInFlight = true;
+              requestDescription(next.side, next.photoDataUrl)
+                  .catch(error => {
+                      console.error('Description request failed:', error);
+                  })
+                  .finally(() => {
+                      isDescriptionInFlight = false;
+                      processDescriptionQueue();
+                  });
+          }
+
           function requestDescription(side, photoDataUrl) {
               const state = descriptionState[side];
               if (!state) {
-                  return;
+                  return Promise.resolve();
               }
 
               const label = side === 'you' ? 'You' : 'Me';
 
               if (!window.DESCRIPTION_API_URL) {
                   setDescriptionState(side, 'error', `${label} description API is not configured. Set window.DESCRIPTION_API_URL before capturing.`);
-                  return;
+                  return Promise.resolve();
               }
 
               setDescriptionState(side, 'loading', `${label} description requested from server…`);
@@ -523,7 +551,7 @@ showDefaultPhoto('selfie');
               const controller = new AbortController();
               const timeoutId = window.setTimeout(() => controller.abort(), DESCRIPTION_API_TIMEOUT_MS);
 
-              fetch(window.DESCRIPTION_API_URL, {
+              return fetch(window.DESCRIPTION_API_URL, {
                   method: 'POST',
                   headers: {
                       'Content-Type': 'application/json'
@@ -556,6 +584,7 @@ showDefaultPhoto('selfie');
                           ? `${label} description request timed out after ${Math.round(DESCRIPTION_API_TIMEOUT_MS / 1000)}s.`
                           : `${label} description failed: ${error?.message || 'Unknown error.'}`;
                       setDescriptionState(side, 'error', message);
+                      throw error;
                   });
           }
 
@@ -1168,7 +1197,7 @@ showDefaultPhoto('selfie');
             // Stop camera
             stopAllCameras();
 
-              requestDescription('you', photoDataUrl);
+              enqueueDescription('you', photoDataUrl);
         }
 
           function resetBackCamera() {
@@ -1217,7 +1246,7 @@ showDefaultPhoto('selfie');
             // Stop camera
             stopAllCameras();
 
-              requestDescription('me', photoDataUrl);
+              enqueueDescription('me', photoDataUrl);
         }
 
           function resetSelfieCamera() {
