@@ -167,6 +167,7 @@
             position: absolute;
             transform-origin: center center;
             object-fit: cover;
+            object-position: center;
             width: 100%;
             height: 100%;
             top: 0;
@@ -232,6 +233,11 @@
         .error-message.active {
             display: block;
         }
+
+        .error-message.warning {
+            background: rgba(255, 165, 0, 0.85);
+            color: rgba(0, 0, 0, 0.9);
+        }
     </style>
 </head>
 <body>
@@ -281,6 +287,71 @@
         const selfieCameraHalf = document.getElementById('selfieCameraHalf');
         const selfiePlaceholder = document.getElementById('selfiePlaceholder');
         
+const DEFAULT_IMAGES = {
+    back: 'youphoto.jpg',
+    selfie: 'mephoto.jpg'
+};
+
+const photoSlots = {
+    back: {
+        imageEl: backCapturedPhoto,
+        placeholderEl: backPlaceholder,
+        defaultSrc: DEFAULT_IMAGES.back
+    },
+    selfie: {
+        imageEl: selfieCapturedPhoto,
+        placeholderEl: selfiePlaceholder,
+        defaultSrc: DEFAULT_IMAGES.selfie
+    }
+};
+
+function showDefaultPhoto(side) {
+    const slot = photoSlots[side];
+    if (!slot) {
+        return;
+    }
+
+    const { imageEl, placeholderEl, defaultSrc } = slot;
+    if (!imageEl || !defaultSrc) {
+        return;
+    }
+
+    if (
+        imageEl.dataset.defaultPhoto === 'true' &&
+        imageEl.classList.contains('active')
+    ) {
+        if (placeholderEl) {
+            placeholderEl.classList.add('hidden');
+        }
+        return;
+    }
+
+    imageEl.src = defaultSrc;
+    imageEl.dataset.defaultPhoto = 'true';
+    imageEl.classList.add('active');
+    if (placeholderEl) {
+        placeholderEl.classList.add('hidden');
+    }
+}
+
+function markPhotoCaptured(side) {
+    const slot = photoSlots[side];
+    if (!slot || !slot.imageEl) {
+        return;
+    }
+    delete slot.imageEl.dataset.defaultPhoto;
+}
+
+function hideDefaultPhoto(side) {
+    const slot = photoSlots[side];
+    if (!slot || !slot.imageEl) {
+        return;
+    }
+    if (slot.imageEl.dataset.defaultPhoto === 'true') {
+        slot.imageEl.classList.remove('active');
+    }
+}
+
         const errorMessage = document.getElementById('errorMessage');
           const youDescriptionPanel = document.getElementById('youDescriptionPanel');
           const meDescriptionPanel = document.getElementById('meDescriptionPanel');
@@ -316,6 +387,9 @@
 
         updateCameraHalfAspect('back', DEFAULT_BACK_ASPECT);
         updateCameraHalfAspect('selfie', DEFAULT_SELFIE_ASPECT);
+
+showDefaultPhoto('back');
+showDefaultPhoto('selfie');
         
         // Back camera state
         const BACK_TARGET_ZOOM = 3;
@@ -430,12 +504,24 @@
         const CAMERA_RELEASE_TIMEOUT_MS = 500;
 
         function showError(message) {
-            errorMessage.textContent = message;
+            if (typeof message === 'string') {
+                errorMessage.textContent = message;
+            }
+            errorMessage.classList.remove('warning');
             errorMessage.classList.add('active');
+        }
+
+        function showWarning(message) {
+            if (typeof message === 'string') {
+                errorMessage.textContent = message;
+            }
+            errorMessage.classList.add('active', 'warning');
+            console.warn(message);
         }
 
         function hideError() {
             errorMessage.classList.remove('active');
+            errorMessage.classList.remove('warning');
         }
 
         function stopStream(stream) {
@@ -494,18 +580,26 @@
             }
 
             if (typeof track.getCapabilities !== 'function') {
-                return { success: false, reason: 'Zoom capability is not available on this device.' };
+                const warning = 'Zoom capability is not available on this device.';
+                console.warn(warning);
+                return { success: true, appliedZoom: null, warning };
             }
 
             const capabilities = track.getCapabilities();
-            if (!capabilities || !capabilities.zoom) {
-                return { success: false, reason: 'Zoom control is not supported for this camera.' };
+            const zoomCapabilities = capabilities?.zoom;
+
+            if (!zoomCapabilities) {
+                const warning = 'Zoom control is not supported for this camera.';
+                console.warn(warning);
+                return { success: true, appliedZoom: null, warning };
             }
 
-            const { min, max } = capabilities.zoom;
+            const { min, max } = zoomCapabilities;
 
             if (typeof min !== 'number' || typeof max !== 'number') {
-                return { success: false, reason: 'Zoom range information is unavailable for this camera.' };
+                const warning = 'Zoom range information is unavailable for this camera.';
+                console.warn(warning);
+                return { success: true, appliedZoom: null, warning };
             }
 
             let desiredZoom;
@@ -605,27 +699,38 @@
               backVideoElement.srcObject = backStream;
 
             try {
+                const shouldVerifyZoom = typeof zoomResult.appliedZoom === 'number';
+                const expectedZoom = shouldVerifyZoom
+                    ? zoomResult.appliedZoom
+                    : BACK_TARGET_ZOOM;
+
+                const zoomVerificationPromise = shouldVerifyZoom
+                    ? waitForZoomToSettle(track, expectedZoom)
+                    : Promise.resolve({ success: true, appliedZoom: zoomResult.appliedZoom });
+
                 const [zoomSettled] = await Promise.all([
-                    waitForZoomToSettle(track, BACK_TARGET_ZOOM),
+                    zoomVerificationPromise,
                     waitForVideoMetadata(backVideoElement)
                 ]);
 
-                if (!zoomSettled.success) {
+                if (shouldVerifyZoom && !zoomSettled.success) {
                       stopStream(stream);
                       backVideoElement.srcObject = null;
                         showError('Back camera (requires 3x zoom): ' + zoomSettled.reason);
                     return false;
                 }
 
-                const verifiedZoom = typeof zoomSettled.appliedZoom === 'number'
-                    ? zoomSettled.appliedZoom
-                    : (typeof track.getSettings === 'function' ? track.getSettings().zoom : undefined);
+                if (shouldVerifyZoom) {
+                    const verifiedZoom = typeof zoomSettled.appliedZoom === 'number'
+                        ? zoomSettled.appliedZoom
+                        : (typeof track.getSettings === 'function' ? track.getSettings().zoom : undefined);
 
-                if (typeof verifiedZoom === 'number' && Math.abs(verifiedZoom - BACK_TARGET_ZOOM) > 0.05) {
-                      stopStream(stream);
-                      backVideoElement.srcObject = null;
-                        showError('Back camera (requires 3x zoom): Device reported ' + verifiedZoom.toFixed(2) + 'x zoom.');
-                    return false;
+                    if (typeof verifiedZoom === 'number' && Math.abs(verifiedZoom - expectedZoom) > 0.05) {
+                          stopStream(stream);
+                          backVideoElement.srcObject = null;
+                            showError('Back camera (requires 3x zoom): Device reported ' + verifiedZoom.toFixed(2) + 'x zoom.');
+                        return false;
+                    }
                 }
 
                 const videoWidth = backVideoElement.videoWidth;
@@ -643,8 +748,13 @@
                   return false;
               }
 
-            hideError();
+            if (zoomResult.warning) {
+                showWarning('Back camera: ' + zoomResult.warning + ' Displaying the default field of view.');
+            } else {
+                hideError();
+            }
             backCameraHalf.classList.add('initializing');
+            hideDefaultPhoto('back');
             backVideoElement.classList.add('active');
             backCrosshair.classList.add('active');
             isBackActive = true;
@@ -665,6 +775,7 @@
         async function activateSelfieStream(stream) {
             selfieStream = stream;
             selfieVideoElement.srcObject = selfieStream;
+            const selfieTrack = selfieStream?.getVideoTracks()[0];
 
             const zoomResult = await applyZoomSetting(selfieStream, SELFIE_ZOOM_MODE);
             if (!zoomResult.success) {
@@ -675,8 +786,30 @@
                 return false;
             }
 
+            let zoomWarningMessage = zoomResult.warning
+                ? 'Selfie camera: ' + zoomResult.warning + ' Displaying the default field of view.'
+                : null;
+
               try {
-                  await waitForVideoMetadata(selfieVideoElement);
+                  const shouldVerifyZoom = typeof zoomResult.appliedZoom === 'number';
+                  const expectedZoom = shouldVerifyZoom
+                      ? zoomResult.appliedZoom
+                      : undefined;
+
+                  const zoomVerificationPromise = shouldVerifyZoom
+                      ? waitForZoomToSettle(selfieTrack, expectedZoom)
+                      : Promise.resolve({ success: true, appliedZoom: zoomResult.appliedZoom });
+
+                  const [zoomSettled] = await Promise.all([
+                      zoomVerificationPromise,
+                      waitForVideoMetadata(selfieVideoElement)
+                  ]);
+
+                  if (shouldVerifyZoom && !zoomSettled.success) {
+                      const warning = 'Selfie camera: ' + zoomSettled.reason + ' Displaying the default field of view.';
+                      console.warn('Selfie camera zoom verification failed:', zoomSettled.reason);
+                      zoomWarningMessage = warning;
+                  }
               } catch (error) {
                   console.error('Selfie camera stream failed to become ready:', error);
                   stopStream(selfieStream);
@@ -694,7 +827,12 @@
                   console.warn('Selfie camera metadata unavailable after initialization.');
               }
 
-            hideError();
+            if (zoomWarningMessage) {
+                showWarning(zoomWarningMessage);
+            } else {
+                hideError();
+            }
+            hideDefaultPhoto('selfie');
             selfieVideoElement.classList.add('active');
             isSelfieActive = true;
             selfiePlaceholder.classList.add('hidden');
@@ -736,6 +874,14 @@
             selfieVideoElement.classList.remove('active');
             isSelfieActive = false;
             
+            if (!isBackFrozen) {
+                showDefaultPhoto('back');
+            }
+
+            if (!isSelfieFrozen) {
+                showDefaultPhoto('selfie');
+            }
+
         }
 
         async function openBackCamera() {
@@ -777,15 +923,25 @@
                         showError('No back camera found.');
                     } else {
                         try {
-                              const stream = await navigator.mediaDevices.getUserMedia({ 
-                                    video: { facingMode: 'environment', advanced: [{ zoom: BACK_TARGET_ZOOM }] } 
+                            const stream = await navigator.mediaDevices.getUserMedia({
+                                video: { facingMode: 'environment' }
                             });
                             const activated = await activateBackStream(stream);
                             if (!activated) {
                                 return;
                             }
                         } catch (retryError) {
-                            showError('Failed to access back camera.');
+                            console.warn('Back camera fallback without zoom constraint failed, retrying with generic video request.', retryError);
+                            try {
+                                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                                const activated = await activateBackStream(stream);
+                                if (!activated) {
+                                    return;
+                                }
+                            } catch (finalRetryError) {
+                                console.error('Final attempt to access back camera failed:', finalRetryError);
+                                showError('Failed to access back camera.');
+                            }
                         }
                     }
                 }
@@ -930,17 +1086,18 @@
             );
 
               const photoDataUrl = canvas.toDataURL('image/png');
+            markPhotoCaptured('back');
             backCapturedPhoto.src = photoDataUrl;
             backCapturedPhoto.classList.add('active');
             backVideoElement.classList.remove('active');
             backPlaceholder.classList.add('hidden');
             backCrosshair.classList.remove('active');
             
+            isBackFrozen = true;
+
             // Stop camera
             stopAllCameras();
             
-            isBackFrozen = true;
-
               requestDescription('you', photoDataUrl);
         }
 
@@ -948,7 +1105,7 @@
             if (!isBackFrozen) return;
             
             backCapturedPhoto.classList.remove('active');
-            // Don't show placeholder again - it's only shown initially
+            showDefaultPhoto('back');
             isBackFrozen = false;
               resetDescriptionState('you');
         }
@@ -979,16 +1136,17 @@
             );
 
               const photoDataUrl = canvas.toDataURL('image/png');
+            markPhotoCaptured('selfie');
             selfieCapturedPhoto.src = photoDataUrl;
             selfieCapturedPhoto.classList.add('active');
             selfieVideoElement.classList.remove('active');
             selfiePlaceholder.classList.add('hidden');
             
+            isSelfieFrozen = true;
+
             // Stop camera
             stopAllCameras();
             
-            isSelfieFrozen = true;
-
               requestDescription('me', photoDataUrl);
         }
 
@@ -996,7 +1154,7 @@
             if (!isSelfieFrozen) return;
             
             selfieCapturedPhoto.classList.remove('active');
-            // Don't show placeholder again - it's only shown initially
+            showDefaultPhoto('selfie');
             isSelfieFrozen = false;
               resetDescriptionState('me');
         }
@@ -1055,6 +1213,9 @@
 
           resetDescriptionState('you');
           resetDescriptionState('me');
+
+          // Configure the API endpoint for Netlify Function
+          window.DESCRIPTION_API_URL = '/.netlify/functions/describe';
     </script>
 </body>
 </html>
