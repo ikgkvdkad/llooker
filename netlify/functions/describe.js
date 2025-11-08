@@ -39,10 +39,10 @@ exports.handler = async (event, context) => {
             role: 'user',
             content: [
               {
-                type: 'text',
-                  text: role === 'you' 
-                    ? 'Describe the person in the photo as reference notes for an artist preparing to draw them. Include overall posture, proportions, facial structure, hair style and color, clothing with colors and textures, accessories, and lighting or mood cues. Highlight distinctive features and avoid speculating about their identity.'
-                    : 'Describe the sender in the photo as reference notes for an artist preparing to draw them. Include overall posture, proportions, facial structure, hair style and color, clothing with colors and textures, accessories, and lighting or mood cues. Highlight distinctive features and avoid speculating about their identity.'
+                  type: 'text',
+                    text: role === 'you' 
+                      ? 'Describe the entire image and everyone in it as reference notes for an artist preparing to draw you. Include the overall scene layout, each person\'s posture, proportions, facial structure, hair style and color, clothing with colors and textures, accessories, and lighting or mood cues. Highlight distinctive features for every subject and avoid speculating about anyone\'s identity.'
+                      : 'Describe the entire image and everyone in it as reference notes for an artist preparing to draw the sender. Include the overall scene layout, each person\'s posture, proportions, facial structure, hair style and color, clothing with colors and textures, accessories, and lighting or mood cues. Highlight distinctive features for every subject and avoid speculating about anyone\'s identity.'
               },
               {
                 type: 'image_url',
