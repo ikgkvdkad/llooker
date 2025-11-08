@@ -18,7 +18,7 @@ exports.handler = async (event, context) => {
     }
 
     // Check if API key is configured
-    if (!process.env.OPENAIKEY) {
+    if (!process.env.OPENAI_API_KEY) {
       return {
         statusCode: 500,
         body: JSON.stringify({ error: 'OpenAI API key not configured' })
@@ -30,31 +30,35 @@ exports.handler = async (event, context) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.OPENAIKEY}`
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
+        model: 'gpt-4o-mini',
         messages: [
+          {
+            role: 'system',
+            content: 'You provide richly detailed, respectful descriptions of people in images. Focus on non-identifying, physical and stylistic attributes. Never guess identities, names, or personal data.'
+          },
           {
             role: 'user',
             content: [
               {
-                  type: 'text',
-                    text: role === 'you' 
-                      ? 'Describe the entire image and everyone in it as reference notes for an artist preparing to draw you. Include the overall scene layout, each person\'s posture, proportions, facial structure, hair style and color, clothing with colors and textures, accessories, and lighting or mood cues. Highlight distinctive features for every subject and avoid speculating about anyone\'s identity.'
-                      : 'Describe the entire image and everyone in it as reference notes for an artist preparing to draw the sender. Include the overall scene layout, each person\'s posture, proportions, facial structure, hair style and color, clothing with colors and textures, accessories, and lighting or mood cues. Highlight distinctive features for every subject and avoid speculating about anyone\'s identity.'
+                type: 'text',
+                text: role === 'you'
+                  ? 'Provide a “wine label” style description of the entire image and everyone in it so an artist could recreate you. Include scene layout, posture, physique, height impression, skin tone, hair style and facial hair, clothing layers with colors and textures, footwear, accessories, and lighting or mood cues. Only state observable attributes; do not guess age, name, identity, or unseen traits.'
+                  : 'Provide a “wine label” style description of the entire image and everyone in it so an artist could recreate the sender. Include scene layout, posture, physique, height impression, skin tone, hair style and facial hair, clothing layers with colors and textures, footwear, accessories, and lighting or mood cues. Only state observable attributes; do not guess age, name, identity, or unseen traits.'
               },
               {
                 type: 'image_url',
-                image_url: { 
+                image_url: {
                   url: image,
-                  detail: 'low' // Use low detail for faster/cheaper processing
+                  detail: 'high'
                 }
               }
             ]
           }
         ],
-        max_tokens: 150
+        max_tokens: 300
       })
     });
 
