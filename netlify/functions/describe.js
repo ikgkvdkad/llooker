@@ -40,9 +40,9 @@ exports.handler = async (event, context) => {
             content: [
               {
                 type: 'text',
-                text: role === 'you' 
-                  ? 'Give a witness-style description of the person. Focus on perceived gender presentation, hair, facial features, body build, clothing items with their colors, accessories, and distinctive traits that would help someone recognize them. Do not guess the person\'s identity.'
-                  : 'Give a witness-style description of the sender. Focus on perceived gender presentation, hair, facial features, body build, clothing items with their colors, accessories, and distinctive traits that would help someone recognize them. Do not guess the person\'s identity.'
+                  text: role === 'you' 
+                    ? 'Describe the person in the photo as reference notes for an artist preparing to draw them. Include overall posture, proportions, facial structure, hair style and color, clothing with colors and textures, accessories, and lighting or mood cues. Highlight distinctive features and avoid speculating about their identity.'
+                    : 'Describe the sender in the photo as reference notes for an artist preparing to draw them. Include overall posture, proportions, facial structure, hair style and color, clothing with colors and textures, accessories, and lighting or mood cues. Highlight distinctive features and avoid speculating about their identity.'
               },
               {
                 type: 'image_url',
