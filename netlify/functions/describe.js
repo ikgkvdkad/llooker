@@ -44,12 +44,12 @@ exports.handler = async (event, context) => {
           {
             role: 'user',
             content: [
-              {
-                type: 'text',
-                text: role === 'you'
-                  ? 'Provide a “wine label” style description of the entire image and everyone in it so an artist could recreate you. Include scene layout, posture, physique, height impression, skin tone, hair style and facial hair, clothing layers with colors and textures, footwear, accessories, and lighting or mood cues. Only state observable attributes; do not guess age, name, identity, or unseen traits.'
-                  : 'Provide a “wine label” style description of the entire image and everyone in it so an artist could recreate the sender. Include scene layout, posture, physique, height impression, skin tone, hair style and facial hair, clothing layers with colors and textures, footwear, accessories, and lighting or mood cues. Only state observable attributes; do not guess age, name, identity, or unseen traits.'
-              },
+                {
+                  type: 'text',
+                  text: role === 'you'
+                    ? 'Describe only the person centered within the crosshair of this \"You\" photo so an artist could recreate them. Focus on posture, physique, height impression, skin tone, hairstyle or facial hair, clothing layers (with colors, textures, and fit), footwear, accessories, and any lighting or mood cues that affect the subject. Mention the immediate context only if it helps position the subject, and avoid guessing age, name, identity, or traits that cannot be seen.'
+                    : 'Describe only the sender taking this \"Me\" selfie so an artist could recreate them. Focus on posture, physique, height impression, skin tone, hairstyle or facial hair, clothing layers (with colors, textures, and fit), footwear, accessories, and any lighting or mood cues that affect the subject. Mention the immediate context only if it helps position the subject, and avoid guessing age, name, identity, or traits that cannot be seen.'
+                },
               {
                 type: 'image_url',
                 image_url: {
