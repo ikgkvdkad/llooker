@@ -507,7 +507,7 @@ showDefaultPhoto('selfie');
         const BACK_TARGET_ZOOM = 2;
         const SELFIE_ZOOM_MODE = 'min';
           const DESCRIPTION_API_TIMEOUT_MS = 25000;
-          const descriptionQueue = [];
+            const descriptionQueue = [];
           let isDescriptionInFlight = false;
           const descriptionState = {
               you: {
@@ -521,6 +521,7 @@ showDefaultPhoto('selfie');
                   contentEl: meDescriptionContent
               }
           };
+            const WAITING_FOR_DESCRIPTION_MESSAGE = 'waiting for description...';
 
           function resetDescriptionState(side) {
               const state = descriptionState[side];
@@ -569,7 +570,7 @@ showDefaultPhoto('selfie');
                     return;
                 }
 
-                setDescriptionState(side, 'loading', `${label} description resubmitted…`);
+                  setDescriptionState(side, 'loading', WAITING_FOR_DESCRIPTION_MESSAGE, WAITING_FOR_DESCRIPTION_MESSAGE);
                 enqueueDescription(side, photoDataUrl);
             }
 
@@ -627,7 +628,7 @@ showDefaultPhoto('selfie');
                   return Promise.resolve();
               }
 
-              setDescriptionState(side, 'loading', `${label} description requested from server…`);
+                setDescriptionState(side, 'loading', WAITING_FOR_DESCRIPTION_MESSAGE, WAITING_FOR_DESCRIPTION_MESSAGE);
 
               const controller = new AbortController();
               const timeoutId = window.setTimeout(() => controller.abort(), DESCRIPTION_API_TIMEOUT_MS);
