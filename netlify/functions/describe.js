@@ -1,3 +1,20 @@
+function estimateImageBytesFromDataUrl(dataUrl) {
+  if (typeof dataUrl !== 'string') {
+    return null;
+  }
+
+  const base64Index = dataUrl.indexOf(',');
+  if (base64Index === -1) {
+    return null;
+  }
+
+  const base64Data = dataUrl.slice(base64Index + 1);
+  const paddingMatch = base64Data.match(/=+$/);
+  const paddingLength = paddingMatch ? paddingMatch[0].length : 0;
+
+  return Math.floor((base64Data.length * 3) / 4) - paddingLength;
+}
+
 exports.handler = async (event, context) => {
   // Only allow POST requests
   if (event.httpMethod !== 'POST') {
@@ -7,9 +24,28 @@ exports.handler = async (event, context) => {
     };
   }
 
-  try {
-    const { role, image } = JSON.parse(event.body);
+  let requestPayload;
 
+  try {
+    requestPayload = JSON.parse(event.body);
+  } catch (parseError) {
+    console.error('Invalid JSON payload:', parseError);
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: 'Invalid JSON body' })
+    };
+  }
+
+  const { role, image } = requestPayload;
+
+  const requestMeta = {
+    role: typeof role === 'string' ? role : null,
+    imageProvided: typeof image === 'string',
+    imageLength: typeof image === 'string' ? image.length : null,
+    imageBytesEstimated: estimateImageBytesFromDataUrl(image)
+  };
+
+  try {
     if (!image) {
       return {
         statusCode: 400,
@@ -65,11 +101,50 @@ exports.handler = async (event, context) => {
     });
 
     if (!response.ok) {
-      const errorData = await response.text();
-      console.error('OpenAI API error:', errorData);
+      const errorText = await response.text();
+      let openAiResponse;
+
+      try {
+        openAiResponse = JSON.parse(errorText);
+      } catch {
+        openAiResponse = null;
+      }
+
+      const openAiError = openAiResponse?.error;
+      const openAiRequestId = response.headers.get('x-request-id')
+        || response.headers.get('openai-request-id')
+        || null;
+
+      const errorDetails = {
+        status: response.status,
+        statusText: response.statusText,
+        requestId: openAiRequestId,
+        openAiMessage: openAiError?.message ?? null,
+        openAiType: openAiError?.type ?? null,
+        openAiCode: openAiError?.code ?? null,
+        openAiParam: openAiError?.param ?? null,
+        requestMeta
+      };
+
+      console.error('OpenAI API error:', {
+        ...errorDetails,
+        rawResponseBodySnippet: typeof errorText === 'string' ? errorText.slice(0, 500) : null
+      });
+
       return {
         statusCode: response.status,
-        body: JSON.stringify({ error: `OpenAI API error: ${response.statusText}` })
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          error: 'OpenAI API request failed',
+          details: {
+            ...errorDetails,
+            rawResponseBodySnippet: typeof errorText === 'string'
+              ? errorText.slice(0, 500)
+              : null
+          }
+        })
       };
     }
 
@@ -92,7 +167,11 @@ exports.handler = async (event, context) => {
     };
 
   } catch (error) {
-    console.error('Function error:', error);
+    console.error('Function error:', {
+      message: error?.message,
+      stack: error?.stack,
+      requestMeta
+    });
     return {
       statusCode: 500,
       body: JSON.stringify({ error: error.message || 'Failed to get description' })
