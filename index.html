@@ -683,20 +683,22 @@ showDefaultPhoto('selfie');
                 }, { passive: false });
             }
   
-          function attachUploadHandler(button, input, side) {
-              if (!button || !input) {
-                  return;
-              }
+            function attachUploadHandler(button, input, side) {
+                if (!button || !input) {
+                    return;
+                }
 
-              const triggerInputSelection = () => {
-                  input.click();
-              };
+                const triggerInputSelection = () => {
+                    input.click();
+                };
 
-              button.addEventListener('click', triggerInputSelection);
-              button.addEventListener('touchstart', (event) => {
-                  event.preventDefault();
-                  triggerInputSelection();
-              }, { passive: false });
+                button.addEventListener('click', triggerInputSelection);
+                button.addEventListener('pointerup', (event) => {
+                    if (event.pointerType === 'touch') {
+                        event.preventDefault();
+                        triggerInputSelection();
+                    }
+                });
 
               input.addEventListener('change', async () => {
                   const file = input.files && input.files[0];
