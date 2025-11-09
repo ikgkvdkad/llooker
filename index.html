@@ -465,7 +465,7 @@ showDefaultPhoto('back');
 showDefaultPhoto('selfie');
         
         // Back camera state
-        const BACK_TARGET_ZOOM = 3;
+        const BACK_TARGET_ZOOM = 2;
         const SELFIE_ZOOM_MODE = 'min';
           const DESCRIPTION_API_TIMEOUT_MS = 25000;
           const descriptionQueue = [];
@@ -573,15 +573,32 @@ showDefaultPhoto('selfie');
                       }
                       return response.json();
                   })
-                  .then(payload => {
-                      const descriptionText = typeof payload?.description === 'string'
-                          ? payload.description.trim()
-                          : '';
-                      if (!descriptionText) {
-                          throw new Error('API response did not include a usable description.');
-                      }
-                      setDescriptionState(side, 'success', `${label} description ready.`, descriptionText);
-                  })
+                    .then(payload => {
+                        const statusFlag = typeof payload?.status === 'string'
+                            ? payload.status.trim().toLowerCase()
+                            : null;
+                        const descriptionText = typeof payload?.description === 'string'
+                            ? payload.description.trim()
+                            : '';
+
+                        if (statusFlag === 'ok' && descriptionText) {
+                            setDescriptionState(side, 'success', `${label} description ready.`, descriptionText);
+                            return;
+                        }
+
+                        if (statusFlag === 'unclear') {
+                            const unclearMessage = descriptionText || 'Unclear photo';
+                            setDescriptionState(
+                                side,
+                                'error',
+                                `${label} description unavailable: subject not clear. Retake a closer photo.`,
+                                unclearMessage
+                            );
+                            return;
+                        }
+
+                        throw new Error('API response did not include a usable description.');
+                    })
                   .catch(error => {
                       const message = error?.name === 'AbortError'
                           ? `${label} description request timed out after ${Math.round(DESCRIPTION_API_TIMEOUT_MS / 1000)}s.`
@@ -791,7 +808,7 @@ showDefaultPhoto('selfie');
             const zoomResult = await applyZoomSetting(stream, BACK_TARGET_ZOOM);
             if (!zoomResult.success) {
                   stopStream(stream);
-                    showError('Back camera (requires 3x zoom): ' + zoomResult.reason);
+                      showError('Back camera (requires 2x zoom): ' + zoomResult.reason);
                 return false;
             }
 
@@ -818,7 +835,7 @@ showDefaultPhoto('selfie');
                 if (shouldVerifyZoom && !zoomSettled.success) {
                       stopStream(stream);
                       backVideoElement.srcObject = null;
-                        showError('Back camera (requires 3x zoom): ' + zoomSettled.reason);
+                          showError('Back camera (requires 2x zoom): ' + zoomSettled.reason);
                     return false;
                 }
 
@@ -830,7 +847,7 @@ showDefaultPhoto('selfie');
                     if (typeof verifiedZoom === 'number' && Math.abs(verifiedZoom - expectedZoom) > 0.05) {
                           stopStream(stream);
                           backVideoElement.srcObject = null;
-                            showError('Back camera (requires 3x zoom): Device reported ' + verifiedZoom.toFixed(2) + 'x zoom.');
+                              showError('Back camera (requires 2x zoom): Device reported ' + verifiedZoom.toFixed(2) + 'x zoom.');
                         return false;
                     }
                 }
@@ -846,7 +863,7 @@ showDefaultPhoto('selfie');
                   console.error('Back camera stream failed to become ready:', error);
                     stopStream(stream);
                     backVideoElement.srcObject = null;
-                      showError('Back camera (requires 3x zoom): Unable to load camera stream.');
+                      showError('Back camera (requires 2x zoom): Unable to load camera stream.');
                   return false;
               }
 

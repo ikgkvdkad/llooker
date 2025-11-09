@@ -73,18 +73,24 @@ exports.handler = async (event, context) => {
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: [
-          {
-            role: 'system',
-            content: 'You provide richly detailed, respectful descriptions of people in images. Focus on non-identifying, physical and stylistic attributes. Never guess identities, names, or personal data.'
-          },
+            {
+              role: 'system',
+              content: [
+                'You provide richly detailed, respectful descriptions of people in images. Focus on non-identifying, physical and stylistic attributes.',
+                'Always assess the person whose body or face is closest to the true center of the frame. Ignore other subjects unless they are the centered figure.',
+                'If that subject is too distant, blurred, obstructed, poorly lit, or otherwise indiscernible, respond only with the JSON object {"status":"unclear","description":"Unclear photo"}.',
+                'Otherwise respond with a single JSON object (no code block) shaped as {"status":"ok","description":"<rich but non-identifying description>"} and nothing else.',
+                'Never guess identities, names, or personal data. Keep clothing colors, textures, posture, lighting, and mood details accurate to what you can see.'
+              ].join(' ')
+            },
           {
             role: 'user',
             content: [
                 {
-                  type: 'text',
-                  text: role === 'you'
-                    ? 'Describe only the person centered within the crosshair of this \"You\" photo so an artist could recreate them. Focus on posture, physique, height impression, skin tone, hairstyle or facial hair, clothing layers (with colors, textures, and fit), footwear, accessories, and any lighting or mood cues that affect the subject. Mention the immediate context only if it helps position the subject, and avoid guessing age, name, identity, or traits that cannot be seen.'
-                    : 'Describe only the sender taking this \"Me\" selfie so an artist could recreate them. Focus on posture, physique, height impression, skin tone, hairstyle or facial hair, clothing layers (with colors, textures, and fit), footwear, accessories, and any lighting or mood cues that affect the subject. Mention the immediate context only if it helps position the subject, and avoid guessing age, name, identity, or traits that cannot be seen.'
+                    type: 'text',
+                    text: role === 'you'
+                      ? 'Describe only the person closest to the exact center crosshair of this \"You\" photo so an artist could recreate them. Before describing, confirm that subject is clearly visible and distinguishable. If they are too far, obstructed, or blurred to describe responsibly, reply with {\"status\":\"unclear\",\"description\":\"Unclear photo\"}. Otherwise supply {\"status\":\"ok\",\"description\":\"...\"} with a rich but non-identifying description covering posture, physique, height impression, skin tone, hairstyle or facial hair, clothing layers (with colors, textures, and fit), footwear, accessories, and lighting or mood cues. Mention immediate context only if it positions the subject, and avoid guessing age, name, identity, or traits that cannot be seen.'
+                      : 'Describe only the sender taking this \"Me\" selfie, focusing on the person closest to the frame center. Confirm that subject is clearly visible; if not, reply with {\"status\":\"unclear\",\"description\":\"Unclear photo\"}. Otherwise respond with {\"status\":\"ok\",\"description\":\"...\"} providing a rich but non-identifying description covering posture, physique, height impression, skin tone, hairstyle or facial hair, clothing layers (with colors, textures, and fit), accessories, and lighting or mood cues. Mention immediate context only if it helps position the subject and avoid guessing age, name, identity, or traits that cannot be seen.'
                 },
               {
                 type: 'image_url',
@@ -148,23 +154,59 @@ exports.handler = async (event, context) => {
       };
     }
 
-    const data = await response.json();
-    const description = data.choices?.[0]?.message?.content;
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content;
 
-    if (!description) {
+      if (!content) {
+        return {
+          statusCode: 500,
+          body: JSON.stringify({ error: 'No description returned from OpenAI' })
+        };
+      }
+
+      let parsed;
+
+      try {
+        parsed = JSON.parse(content);
+      } catch (parseError) {
+        console.error('Failed to parse AI response as JSON.', {
+          parseError: parseError?.message,
+          rawContentSnippet: typeof content === 'string' ? content.slice(0, 500) : null,
+          requestMeta
+        });
+        return {
+          statusCode: 500,
+          body: JSON.stringify({ error: 'AI response format invalid' })
+        };
+      }
+
+      const status = typeof parsed?.status === 'string' ? parsed.status.trim().toLowerCase() : null;
+      const description = typeof parsed?.description === 'string' ? parsed.description.trim() : '';
+
+      if (status !== 'ok' && status !== 'unclear') {
+        return {
+          statusCode: 500,
+          body: JSON.stringify({ error: 'AI response missing valid status' })
+        };
+      }
+
+      if (!description) {
+        return {
+          statusCode: 500,
+          body: JSON.stringify({ error: 'AI response missing description' })
+        };
+      }
+
       return {
-        statusCode: 500,
-        body: JSON.stringify({ error: 'No description returned from OpenAI' })
+        statusCode: 200,
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          status,
+          description
+        })
       };
-    }
-
-    return {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ description })
-    };
 
   } catch (error) {
     console.error('Function error:', {
