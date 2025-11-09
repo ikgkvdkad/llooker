@@ -120,6 +120,43 @@
             background: rgba(255, 255, 255, 0.08);
         }
 
+          .description-title-row {
+              display: flex;
+              align-items: center;
+              gap: 10px;
+          }
+
+          .description-upload-button {
+              font-size: 13px;
+              font-weight: 500;
+              letter-spacing: 0.01em;
+              color: rgba(255, 255, 255, 0.85);
+              background: rgba(255, 255, 255, 0.12);
+              border: 1px solid rgba(255, 255, 255, 0.25);
+              border-radius: 6px;
+              padding: 4px 10px;
+              cursor: pointer;
+              transition: background 0.2s ease, border-color 0.2s ease;
+          }
+
+          .description-upload-button:hover {
+              background: rgba(255, 255, 255, 0.2);
+              border-color: rgba(255, 255, 255, 0.35);
+          }
+
+          .description-upload-button:focus-visible {
+              outline: 2px solid rgba(255, 255, 255, 0.7);
+              outline-offset: 3px;
+          }
+
+          .description-upload-button:active {
+              background: rgba(255, 255, 255, 0.28);
+          }
+
+          .description-upload-input {
+              display: none;
+          }
+
         .description-status {
             font-size: 13px;
             line-height: 1.35;
@@ -284,13 +321,21 @@
         </div>
 
             <div class="description-row">
-                  <div class="description-half left" id="youDescriptionPanel">
-                      <button type="button" class="description-title-button" id="youResubmitButton">You</button>
+                    <div class="description-half left" id="youDescriptionPanel">
+                        <div class="description-title-row">
+                            <button type="button" class="description-title-button" id="youResubmitButton">You</button>
+                            <button type="button" class="description-upload-button" id="youUploadButton">Upload</button>
+                            <input type="file" accept="image/*" id="youUploadInput" class="description-upload-input" aria-label="Upload photo for You">
+                        </div>
                     <div class="description-status" id="youDescriptionStatus"></div>
                     <div class="description-content" id="youDescriptionContent"></div>
                 </div>
-                  <div class="description-half right" id="meDescriptionPanel">
-                      <button type="button" class="description-title-button" id="meResubmitButton">Me</button>
+                    <div class="description-half right" id="meDescriptionPanel">
+                        <div class="description-title-row">
+                            <button type="button" class="description-title-button" id="meResubmitButton">Me</button>
+                            <button type="button" class="description-upload-button" id="meUploadButton">Upload</button>
+                            <input type="file" accept="image/*" id="meUploadInput" class="description-upload-input" aria-label="Upload photo for Me">
+                        </div>
                     <div class="description-status" id="meDescriptionStatus"></div>
                     <div class="description-content" id="meDescriptionContent"></div>
                 </div>
@@ -461,6 +506,55 @@ function hideDefaultPhoto(side) {
         slot.imageEl.classList.remove('active');
     }
 }
+
+  function readFileAsDataUrl(file) {
+      return new Promise((resolve, reject) => {
+          if (!file) {
+              reject(new Error('No file provided.'));
+              return;
+          }
+
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(reader.error || new Error('Unable to read file.'));
+          reader.readAsDataURL(file);
+      });
+  }
+
+  function displayPhotoForSide(side, dataUrl) {
+      if (typeof dataUrl !== 'string' || dataUrl.length === 0) {
+          throw new Error('Invalid photo data.');
+      }
+
+      const slotKey = side === 'you' ? 'back' : 'selfie';
+      const slot = photoSlots[slotKey];
+
+      if (!slot || !slot.imageEl) {
+          throw new Error('Photo slot unavailable.');
+      }
+
+      markPhotoCaptured(slotKey);
+      slot.lastPhotoDataUrl = dataUrl;
+      slot.imageEl.src = dataUrl;
+      slot.imageEl.classList.add('active');
+      delete slot.imageEl.dataset.defaultPhoto;
+
+      if (slot.placeholderEl) {
+          slot.placeholderEl.classList.add('hidden');
+      }
+
+      if (slotKey === 'back') {
+          backVideoElement.classList.remove('active');
+          backCrosshair.classList.remove('active');
+          backPlaceholder.classList.add('hidden');
+          backCameraHalf.classList.remove('initializing');
+          isBackFrozen = true;
+      } else if (slotKey === 'selfie') {
+          selfieVideoElement.classList.remove('active');
+          selfiePlaceholder.classList.add('hidden');
+          isSelfieFrozen = true;
+      }
+  }
         
         const errorMessage = document.getElementById('errorMessage');
           const youDescriptionPanel = document.getElementById('youDescriptionPanel');
@@ -471,6 +565,10 @@ function hideDefaultPhoto(side) {
           const meDescriptionContent = document.getElementById('meDescriptionContent');
         const youResubmitButton = document.getElementById('youResubmitButton');
         const meResubmitButton = document.getElementById('meResubmitButton');
+        const youUploadButton = document.getElementById('youUploadButton');
+        const meUploadButton = document.getElementById('meUploadButton');
+        const youUploadInput = document.getElementById('youUploadInput');
+        const meUploadInput = document.getElementById('meUploadInput');
 
         const DEFAULT_BACK_ASPECT = 16 / 9;
         const DEFAULT_SELFIE_ASPECT = 16 / 9;
@@ -584,6 +682,59 @@ showDefaultPhoto('selfie');
                     handleResubmitDescription(side);
                 }, { passive: false });
             }
+  
+          function attachUploadHandler(button, input, side) {
+              if (!button || !input) {
+                  return;
+              }
+
+              const triggerInputSelection = () => {
+                  input.click();
+              };
+
+              button.addEventListener('click', triggerInputSelection);
+              button.addEventListener('touchstart', (event) => {
+                  event.preventDefault();
+                  triggerInputSelection();
+              }, { passive: false });
+
+              input.addEventListener('change', async () => {
+                  const file = input.files && input.files[0];
+                  if (!file) {
+                      return;
+                  }
+
+                  const label = side === 'you' ? 'You' : 'Me';
+
+                  if (file.type && !file.type.startsWith('image/')) {
+                      const message = `${label} upload failed: selected file is not an image.`;
+                      console.warn(message);
+                      showError(message);
+                      setDescriptionState(side, 'error', message);
+                      input.value = '';
+                      return;
+                  }
+
+                  try {
+                      setDescriptionState(side, 'loading', WAITING_FOR_DESCRIPTION_MESSAGE, WAITING_FOR_DESCRIPTION_MESSAGE);
+                      const dataUrl = await readFileAsDataUrl(file);
+                      if (typeof dataUrl !== 'string') {
+                          throw new Error('Uploaded data unavailable.');
+                      }
+                      displayPhotoForSide(side, dataUrl);
+                      stopAllCameras();
+                      enqueueDescription(side, dataUrl);
+                      hideError();
+                  } catch (error) {
+                      console.error(`${label} photo upload failed:`, error);
+                      const message = `${label} upload failed: ${error?.message || 'Unable to process image.'}`;
+                      showError(message);
+                      setDescriptionState(side, 'error', message);
+                  } finally {
+                      input.value = '';
+                  }
+              });
+          }
 
             function enqueueDescription(side, photoDataUrl) {
                 const slot = getPhotoSlotByDescriptionSide(side);
@@ -1407,12 +1558,14 @@ showDefaultPhoto('selfie');
         });
 
         // Cleanup when page is closed
-        window.addEventListener('beforeunload', () => {
+          window.addEventListener('beforeunload', () => {
             stopAllCameras();
         });
 
-            attachResubmitHandlers(youResubmitButton, 'you');
-            attachResubmitHandlers(meResubmitButton, 'me');
+          attachResubmitHandlers(youResubmitButton, 'you');
+          attachResubmitHandlers(meResubmitButton, 'me');
+          attachUploadHandler(youUploadButton, youUploadInput, 'you');
+          attachUploadHandler(meUploadButton, meUploadInput, 'me');
 
             resetDescriptionState('you');
             resetDescriptionState('me');
