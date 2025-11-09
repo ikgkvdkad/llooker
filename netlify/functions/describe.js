@@ -73,17 +73,17 @@ exports.handler = async (event, context) => {
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: [
-          {
-            role: 'system',
-            content: 'You provide richly detailed, respectful descriptions of people in images. Focus on non-identifying, physical and stylistic attributes. Never guess identities, names, or personal data.'
-          },
+            {
+              role: 'system',
+              content: 'You provide richly detailed, respectful descriptions of people in images. Focus on non-identifying, physical and stylistic attributes. Never guess identities, names, or personal data. If the intended subject is not clearly visible, respond exactly with: \"Unclear photo - unable to describe the central subject.\"'
+            },
           {
             role: 'user',
             content: [
                 {
                   type: 'text',
-                  text: role === 'you'
-                    ? 'Describe only the person centered within the crosshair of this \"You\" photo so an artist could recreate them. Focus on posture, physique, height impression, skin tone, hairstyle or facial hair, clothing layers (with colors, textures, and fit), footwear, accessories, and any lighting or mood cues that affect the subject. Mention the immediate context only if it helps position the subject, and avoid guessing age, name, identity, or traits that cannot be seen.'
+                    text: role === 'you'
+                        ? 'Describe only the person whose body is closest to the crosshair at the exact center of this \"You\" photo so an artist could recreate them. First confirm that this central subject is clearly visible; if they are distant, poorly lit, blurred, or obscured, respond exactly with \"Unclear photo - unable to describe the central subject.\" When the subject is clear, focus on posture, physique, height impression, skin tone, hairstyle or facial hair, clothing layers (with colors, textures, and fit), footwear, accessories, and any lighting or mood cues that affect the subject. Mention the immediate context only if it helps position the subject, and avoid guessing age, name, identity, or traits that cannot be seen.'
                     : 'Describe only the sender taking this \"Me\" selfie so an artist could recreate them. Focus on posture, physique, height impression, skin tone, hairstyle or facial hair, clothing layers (with colors, textures, and fit), footwear, accessories, and any lighting or mood cues that affect the subject. Mention the immediate context only if it helps position the subject, and avoid guessing age, name, identity, or traits that cannot be seen.'
                 },
               {
