@@ -54,6 +54,56 @@
             justify-content: center;
         }
 
+        .camera-title-bar {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            right: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            z-index: 20;
+            pointer-events: none;
+        }
+
+        .camera-title-text {
+            font-size: 20px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            color: rgba(255, 255, 255, 0.95);
+            text-transform: uppercase;
+            pointer-events: none;
+        }
+
+        .camera-title-upload-button {
+            font-size: 13px;
+            font-weight: 500;
+            letter-spacing: 0.01em;
+            color: rgba(255, 255, 255, 0.9);
+            background: rgba(0, 0, 0, 0.45);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 6px;
+            padding: 6px 12px;
+            cursor: pointer;
+            transition: background 0.2s ease, border-color 0.2s ease;
+            pointer-events: auto;
+        }
+
+        .camera-title-upload-button:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.35);
+        }
+
+        .camera-title-upload-button:focus-visible {
+            outline: 2px solid rgba(255, 255, 255, 0.7);
+            outline-offset: 3px;
+        }
+
+        .camera-title-upload-button:active {
+            background: rgba(255, 255, 255, 0.28);
+        }
+
         .camera-half.left {
             border-right-width: 1.5px;
         }
@@ -306,15 +356,23 @@
 <body>
     <div class="camera-container">
             <div class="camera-row">
-                <div class="camera-half left" id="backCameraHalf">
-                    <div class="placeholder-text" id="backPlaceholder">You</div>
+                  <div class="camera-half left" id="backCameraHalf">
+                      <div class="camera-title-bar">
+                          <span class="camera-title-text">You</span>
+                          <button type="button" class="camera-title-upload-button" id="youHeaderUploadButton">Upload</button>
+                      </div>
+                      <div class="placeholder-text" id="backPlaceholder">You</div>
                 <video id="backVideoElement" class="video-element" autoplay playsinline></video>
                 <img id="backCapturedPhoto" class="captured-photo" alt="Back camera photo">
                 <div class="crosshair" id="backCrosshair"></div>
             </div>
 
-                <div class="camera-half right" id="selfieCameraHalf">
-                    <div class="placeholder-text" id="selfiePlaceholder">Me</div>
+                  <div class="camera-half right" id="selfieCameraHalf">
+                      <div class="camera-title-bar">
+                          <span class="camera-title-text">Me</span>
+                          <button type="button" class="camera-title-upload-button" id="meHeaderUploadButton">Upload</button>
+                      </div>
+                      <div class="placeholder-text" id="selfiePlaceholder">Me</div>
                 <video id="selfieVideoElement" class="video-element" autoplay playsinline></video>
                 <img id="selfieCapturedPhoto" class="captured-photo" alt="Selfie photo">
             </div>
@@ -563,10 +621,12 @@ function hideDefaultPhoto(side) {
           const youDescriptionContent = document.getElementById('youDescriptionContent');
           const meDescriptionStatus = document.getElementById('meDescriptionStatus');
           const meDescriptionContent = document.getElementById('meDescriptionContent');
-        const youResubmitButton = document.getElementById('youResubmitButton');
-        const meResubmitButton = document.getElementById('meResubmitButton');
-        const youUploadButton = document.getElementById('youUploadButton');
-        const meUploadButton = document.getElementById('meUploadButton');
+          const youResubmitButton = document.getElementById('youResubmitButton');
+          const meResubmitButton = document.getElementById('meResubmitButton');
+          const youUploadButton = document.getElementById('youUploadButton');
+          const meUploadButton = document.getElementById('meUploadButton');
+          const youHeaderUploadButton = document.getElementById('youHeaderUploadButton');
+          const meHeaderUploadButton = document.getElementById('meHeaderUploadButton');
         const youUploadInput = document.getElementById('youUploadInput');
         const meUploadInput = document.getElementById('meUploadInput');
 
@@ -683,57 +743,72 @@ showDefaultPhoto('selfie');
                 }, { passive: false });
             }
   
-          function attachUploadHandler(button, input, side) {
-              if (!button || !input) {
+            function attachUploadHandler(buttonOrButtons, input, side) {
+                if (!input) {
                   return;
               }
+
+                const buttons = Array.isArray(buttonOrButtons)
+                    ? buttonOrButtons.filter(Boolean)
+                    : [buttonOrButtons].filter(Boolean);
+
+                if (!buttons.length) {
+                    return;
+                }
 
               const triggerInputSelection = () => {
                   input.click();
               };
 
-              button.addEventListener('click', triggerInputSelection);
-              button.addEventListener('touchstart', (event) => {
-                  event.preventDefault();
-                  triggerInputSelection();
-              }, { passive: false });
+                buttons.forEach((button) => {
+                    button.addEventListener('click', triggerInputSelection);
+                    button.addEventListener('touchstart', (event) => {
+                        event.preventDefault();
+                        triggerInputSelection();
+                    }, { passive: false });
+                });
 
-              input.addEventListener('change', async () => {
-                  const file = input.files && input.files[0];
-                  if (!file) {
-                      return;
-                  }
+                if (input.dataset.uploadHandlerAttached === 'true') {
+                    return;
+                }
 
-                  const label = side === 'you' ? 'You' : 'Me';
+                input.addEventListener('change', async () => {
+                    const file = input.files && input.files[0];
+                    if (!file) {
+                        return;
+                    }
 
-                  if (file.type && !file.type.startsWith('image/')) {
-                      const message = `${label} upload failed: selected file is not an image.`;
-                      console.warn(message);
-                      showError(message);
-                      setDescriptionState(side, 'error', message);
-                      input.value = '';
-                      return;
-                  }
+                    const label = side === 'you' ? 'You' : 'Me';
 
-                  try {
-                      setDescriptionState(side, 'loading', WAITING_FOR_DESCRIPTION_MESSAGE, WAITING_FOR_DESCRIPTION_MESSAGE);
-                      const dataUrl = await readFileAsDataUrl(file);
-                      if (typeof dataUrl !== 'string') {
-                          throw new Error('Uploaded data unavailable.');
-                      }
-                      displayPhotoForSide(side, dataUrl);
-                      stopAllCameras();
-                      enqueueDescription(side, dataUrl);
-                      hideError();
-                  } catch (error) {
-                      console.error(`${label} photo upload failed:`, error);
-                      const message = `${label} upload failed: ${error?.message || 'Unable to process image.'}`;
-                      showError(message);
-                      setDescriptionState(side, 'error', message);
-                  } finally {
-                      input.value = '';
-                  }
-              });
+                    if (file.type && !file.type.startsWith('image/')) {
+                        const message = `${label} upload failed: selected file is not an image.`;
+                        console.warn(message);
+                        showError(message);
+                        setDescriptionState(side, 'error', message);
+                        input.value = '';
+                        return;
+                    }
+
+                    try {
+                        setDescriptionState(side, 'loading', WAITING_FOR_DESCRIPTION_MESSAGE, WAITING_FOR_DESCRIPTION_MESSAGE);
+                        const dataUrl = await readFileAsDataUrl(file);
+                        if (typeof dataUrl !== 'string') {
+                            throw new Error('Uploaded data unavailable.');
+                        }
+                        displayPhotoForSide(side, dataUrl);
+                        stopAllCameras();
+                        enqueueDescription(side, dataUrl);
+                        hideError();
+                    } catch (error) {
+                        console.error(`${label} photo upload failed:`, error);
+                        const message = `${label} upload failed: ${error?.message || 'Unable to process image.'}`;
+                        showError(message);
+                        setDescriptionState(side, 'error', message);
+                    } finally {
+                        input.value = '';
+                    }
+                });
+                input.dataset.uploadHandlerAttached = 'true';
           }
 
             function enqueueDescription(side, photoDataUrl) {
@@ -1564,8 +1639,8 @@ showDefaultPhoto('selfie');
 
           attachResubmitHandlers(youResubmitButton, 'you');
           attachResubmitHandlers(meResubmitButton, 'me');
-          attachUploadHandler(youUploadButton, youUploadInput, 'you');
-          attachUploadHandler(meUploadButton, meUploadInput, 'me');
+            attachUploadHandler([youUploadButton, youHeaderUploadButton], youUploadInput, 'you');
+            attachUploadHandler([meUploadButton, meHeaderUploadButton], meUploadInput, 'me');
 
             resetDescriptionState('you');
             resetDescriptionState('me');
