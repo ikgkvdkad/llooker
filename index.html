@@ -235,6 +235,7 @@
             height: 100%;
             top: 0;
             left: 0;
+            will-change: transform;
         }
 
         .captured-photo.active {
@@ -317,6 +318,7 @@
                     <div class="placeholder-text" id="selfiePlaceholder">Me</div>
                 <video id="selfieVideoElement" class="video-element" autoplay playsinline></video>
                 <img id="selfieCapturedPhoto" class="captured-photo" alt="Selfie photo">
+                <div class="crosshair" id="selfieCrosshair"></div>
             </div>
         </div>
 
@@ -363,10 +365,13 @@ const DEFAULT_IMAGES = {
     selfie: 'mephoto.jpg'
 };
 
+const selfieCrosshair = document.getElementById('selfieCrosshair');
+
 const photoSlots = {
     back: {
         imageEl: backCapturedPhoto,
         placeholderEl: backPlaceholder,
+        crosshairEl: backCrosshair,
         defaultSrc: DEFAULT_IMAGES.back,
         defaultDescriptionRequested: false,
         lastPhotoDataUrl: null
@@ -374,6 +379,7 @@ const photoSlots = {
     selfie: {
         imageEl: selfieCapturedPhoto,
         placeholderEl: selfiePlaceholder,
+        crosshairEl: selfieCrosshair,
         defaultSrc: DEFAULT_IMAGES.selfie,
         defaultDescriptionRequested: false,
         lastPhotoDataUrl: null
@@ -473,6 +479,15 @@ function showDefaultPhoto(side) {
         if (placeholderEl) {
             placeholderEl.classList.add('hidden');
         }
+        resetPhotoTransform(side);
+        setCrosshairVisibility(side, false);
+        const state = interactionState[side];
+        if (state) {
+            state.selectionPending = false;
+            state.pendingDescription = null;
+            state.selectionPoint = null;
+            state.lastTap = null;
+        }
         requestDefaultDescription(side);
         return;
     }
@@ -484,6 +499,15 @@ function showDefaultPhoto(side) {
     slot.defaultDescriptionRequested = false;
     if (placeholderEl) {
         placeholderEl.classList.add('hidden');
+    }
+    resetPhotoTransform(side);
+    setCrosshairVisibility(side, false);
+    const state = interactionState[side];
+    if (state) {
+        state.selectionPending = false;
+        state.pendingDescription = null;
+        state.selectionPoint = null;
+        state.lastTap = null;
     }
     requestDefaultDescription(side);
 }
@@ -538,6 +562,8 @@ function hideDefaultPhoto(side) {
       slot.imageEl.src = dataUrl;
       slot.imageEl.classList.add('active');
       delete slot.imageEl.dataset.defaultPhoto;
+        resetPhotoTransform(slotKey);
+        prepareSelection(slotKey, side, dataUrl);
 
       if (slot.placeholderEl) {
           slot.placeholderEl.classList.add('hidden');
@@ -545,15 +571,17 @@ function hideDefaultPhoto(side) {
 
       if (slotKey === 'back') {
           backVideoElement.classList.remove('active');
-          backCrosshair.classList.remove('active');
           backPlaceholder.classList.add('hidden');
           backCameraHalf.classList.remove('initializing');
           isBackFrozen = true;
+            setCrosshairVisibility(slotKey, true);
       } else if (slotKey === 'selfie') {
           selfieVideoElement.classList.remove('active');
           selfiePlaceholder.classList.add('hidden');
           isSelfieFrozen = true;
+            setCrosshairVisibility(slotKey, true);
       }
+        promptForSelection(side);
   }
         
         const errorMessage = document.getElementById('errorMessage');
@@ -578,6 +606,643 @@ function hideDefaultPhoto(side) {
             selfie: { element: selfieCameraHalf, aspectRatio: null }
         };
 
+function createInteractionState() {
+    return {
+        pointerMap: new Map(),
+        baseDistance: null,
+        baseZoom: null,
+        zoomSupported: false,
+        streamZoom: {
+            min: 1,
+            max: 1,
+            current: 1
+        },
+        transform: {
+            scale: 1,
+            translateX: 0,
+            translateY: 0
+        },
+        transformBounds: {
+            minScale: 1,
+            maxScale: 4
+        },
+        panStart: null,
+        selectionPending: false,
+        selectionPoint: null,
+        crosshairPosition: { x: 0.5, y: 0.5 },
+        pendingDescription: null,
+        tapCandidate: null,
+        pendingZoom: null,
+        zoomUpdateFrame: null,
+        zoomUpdateInFlight: false,
+        lastTap: null
+    };
+}
+
+const interactionState = {
+    back: createInteractionState(),
+    selfie: createInteractionState()
+};
+
+function isCameraActive(slotKey) {
+    if (slotKey === 'back') {
+        return isBackActive;
+    }
+    if (slotKey === 'selfie') {
+        return isSelfieActive;
+    }
+    return false;
+}
+
+function isCameraFrozen(slotKey) {
+    if (slotKey === 'back') {
+        return isBackFrozen;
+    }
+    if (slotKey === 'selfie') {
+        return isSelfieFrozen;
+    }
+    return false;
+}
+
+function getCameraHalfElement(slotKey) {
+    if (slotKey === 'back') {
+        return backCameraHalf;
+    }
+    if (slotKey === 'selfie') {
+        return selfieCameraHalf;
+    }
+    return null;
+}
+
+function setCrosshairVisibility(slotKey, isVisible) {
+    const slot = photoSlots[slotKey];
+    if (!slot?.crosshairEl) {
+        return;
+    }
+    if (isVisible) {
+        slot.crosshairEl.classList.add('active');
+    } else {
+        slot.crosshairEl.classList.remove('active');
+    }
+}
+
+function updateCrosshairPosition(slotKey, normalizedX, normalizedY) {
+    const state = interactionState[slotKey];
+    const slot = photoSlots[slotKey];
+    const container = getCameraHalfElement(slotKey);
+    if (!state || !slot?.crosshairEl || !container) {
+        return;
+    }
+
+    const clampedX = Math.min(1, Math.max(0, normalizedX));
+    const clampedY = Math.min(1, Math.max(0, normalizedY));
+    state.crosshairPosition = { x: clampedX, y: clampedY };
+
+    slot.crosshairEl.style.left = `${clampedX * 100}%`;
+    slot.crosshairEl.style.top = `${clampedY * 100}%`;
+}
+
+function resetCrosshair(slotKey) {
+    updateCrosshairPosition(slotKey, 0.5, 0.5);
+}
+
+function getNormalizedCoordinates(slotKey, clientX, clientY) {
+    const container = getCameraHalfElement(slotKey);
+    if (!container) {
+        return { x: 0.5, y: 0.5 };
+    }
+    const rect = container.getBoundingClientRect();
+    if (!rect.width || !rect.height) {
+        return { x: 0.5, y: 0.5 };
+    }
+    const normalizedX = (clientX - rect.left) / rect.width;
+    const normalizedY = (clientY - rect.top) / rect.height;
+    return {
+        x: Math.min(1, Math.max(0, normalizedX)),
+        y: Math.min(1, Math.max(0, normalizedY))
+    };
+}
+
+function resetPhotoTransform(slotKey) {
+    const state = interactionState[slotKey];
+    const slot = photoSlots[slotKey];
+    if (!state || !slot?.imageEl) {
+        return;
+    }
+    state.transform.scale = 1;
+    state.transform.translateX = 0;
+    state.transform.translateY = 0;
+    applyPhotoTransform(slotKey);
+}
+
+function clampPhotoTranslation(slotKey) {
+    const state = interactionState[slotKey];
+    const slot = photoSlots[slotKey];
+    const container = getCameraHalfElement(slotKey);
+    if (!state || !slot?.imageEl || !container) {
+        return;
+    }
+
+    const { scale } = state.transform;
+    if (!scale || scale <= 1) {
+        state.transform.translateX = 0;
+        state.transform.translateY = 0;
+        return;
+    }
+
+    const boundsWidth = container.clientWidth;
+    const boundsHeight = container.clientHeight;
+    if (!boundsWidth || !boundsHeight) {
+        return;
+    }
+
+    const maxOffsetX = ((scale - 1) * boundsWidth) / 2;
+    const maxOffsetY = ((scale - 1) * boundsHeight) / 2;
+
+    state.transform.translateX = Math.min(
+        Math.max(state.transform.translateX, -maxOffsetX),
+        maxOffsetX
+    );
+
+    state.transform.translateY = Math.min(
+        Math.max(state.transform.translateY, -maxOffsetY),
+        maxOffsetY
+    );
+}
+
+function applyPhotoTransform(slotKey) {
+    const slot = photoSlots[slotKey];
+    const state = interactionState[slotKey];
+    if (!slot?.imageEl || !state) {
+        return;
+    }
+
+    clampPhotoTranslation(slotKey);
+    const { scale, translateX, translateY } = state.transform;
+    slot.imageEl.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+}
+
+function prepareSelection(slotKey, side, photoDataUrl) {
+    const state = interactionState[slotKey];
+    if (!state) {
+        return;
+    }
+    state.selectionPending = true;
+    state.pendingDescription = { side, photoDataUrl, selection: null };
+    state.selectionPoint = null;
+    resetCrosshair(slotKey);
+    setCrosshairVisibility(slotKey, true);
+    state.lastTap = null;
+}
+
+function markSelectionComplete(slotKey) {
+    const state = interactionState[slotKey];
+    if (!state) {
+        return;
+    }
+    state.selectionPending = false;
+}
+
+function resetPointerTracking(slotKey) {
+    const state = interactionState[slotKey];
+    if (!state) {
+        return;
+    }
+    state.pointerMap.clear();
+    state.baseDistance = null;
+    state.baseZoom = null;
+    state.panStart = null;
+    state.tapCandidate = null;
+    state.pendingZoom = null;
+    if (state.zoomUpdateFrame !== null) {
+        cancelAnimationFrame(state.zoomUpdateFrame);
+        state.zoomUpdateFrame = null;
+    }
+    state.zoomUpdateInFlight = false;
+    state.lastTap = null;
+}
+
+function submitSelection(slotKey, normalizedPoint) {
+    const state = interactionState[slotKey];
+    if (!state) {
+        return;
+    }
+
+    setCrosshairVisibility(slotKey, true);
+    updateCrosshairPosition(slotKey, normalizedPoint.x, normalizedPoint.y);
+    state.selectionPoint = normalizedPoint;
+
+    if (!state.pendingDescription) {
+        return;
+    }
+
+    const pending = state.pendingDescription;
+    pending.selection = normalizedPoint;
+    markSelectionComplete(slotKey);
+    state.pendingDescription = null;
+
+    const { side, photoDataUrl } = pending;
+    if (!photoDataUrl) {
+        return;
+    }
+
+    setDescriptionState(side, 'loading', WAITING_FOR_DESCRIPTION_MESSAGE, WAITING_FOR_DESCRIPTION_MESSAGE);
+    enqueueDescription(side, photoDataUrl, normalizedPoint);
+}
+
+function calculateDistance(pointerA, pointerB) {
+    if (!pointerA || !pointerB) {
+        return 0;
+    }
+    const deltaX = pointerB.clientX - pointerA.clientX;
+    const deltaY = pointerB.clientY - pointerA.clientY;
+    return Math.hypot(deltaX, deltaY);
+}
+
+function getPointerEntries(state) {
+    if (!state) {
+        return [];
+    }
+    return Array.from(state.pointerMap.values());
+}
+
+function addPointer(state, event) {
+    state.pointerMap.set(event.pointerId, {
+        pointerId: event.pointerId,
+        clientX: event.clientX,
+        clientY: event.clientY,
+        startX: event.clientX,
+        startY: event.clientY
+    });
+}
+
+function updatePointer(state, event) {
+    const entry = state.pointerMap.get(event.pointerId);
+    if (!entry) {
+        return;
+    }
+    entry.clientX = event.clientX;
+    entry.clientY = event.clientY;
+}
+
+function removePointer(state, pointerId) {
+    if (!state) {
+        return;
+    }
+    state.pointerMap.delete(pointerId);
+}
+
+function initializeZoomStateFromTrack(slotKey, track) {
+    const state = interactionState[slotKey];
+    if (!state || !track) {
+        return;
+    }
+
+    let capabilities = null;
+    let settings = null;
+
+    if (typeof track.getCapabilities === 'function') {
+        capabilities = track.getCapabilities();
+    }
+    if (typeof track.getSettings === 'function') {
+        settings = track.getSettings();
+    }
+
+    const zoomCapabilities = capabilities?.zoom;
+    if (zoomCapabilities && typeof zoomCapabilities.min === 'number' && typeof zoomCapabilities.max === 'number') {
+        state.zoomSupported = true;
+        state.streamZoom.min = zoomCapabilities.min;
+        state.streamZoom.max = zoomCapabilities.max;
+    } else {
+        state.zoomSupported = false;
+        state.streamZoom.min = 1;
+        state.streamZoom.max = 1;
+    }
+
+    if (typeof settings?.zoom === 'number') {
+        state.streamZoom.current = settings.zoom;
+    } else if (state.zoomSupported) {
+        state.streamZoom.current = state.streamZoom.min;
+    } else {
+        state.streamZoom.current = 1;
+    }
+}
+
+function scheduleCameraZoomUpdate(slotKey, targetZoom) {
+    const state = interactionState[slotKey];
+    if (!state) {
+        return;
+    }
+
+    const clamped = Math.min(state.streamZoom.max, Math.max(state.streamZoom.min, targetZoom));
+    state.pendingZoom = clamped;
+
+    if (state.zoomUpdateFrame !== null) {
+        return;
+    }
+
+    state.zoomUpdateFrame = requestAnimationFrame(() => {
+        state.zoomUpdateFrame = null;
+        if (state.zoomUpdateInFlight) {
+            scheduleCameraZoomUpdate(slotKey, state.pendingZoom);
+            return;
+        }
+        if (typeof state.pendingZoom === 'number') {
+            applyStreamZoom(slotKey, state.pendingZoom);
+        }
+    });
+}
+
+async function applyStreamZoom(slotKey, targetZoom) {
+    const state = interactionState[slotKey];
+    if (!state) {
+        return;
+    }
+
+    const stream = slotKey === 'back' ? backStream : selfieStream;
+    const track = stream?.getVideoTracks?.()[0];
+    if (!track) {
+        return;
+    }
+
+    state.zoomUpdateInFlight = true;
+
+    try {
+        await track.applyConstraints({ advanced: [{ zoom: targetZoom }] });
+        state.streamZoom.current = targetZoom;
+    } catch (primaryError) {
+        try {
+            await track.applyConstraints({ zoom: targetZoom });
+            state.streamZoom.current = targetZoom;
+        } catch (secondaryError) {
+            console.warn('Unable to apply pinch zoom:', secondaryError || primaryError);
+            state.zoomSupported = false;
+        }
+    } finally {
+        state.zoomUpdateInFlight = false;
+        const pending = state.pendingZoom;
+        state.pendingZoom = null;
+        if (typeof pending === 'number' && Math.abs(pending - targetZoom) > 0.01) {
+            scheduleCameraZoomUpdate(slotKey, pending);
+        }
+    }
+}
+
+function handlePointerDownOnHalf(slotKey, event) {
+    const state = interactionState[slotKey];
+    if (!state) {
+        return;
+    }
+
+    event.preventDefault();
+
+    const target = event.currentTarget;
+    if (target && typeof target.setPointerCapture === 'function') {
+        try {
+            target.setPointerCapture(event.pointerId);
+        } catch (captureError) {
+            console.warn('Failed to set pointer capture:', captureError);
+        }
+    }
+
+    addPointer(state, event);
+
+    if (state.pointerMap.size === 1) {
+        state.baseDistance = null;
+        state.baseZoom = null;
+        state.tapCandidate = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            startTime: performance.now()
+        };
+
+        if (isCameraFrozen(slotKey) && state.transform.scale > 1.01) {
+            state.panStart = {
+                pointerId: event.pointerId,
+                startX: event.clientX,
+                startY: event.clientY,
+                originX: state.transform.translateX,
+                originY: state.transform.translateY
+            };
+        } else {
+            state.panStart = null;
+        }
+    } else if (state.pointerMap.size === 2) {
+        const pointers = getPointerEntries(state);
+        state.baseDistance = calculateDistance(pointers[0], pointers[1]);
+        if (state.baseDistance < 0.01) {
+            state.baseDistance = 0;
+        }
+
+        if (isCameraActive(slotKey) && state.zoomSupported) {
+            state.baseZoom = state.streamZoom.current || state.streamZoom.min || 1;
+        } else if (isCameraFrozen(slotKey)) {
+            state.baseZoom = state.transform.scale || 1;
+        } else {
+            state.baseZoom = null;
+        }
+
+        state.tapCandidate = null;
+        state.panStart = null;
+    } else {
+        state.tapCandidate = null;
+        state.panStart = null;
+        state.baseDistance = null;
+        state.baseZoom = null;
+    }
+}
+
+function handlePointerMoveOnHalf(slotKey, event) {
+    const state = interactionState[slotKey];
+    if (!state) {
+        return;
+    }
+
+    updatePointer(state, event);
+
+    if (state.pointerMap.size === 2 && state.baseDistance) {
+        const pointers = getPointerEntries(state);
+        const distance = calculateDistance(pointers[0], pointers[1]);
+        if (distance > 0 && state.baseDistance > 0) {
+            const scaleFactor = distance / state.baseDistance;
+
+            if (isCameraActive(slotKey) && state.zoomSupported && state.baseZoom) {
+                const targetZoom = state.baseZoom * scaleFactor;
+                scheduleCameraZoomUpdate(slotKey, targetZoom);
+            } else if (isCameraFrozen(slotKey)) {
+                const baseScale = state.baseZoom || 1;
+                let targetScale = baseScale * scaleFactor;
+                targetScale = Math.min(state.transformBounds.maxScale, Math.max(1, targetScale));
+                if (Math.abs(targetScale - state.transform.scale) > 0.005) {
+                    state.transform.scale = targetScale;
+                    applyPhotoTransform(slotKey);
+                }
+            }
+        }
+        state.tapCandidate = null;
+    } else if (
+        state.pointerMap.size === 1 &&
+        state.panStart &&
+        state.panStart.pointerId === event.pointerId &&
+        isCameraFrozen(slotKey)
+    ) {
+        const deltaX = event.clientX - state.panStart.startX;
+        const deltaY = event.clientY - state.panStart.startY;
+        state.transform.translateX = state.panStart.originX + deltaX;
+        state.transform.translateY = state.panStart.originY + deltaY;
+        applyPhotoTransform(slotKey);
+    }
+
+    if (state.tapCandidate && state.tapCandidate.pointerId === event.pointerId) {
+        const dx = event.clientX - state.tapCandidate.startX;
+        const dy = event.clientY - state.tapCandidate.startY;
+        if (Math.hypot(dx, dy) > TAP_MAX_MOVEMENT_PX) {
+            state.tapCandidate = null;
+        }
+    }
+}
+
+function handlePointerUpOnHalf(slotKey, event) {
+    const state = interactionState[slotKey];
+    if (!state) {
+        return;
+    }
+
+    const target = event.currentTarget;
+    if (target && typeof target.releasePointerCapture === 'function') {
+        try {
+            target.releasePointerCapture(event.pointerId);
+        } catch (releaseError) {
+            // Ignore release errors
+        }
+    }
+
+    let isTap = false;
+    if (state.tapCandidate && state.tapCandidate.pointerId === event.pointerId) {
+        const duration = performance.now() - state.tapCandidate.startTime;
+        const dx = event.clientX - state.tapCandidate.startX;
+        const dy = event.clientY - state.tapCandidate.startY;
+        if (duration <= TAP_MAX_DURATION_MS && Math.hypot(dx, dy) <= TAP_MAX_MOVEMENT_PX) {
+            isTap = true;
+        }
+    }
+
+    removePointer(state, event.pointerId);
+
+    state.tapCandidate = null;
+
+    if (state.pointerMap.size === 0) {
+        state.baseDistance = null;
+        state.baseZoom = null;
+        state.panStart = null;
+    } else if (state.pointerMap.size === 1 && isCameraFrozen(slotKey) && state.transform.scale > 1.01) {
+        const [remainingPointer] = getPointerEntries(state);
+        state.panStart = {
+            pointerId: remainingPointer.pointerId,
+            startX: remainingPointer.clientX,
+            startY: remainingPointer.clientY,
+            originX: state.transform.translateX,
+            originY: state.transform.translateY
+        };
+        state.baseDistance = null;
+        state.baseZoom = null;
+    } else {
+        state.baseDistance = null;
+        state.baseZoom = null;
+        state.panStart = null;
+    }
+
+    if (isTap) {
+        handleTapOnHalf(slotKey, event);
+    }
+}
+
+function handlePointerCancelOnHalf(slotKey, event) {
+    const state = interactionState[slotKey];
+    if (!state) {
+        return;
+    }
+
+    removePointer(state, event.pointerId);
+    state.tapCandidate = null;
+    if (state.pointerMap.size === 0) {
+        state.baseDistance = null;
+        state.baseZoom = null;
+        state.panStart = null;
+    } else if (state.pointerMap.size === 1 && isCameraFrozen(slotKey) && state.transform.scale > 1.01) {
+        const [remainingPointer] = getPointerEntries(state);
+        state.panStart = {
+            pointerId: remainingPointer.pointerId,
+            startX: remainingPointer.clientX,
+            startY: remainingPointer.clientY,
+            originX: state.transform.translateX,
+            originY: state.transform.translateY
+        };
+        state.baseDistance = null;
+        state.baseZoom = null;
+    } else {
+        state.baseDistance = null;
+        state.baseZoom = null;
+        state.panStart = null;
+    }
+}
+
+function handleTapOnHalf(slotKey, event) {
+    const state = interactionState[slotKey];
+    if (!state) {
+        return;
+    }
+
+    const now = performance.now();
+    const normalized = getNormalizedCoordinates(slotKey, event.clientX, event.clientY);
+    const isFrozen = isCameraFrozen(slotKey);
+    const isActive = isCameraActive(slotKey);
+
+    if (isFrozen) {
+        const lastTap = state.lastTap;
+        const isDoubleTap =
+            lastTap &&
+            now - lastTap.time < 400 &&
+            Math.hypot(
+                normalized.x - lastTap.x,
+                normalized.y - lastTap.y
+            ) < 0.05;
+
+        state.lastTap = { time: now, x: normalized.x, y: normalized.y };
+
+        if (isDoubleTap) {
+            if (slotKey === 'back') {
+                resetBackCamera();
+                openBackCamera().catch(error => console.error('Failed to reopen back camera:', error));
+            } else if (slotKey === 'selfie') {
+                resetSelfieCamera();
+                openSelfieCamera().catch(error => console.error('Failed to reopen selfie camera:', error));
+            }
+            return;
+        }
+
+        submitSelection(slotKey, normalized);
+        return;
+    }
+
+    state.lastTap = { time: now, x: normalized.x, y: normalized.y };
+
+    if (isActive) {
+        if (slotKey === 'back') {
+            captureBackPhoto();
+        } else if (slotKey === 'selfie') {
+            captureSelfiePhoto();
+        }
+        return;
+    }
+
+    if (slotKey === 'back') {
+        openBackCamera().catch(error => console.error('Failed to open back camera:', error));
+    } else if (slotKey === 'selfie') {
+        openSelfieCamera().catch(error => console.error('Failed to open selfie camera:', error));
+    }
+}
         function updateCameraHalfAspect(side, aspectRatio) {
             const state = cameraLayoutState[side];
             if (!state || !state.element) {
@@ -619,7 +1284,10 @@ showDefaultPhoto('selfie');
                   contentEl: meDescriptionContent
               }
           };
-            const WAITING_FOR_DESCRIPTION_MESSAGE = 'waiting for description...';
+          const WAITING_FOR_DESCRIPTION_MESSAGE = 'waiting for description...';
+          const WAITING_FOR_SELECTION_MESSAGE = 'Tap the photo to choose who to describe. Double-tap to retake.';
+          const TAP_MAX_MOVEMENT_PX = 12;
+          const TAP_MAX_DURATION_MS = 350;
 
           function resetDescriptionState(side) {
               const state = descriptionState[side];
@@ -648,6 +1316,10 @@ showDefaultPhoto('selfie');
               state.contentEl.textContent = descriptionText;
           }
 
+          function promptForSelection(side) {
+              setDescriptionState(side, null, WAITING_FOR_SELECTION_MESSAGE, WAITING_FOR_SELECTION_MESSAGE);
+          }
+
             function handleResubmitDescription(side) {
                 const slot = getPhotoSlotByDescriptionSide(side);
                 const label = side === 'you' ? 'You' : 'Me';
@@ -668,8 +1340,15 @@ showDefaultPhoto('selfie');
                     return;
                 }
 
-                  setDescriptionState(side, 'loading', WAITING_FOR_DESCRIPTION_MESSAGE, WAITING_FOR_DESCRIPTION_MESSAGE);
-                enqueueDescription(side, photoDataUrl);
+                const slotKey = side === 'you' ? 'back' : 'selfie';
+                const interaction = interactionState[slotKey];
+                if (interaction?.selectionPending) {
+                    promptForSelection(side);
+                    return;
+                }
+
+                setDescriptionState(side, 'loading', WAITING_FOR_DESCRIPTION_MESSAGE, WAITING_FOR_DESCRIPTION_MESSAGE);
+              enqueueDescription(side, photoDataUrl, interaction?.selectionPoint || null);
             }
 
             function attachResubmitHandlers(button, side) {
@@ -738,27 +1417,27 @@ showDefaultPhoto('selfie');
               });
           }
 
-            function enqueueDescription(side, photoDataUrl) {
-                const slot = getPhotoSlotByDescriptionSide(side);
-                if (slot && typeof photoDataUrl === 'string' && photoDataUrl.length > 0) {
-                    slot.lastPhotoDataUrl = photoDataUrl;
+          function enqueueDescription(side, photoDataUrl, selection = null) {
+              const slot = getPhotoSlotByDescriptionSide(side);
+              if (slot && typeof photoDataUrl === 'string' && photoDataUrl.length > 0) {
+                  slot.lastPhotoDataUrl = photoDataUrl;
+              }
+              descriptionQueue.push({ side, photoDataUrl, selection });
+              processDescriptionQueue();
+          }
+
+            function processDescriptionQueue() {
+                if (isDescriptionInFlight) {
+                    return;
                 }
-                descriptionQueue.push({ side, photoDataUrl });
-                processDescriptionQueue();
-            }
-
-          function processDescriptionQueue() {
-              if (isDescriptionInFlight) {
-                  return;
-              }
-
-              const next = descriptionQueue.shift();
-              if (!next) {
-                  return;
-              }
-
-              isDescriptionInFlight = true;
-              requestDescription(next.side, next.photoDataUrl)
+  
+                const next = descriptionQueue.shift();
+                if (!next) {
+                    return;
+                }
+  
+                isDescriptionInFlight = true;
+                requestDescription(next.side, next.photoDataUrl, next.selection)
                   .catch(error => {
                       console.error('Description request failed:', error);
                   })
@@ -768,7 +1447,7 @@ showDefaultPhoto('selfie');
                   });
           }
 
-          function requestDescription(side, photoDataUrl) {
+            function requestDescription(side, photoDataUrl, selection) {
               const state = descriptionState[side];
               if (!state) {
                   return Promise.resolve();
@@ -791,9 +1470,13 @@ showDefaultPhoto('selfie');
                   headers: {
                       'Content-Type': 'application/json'
                   },
-                  body: JSON.stringify({
+                    body: JSON.stringify({
                       role: side,
-                      image: photoDataUrl
+                        image: photoDataUrl,
+                        selection: selection ? {
+                            x: Number(selection.x.toFixed(4)),
+                            y: Number(selection.y.toFixed(4))
+                        } : undefined
                   }),
                   signal: controller.signal
               })
@@ -1045,6 +1728,7 @@ showDefaultPhoto('selfie');
             }
 
             const track = stream.getVideoTracks()[0];
+          initializeZoomStateFromTrack('back', track);
 
               backStream = stream;
               backVideoElement.srcObject = backStream;
@@ -1082,6 +1766,15 @@ showDefaultPhoto('selfie');
                               showError('Back camera (requires 2x zoom): Device reported ' + verifiedZoom.toFixed(2) + 'x zoom.');
                         return false;
                     }
+                      const backState = interactionState.back;
+                      if (backState) {
+                          backState.streamZoom.current = typeof verifiedZoom === 'number' ? verifiedZoom : expectedZoom;
+                      }
+                  } else if (typeof zoomResult.appliedZoom === 'number') {
+                      const backState = interactionState.back;
+                      if (backState) {
+                          backState.streamZoom.current = zoomResult.appliedZoom;
+                      }
                 }
 
                 const videoWidth = backVideoElement.videoWidth;
@@ -1107,7 +1800,13 @@ showDefaultPhoto('selfie');
             backCameraHalf.classList.add('initializing');
             hideDefaultPhoto('back');
             backVideoElement.classList.add('active');
-            backCrosshair.classList.add('active');
+          resetCrosshair('back');
+          setCrosshairVisibility('back', true);
+          const backState = interactionState.back;
+          if (backState) {
+              backState.selectionPending = false;
+              backState.pendingDescription = null;
+          }
             isBackActive = true;
             backPlaceholder.classList.add('hidden');
 
@@ -1136,6 +1835,7 @@ showDefaultPhoto('selfie');
                 showError('Selfie camera: ' + zoomResult.reason);
                 return false;
             }
+          initializeZoomStateFromTrack('selfie', selfieTrack);
 
             let zoomWarningMessage = zoomResult.warning
                 ? 'Selfie camera: ' + zoomResult.warning + ' Displaying the default field of view.'
@@ -1178,6 +1878,13 @@ showDefaultPhoto('selfie');
                   console.warn('Selfie camera metadata unavailable after initialization.');
               }
 
+                if (typeof zoomResult.appliedZoom === 'number') {
+                    const selfieState = interactionState.selfie;
+                    if (selfieState) {
+                        selfieState.streamZoom.current = zoomResult.appliedZoom;
+                    }
+                }
+
             if (zoomWarningMessage) {
                 showWarning(zoomWarningMessage);
             } else {
@@ -1185,6 +1892,13 @@ showDefaultPhoto('selfie');
             }
             hideDefaultPhoto('selfie');
             selfieVideoElement.classList.add('active');
+          resetCrosshair('selfie');
+          setCrosshairVisibility('selfie', true);
+          const selfieState = interactionState.selfie;
+          if (selfieState) {
+              selfieState.selectionPending = false;
+              selfieState.pendingDescription = null;
+          }
             isSelfieActive = true;
             selfiePlaceholder.classList.add('hidden');
 
@@ -1207,9 +1921,16 @@ showDefaultPhoto('selfie');
             }
             backVideoElement.srcObject = null;
             backVideoElement.classList.remove('active');
-            backCrosshair.classList.remove('active');
               backCameraHalf.classList.remove('initializing');
             isBackActive = false;
+          resetPointerTracking('back');
+          const backState = interactionState.back;
+          if (backState) {
+              backState.zoomSupported = false;
+              backState.streamZoom.min = 1;
+              backState.streamZoom.max = 1;
+              backState.streamZoom.current = 1;
+          }
 
               if (backInitializationTimeoutId !== null) {
                   clearTimeout(backInitializationTimeoutId);
@@ -1224,13 +1945,23 @@ showDefaultPhoto('selfie');
             selfieVideoElement.srcObject = null;
             selfieVideoElement.classList.remove('active');
             isSelfieActive = false;
+          resetPointerTracking('selfie');
+          const selfieState = interactionState.selfie;
+          if (selfieState) {
+              selfieState.zoomSupported = false;
+              selfieState.streamZoom.min = 1;
+              selfieState.streamZoom.max = 1;
+              selfieState.streamZoom.current = 1;
+          }
             
             if (!isBackFrozen) {
                 showDefaultPhoto('back');
+              setCrosshairVisibility('back', false);
             }
 
             if (!isSelfieFrozen) {
                 showDefaultPhoto('selfie');
+              setCrosshairVisibility('selfie', false);
             }
             
         }
@@ -1436,21 +2167,13 @@ showDefaultPhoto('selfie');
                 0, 0, canvas.width, canvas.height
             );
 
-            const photoDataUrl = canvas.toDataURL('image/png');
-            photoSlots.back.lastPhotoDataUrl = photoDataUrl;
-            markPhotoCaptured('back');
-            backCapturedPhoto.src = photoDataUrl;
-            backCapturedPhoto.classList.add('active');
-            backVideoElement.classList.remove('active');
-            backPlaceholder.classList.add('hidden');
-            backCrosshair.classList.remove('active');
-            
-            isBackFrozen = true;
-            
-            // Stop camera
-            stopAllCameras();
-
-              enqueueDescription('you', photoDataUrl);
+        const photoDataUrl = canvas.toDataURL('image/png');
+        displayPhotoForSide('you', photoDataUrl);
+        
+        isBackFrozen = true;
+        
+        // Stop camera
+        stopAllCameras();
         }
 
           function resetBackCamera() {
@@ -1487,20 +2210,13 @@ showDefaultPhoto('selfie');
                 0, 0, canvas.width, canvas.height
             );
 
-            const photoDataUrl = canvas.toDataURL('image/png');
-            photoSlots.selfie.lastPhotoDataUrl = photoDataUrl;
-            markPhotoCaptured('selfie');
-            selfieCapturedPhoto.src = photoDataUrl;
-            selfieCapturedPhoto.classList.add('active');
-            selfieVideoElement.classList.remove('active');
-            selfiePlaceholder.classList.add('hidden');
-            
-            isSelfieFrozen = true;
-            
-            // Stop camera
-            stopAllCameras();
-
-              enqueueDescription('me', photoDataUrl);
+        const photoDataUrl = canvas.toDataURL('image/png');
+        displayPhotoForSide('me', photoDataUrl);
+        
+        isSelfieFrozen = true;
+        
+        // Stop camera
+        stopAllCameras();
         }
 
           function resetSelfieCamera() {
@@ -1512,52 +2228,17 @@ showDefaultPhoto('selfie');
               resetDescriptionState('me');
         }
 
-        // Touch event handlers for back camera - toggle behavior
-        backCameraHalf.addEventListener('touchstart', async (e) => {
-            e.preventDefault();
-            
-            if (isBackFrozen) {
-                // If frozen, restart camera
-                resetBackCamera();
-                await openBackCamera();
-                await new Promise(resolve => setTimeout(resolve, 200));
-            } else if (!isBackActive) {
-                // If showing "You" placeholder, start camera
-                await openBackCamera();
-                await new Promise(resolve => setTimeout(resolve, 200));
-            } else {
-                // If camera is active, capture and freeze
-                captureBackPhoto();
-            }
-        });
+        backCameraHalf.addEventListener('pointerdown', (event) => handlePointerDownOnHalf('back', event));
+        backCameraHalf.addEventListener('pointermove', (event) => handlePointerMoveOnHalf('back', event));
+        backCameraHalf.addEventListener('pointerup', (event) => handlePointerUpOnHalf('back', event));
+        backCameraHalf.addEventListener('pointercancel', (event) => handlePointerCancelOnHalf('back', event));
+        backCameraHalf.addEventListener('pointerleave', (event) => handlePointerCancelOnHalf('back', event));
 
-        backCameraHalf.addEventListener('touchmove', (e) => {
-            e.preventDefault();
-        });
-
-        // Touch event handlers for selfie camera
-        selfieCameraHalf.addEventListener('touchstart', async (e) => {
-            e.preventDefault();
-
-            if (isSelfieFrozen) {
-                resetSelfieCamera();
-                await openSelfieCamera();
-                await new Promise(resolve => setTimeout(resolve, 200));
-                return;
-            }
-
-            if (!isSelfieActive) {
-                await openSelfieCamera();
-                await new Promise(resolve => setTimeout(resolve, 200));
-                return;
-            }
-
-            captureSelfiePhoto();
-        });
-
-        selfieCameraHalf.addEventListener('touchmove', (e) => {
-            e.preventDefault();
-        });
+        selfieCameraHalf.addEventListener('pointerdown', (event) => handlePointerDownOnHalf('selfie', event));
+        selfieCameraHalf.addEventListener('pointermove', (event) => handlePointerMoveOnHalf('selfie', event));
+        selfieCameraHalf.addEventListener('pointerup', (event) => handlePointerUpOnHalf('selfie', event));
+        selfieCameraHalf.addEventListener('pointercancel', (event) => handlePointerCancelOnHalf('selfie', event));
+        selfieCameraHalf.addEventListener('pointerleave', (event) => handlePointerCancelOnHalf('selfie', event));
 
         // Cleanup when page is closed
           window.addEventListener('beforeunload', () => {
