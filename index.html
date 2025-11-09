@@ -91,10 +91,33 @@
             border-left-width: 1.5px;
         }
 
-        .description-title {
+        .description-title-button {
             font-size: 18px;
             font-weight: 500;
             letter-spacing: 0.02em;
+            color: inherit;
+            background: none;
+            border: none;
+            padding: 0;
+            align-self: flex-start;
+            text-align: left;
+            cursor: pointer;
+            border-radius: 6px;
+        }
+
+        .description-title-button:hover {
+            text-decoration: underline;
+        }
+
+        .description-title-button:focus-visible {
+            outline: 2px solid rgba(255, 255, 255, 0.7);
+            outline-offset: 3px;
+            text-decoration: none;
+        }
+
+        .description-title-button:active {
+            text-decoration: none;
+            background: rgba(255, 255, 255, 0.08);
         }
 
         .description-status {
@@ -260,18 +283,18 @@
             </div>
         </div>
 
-          <div class="description-row">
-                <div class="description-half left" id="youDescriptionPanel">
-                    <div class="description-title">You</div>
-                  <div class="description-status" id="youDescriptionStatus"></div>
-                  <div class="description-content" id="youDescriptionContent"></div>
-              </div>
-                <div class="description-half right" id="meDescriptionPanel">
-                    <div class="description-title">Me</div>
-                  <div class="description-status" id="meDescriptionStatus"></div>
-                  <div class="description-content" id="meDescriptionContent"></div>
-              </div>
-          </div>
+            <div class="description-row">
+                  <div class="description-half left" id="youDescriptionPanel">
+                      <button type="button" class="description-title-button" id="youResubmitButton">You</button>
+                    <div class="description-status" id="youDescriptionStatus"></div>
+                    <div class="description-content" id="youDescriptionContent"></div>
+                </div>
+                  <div class="description-half right" id="meDescriptionPanel">
+                      <button type="button" class="description-title-button" id="meResubmitButton">Me</button>
+                    <div class="description-status" id="meDescriptionStatus"></div>
+                    <div class="description-content" id="meDescriptionContent"></div>
+                </div>
+            </div>
 
         <div id="errorMessage" class="error-message"></div>
     </div>
@@ -300,15 +323,27 @@ const photoSlots = {
         imageEl: backCapturedPhoto,
         placeholderEl: backPlaceholder,
         defaultSrc: DEFAULT_IMAGES.back,
-        defaultDescriptionRequested: false
+        defaultDescriptionRequested: false,
+        lastPhotoDataUrl: null
     },
     selfie: {
         imageEl: selfieCapturedPhoto,
         placeholderEl: selfiePlaceholder,
         defaultSrc: DEFAULT_IMAGES.selfie,
-        defaultDescriptionRequested: false
+        defaultDescriptionRequested: false,
+        lastPhotoDataUrl: null
     }
 };
+
+function getPhotoSlotByDescriptionSide(side) {
+    if (side === 'you') {
+        return photoSlots.back;
+    }
+    if (side === 'me') {
+        return photoSlots.selfie;
+    }
+    return null;
+}
 
 function fetchImageAsDataUrl(src) {
     return fetch(src, { cache: 'no-cache' })
@@ -344,6 +379,7 @@ function requestDefaultDescription(side) {
         slot.defaultDescriptionRequested = true;
         fetchImageAsDataUrl(defaultSrc)
             .then((dataUrl) => {
+                slot.lastPhotoDataUrl = dataUrl;
                 const role = side === 'back' ? 'you' : 'me';
                 enqueueDescription(role, dataUrl);
             })
@@ -396,6 +432,7 @@ function showDefaultPhoto(side) {
         return;
     }
 
+    slot.lastPhotoDataUrl = null;
     imageEl.src = defaultSrc;
     imageEl.dataset.defaultPhoto = 'true';
     imageEl.classList.add('active');
@@ -432,6 +469,8 @@ function hideDefaultPhoto(side) {
           const youDescriptionContent = document.getElementById('youDescriptionContent');
           const meDescriptionStatus = document.getElementById('meDescriptionStatus');
           const meDescriptionContent = document.getElementById('meDescriptionContent');
+        const youResubmitButton = document.getElementById('youResubmitButton');
+        const meResubmitButton = document.getElementById('meResubmitButton');
 
         const DEFAULT_BACK_ASPECT = 16 / 9;
         const DEFAULT_SELFIE_ASPECT = 16 / 9;
@@ -510,10 +549,49 @@ showDefaultPhoto('selfie');
               state.contentEl.textContent = descriptionText;
           }
 
-          function enqueueDescription(side, photoDataUrl) {
-              descriptionQueue.push({ side, photoDataUrl });
-              processDescriptionQueue();
-          }
+            function handleResubmitDescription(side) {
+                const slot = getPhotoSlotByDescriptionSide(side);
+                const label = side === 'you' ? 'You' : 'Me';
+
+                if (!slot) {
+                    console.warn(`No photo slot available for ${side} resubmission request.`);
+                    return;
+                }
+
+                const photoDataUrl = slot.lastPhotoDataUrl;
+                const hasActivePhoto = !!(slot.imageEl && slot.imageEl.classList.contains('active'));
+
+                if (!photoDataUrl) {
+                    const message = hasActivePhoto
+                        ? `${label} photo data is still loading. Try again shortly or capture a new photo.`
+                        : `${label} photo not captured yet. Capture a photo before requesting a description.`;
+                    setDescriptionState(side, 'error', message);
+                    return;
+                }
+
+                setDescriptionState(side, 'loading', `${label} description resubmitted…`);
+                enqueueDescription(side, photoDataUrl);
+            }
+
+            function attachResubmitHandlers(button, side) {
+                if (!button) {
+                    return;
+                }
+                button.addEventListener('click', () => handleResubmitDescription(side));
+                button.addEventListener('touchstart', (event) => {
+                    event.preventDefault();
+                    handleResubmitDescription(side);
+                }, { passive: false });
+            }
+
+            function enqueueDescription(side, photoDataUrl) {
+                const slot = getPhotoSlotByDescriptionSide(side);
+                if (slot && typeof photoDataUrl === 'string' && photoDataUrl.length > 0) {
+                    slot.lastPhotoDataUrl = photoDataUrl;
+                }
+                descriptionQueue.push({ side, photoDataUrl });
+                processDescriptionQueue();
+            }
 
           function processDescriptionQueue() {
               if (isDescriptionInFlight) {
@@ -1204,7 +1282,8 @@ showDefaultPhoto('selfie');
                 0, 0, canvas.width, canvas.height
             );
 
-              const photoDataUrl = canvas.toDataURL('image/png');
+            const photoDataUrl = canvas.toDataURL('image/png');
+            photoSlots.back.lastPhotoDataUrl = photoDataUrl;
             markPhotoCaptured('back');
             backCapturedPhoto.src = photoDataUrl;
             backCapturedPhoto.classList.add('active');
@@ -1254,7 +1333,8 @@ showDefaultPhoto('selfie');
                 0, 0, canvas.width, canvas.height
             );
 
-              const photoDataUrl = canvas.toDataURL('image/png');
+            const photoDataUrl = canvas.toDataURL('image/png');
+            photoSlots.selfie.lastPhotoDataUrl = photoDataUrl;
             markPhotoCaptured('selfie');
             selfieCapturedPhoto.src = photoDataUrl;
             selfieCapturedPhoto.classList.add('active');
@@ -1330,8 +1410,11 @@ showDefaultPhoto('selfie');
             stopAllCameras();
         });
 
-          resetDescriptionState('you');
-          resetDescriptionState('me');
+            attachResubmitHandlers(youResubmitButton, 'you');
+            attachResubmitHandlers(meResubmitButton, 'me');
+
+            resetDescriptionState('you');
+            resetDescriptionState('me');
 
           // Configure the API endpoint for Netlify Function
           window.DESCRIPTION_API_URL = '/.netlify/functions/describe';
