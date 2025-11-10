@@ -36,13 +36,15 @@ exports.handler = async (event, context) => {
     };
   }
 
-  const { role, image } = requestPayload;
+  const { role, image, selection } = requestPayload;
 
   const requestMeta = {
     role: typeof role === 'string' ? role : null,
     imageProvided: typeof image === 'string',
     imageLength: typeof image === 'string' ? image.length : null,
-    imageBytesEstimated: estimateImageBytesFromDataUrl(image)
+    imageBytesEstimated: estimateImageBytesFromDataUrl(image),
+    selectionProvided: typeof selection === 'object' && selection !== null,
+    selection
   };
 
   try {
@@ -54,6 +56,39 @@ exports.handler = async (event, context) => {
     }
 
     const apiKey = process.env.OPENAI_API_KEY || process.env.OPENAIKEY;
+    let selectionPoint = null;
+
+    if (selection && typeof selection === 'object') {
+      const normalizedX = Number(selection.x);
+      const normalizedY = Number(selection.y);
+      const withinBounds =
+        Number.isFinite(normalizedX) &&
+        Number.isFinite(normalizedY) &&
+        normalizedX >= 0 &&
+        normalizedX <= 1 &&
+        normalizedY >= 0 &&
+        normalizedY <= 1;
+
+      if (!withinBounds) {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({ error: 'Selection coordinates must be numbers between 0 and 1.' })
+        };
+      }
+
+      selectionPoint = { x: normalizedX, y: normalizedY };
+    }
+
+    if ((role === 'you' || role === 'me') && !selectionPoint) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: 'Selection coordinates are required for you/me descriptions.' })
+      };
+    }
+
+    const selectionInstruction = selectionPoint
+      ? `Focus exclusively on the individual nearest to the crosshair located at normalized coordinates (${selectionPoint.x.toFixed(4)}, ${selectionPoint.y.toFixed(4)}) within the image frame.`
+      : 'Focus on the person closest to the image center.';
 
     // Check if API key is configured
     if (!apiKey) {
@@ -91,9 +126,11 @@ exports.handler = async (event, context) => {
             content: [
                 {
                     type: 'text',
-                    text: role === 'you'
-                      ? 'Describe only the person closest to the exact center crosshair of this \"You\" photo so an artist could recreate them. Confirm the subject is clearly visible; if they are too far, obstructed, or blurred to describe responsibly, reply with {\"status\":\"unclear\",\"description\":\"Unclear photo\"}. When the subject is clear, respond with {\"status\":\"ok\",\"description\":\"Basics: ...\nClothing & Style: ...\nAdditional Notes: ...\"} using that order and headings. In Basics, provide apparent age range, build, height impression, posture, skin tone, and hairstyle or facial hair; write \"not clearly visible\" for any detail you cannot confirm. In Clothing & Style, cover layers from outermost to innermost with colors, textures, fit, footwear, and accessories, noting \"not clearly visible\" when information is missing. In Additional Notes, give lighting, mood, or immediate context only if directly observed; otherwise write \"none noted\". Keep the description non-identifying and grounded in visible evidence.'
-                      : 'Describe only the sender taking this \"Me\" selfie, focusing on the person closest to the frame center. Confirm the subject is clearly visible; if not, reply with {\"status\":\"unclear\",\"description\":\"Unclear photo\"}. When the subject is clear, respond with {\"status\":\"ok\",\"description\":\"Basics: ...\nClothing & Style: ...\nAdditional Notes: ...\"} using that order and headings. In Basics, provide apparent age range, build, height impression, posture, skin tone, and hairstyle or facial hair; write \"not clearly visible\" for any detail you cannot confirm. In Clothing & Style, cover layers from outermost to innermost with colors, textures, fit, footwear, and accessories, noting \"not clearly visible\" when information is missing. In Additional Notes, give lighting, mood, or immediate context only if directly observed; otherwise write \"none noted\". Keep the description non-identifying and grounded in visible evidence.'
+                    text: (
+                      role === 'you'
+                        ? 'Describe only the person identified in this \"You\" photo so an artist could recreate them.'
+                        : 'Describe only the sender taking this \"Me\" selfie.'
+                    ) + ' ' + selectionInstruction + ' Confirm the subject is clearly visible; if they are too far, obstructed, or blurred to describe responsibly, reply with {\"status\":\"unclear\",\"description\":\"Unclear photo\"}. When the subject is clear, respond with {\"status\":\"ok\",\"description\":\"Basics: ...\nClothing & Style: ...\nAdditional Notes: ...\"} using that order and headings. In Basics, provide apparent age range, build, height impression, posture, skin tone, and hairstyle or facial hair; write \"not clearly visible\" for any detail you cannot confirm. In Clothing & Style, cover layers from outermost to innermost with colors, textures, fit, footwear, and accessories, noting \"not clearly visible\" when information is missing. In Additional Notes, give lighting, mood, or immediate context only if directly observed; otherwise write \"none noted\". Keep the description non-identifying and grounded in visible evidence.'
                 },
               {
                 type: 'image_url',
