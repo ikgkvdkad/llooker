@@ -40,23 +40,32 @@ export const selectionElements = {
 // Interaction state factory
 export function createInteractionState() {
     return {
-        pointers: {},
-        pinchStart: null,
+        pointerMap: new Map(),
+        baseDistance: null,
+        baseZoom: null,
         panStart: null,
         tapCandidate: null,
         lastTap: null,
-        zoomState: {
-            current: 1,
-            pendingZoom: null,
-            debounceTimerId: null
+        pendingZoom: null,
+        zoomUpdateFrame: null,
+        zoomUpdateInFlight: false,
+        zoomSupported: false,
+        streamZoom: {
+            min: 1,
+            max: 1,
+            current: 1
         },
-        transformState: {
+        transform: {
             scale: 1,
             translateX: 0,
             translateY: 0
         },
+        transformBounds: {
+            maxScale: 4
+        },
         lastSubmittedSignature: null,
-        movementDebounceTimerId: null
+        movementDebounceId: null,
+        lastInteractionAt: 0
     };
 }
 

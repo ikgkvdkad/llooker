@@ -1,11 +1,10 @@
-// File upload handling - PLACEHOLDER
-// Full implementation needed - extract from index.html lines 1877-1963
+// File upload handling
 
 import { readFileAsDataUrl } from './utils.js';
 import { displayPhotoForSide } from './photo.js';
 import { stopAllCameras } from './camera.js';
 import { showError, hideError } from './ui.js';
-import { setDescriptionState } from './description-api.js';
+import { setDescriptionState, handleResubmitDescription } from './description-api.js';
 
 export function attachUploadHandler(button, input, side) {
     if (!button || !input) {
@@ -85,6 +84,13 @@ export function attachUploadHandler(button, input, side) {
 }
 
 export function attachResubmitHandlers(button, side) {
-    // TODO: Extract full implementation from index.html lines 1877-1886
+    if (!button) {
+        return;
+    }
+    button.addEventListener('click', () => handleResubmitDescription(side));
+    button.addEventListener('touchstart', (event) => {
+        event.preventDefault();
+        handleResubmitDescription(side);
+    }, { passive: false });
 }
 
