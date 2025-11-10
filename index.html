@@ -56,6 +56,31 @@
             backdrop-filter: blur(4px);
         }
 
+        .camera-half::before,
+        .camera-half::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.45);
+            pointer-events: none;
+            z-index: 600;
+            opacity: 0.75;
+        }
+
+        .camera-half::before {
+            width: 30%;
+            height: 2px;
+            border-radius: 1px;
+        }
+
+        .camera-half::after {
+            width: 2px;
+            height: 30%;
+            border-radius: 1px;
+        }
+
         .camera-half.left {
             border-right-width: 1.5px;
         }
@@ -1033,7 +1058,7 @@ function handlePointerDownOnHalf(slotKey, event) {
             startTime: performance.now()
         };
 
-        if (isCameraFrozen(slotKey) && state.transform.scale > 1.01) {
+        if (isCameraFrozen(slotKey)) {
             state.panStart = {
                 pointerId: event.pointerId,
                 startX: event.clientX,
@@ -1160,7 +1185,7 @@ function handlePointerUpOnHalf(slotKey, event) {
         state.baseDistance = null;
         state.baseZoom = null;
         state.panStart = null;
-    } else if (state.pointerMap.size === 1 && isCameraFrozen(slotKey) && state.transform.scale > 1.01) {
+    } else if (state.pointerMap.size === 1 && isCameraFrozen(slotKey)) {
         const [remainingPointer] = getPointerEntries(state);
         state.panStart = {
             pointerId: remainingPointer.pointerId,
@@ -1194,7 +1219,7 @@ function handlePointerCancelOnHalf(slotKey, event) {
         state.baseDistance = null;
         state.baseZoom = null;
         state.panStart = null;
-    } else if (state.pointerMap.size === 1 && isCameraFrozen(slotKey) && state.transform.scale > 1.01) {
+    } else if (state.pointerMap.size === 1 && isCameraFrozen(slotKey)) {
         const [remainingPointer] = getPointerEntries(state);
         state.panStart = {
             pointerId: remainingPointer.pointerId,
