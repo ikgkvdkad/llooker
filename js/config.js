@@ -13,10 +13,10 @@ export const DEFAULT_IMAGES = {
 export const MIN_SELECTION_EDGE_PX = 70;
 
 export const DEFAULT_SELECTION_RECT = Object.freeze({
-    x: 0.25,
-    y: 0.25,
-    width: 0.5,
-    height: 0.5
+    x: 0.05,
+    y: 0.05,
+    width: 0.9,
+    height: 0.9
 });
 
 export const BACK_TARGET_ZOOM = 2;
