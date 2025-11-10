@@ -48,6 +48,8 @@ export const meDescriptionContent = document.getElementById('meDescriptionConten
 // Control buttons
 export const youResubmitButton = document.getElementById('youResubmitButton');
 export const meResubmitButton = document.getElementById('meResubmitButton');
+export const youCameraButton = document.getElementById('youCameraButton');
+export const meCameraButton = document.getElementById('meCameraButton');
 export const youUploadButton = document.getElementById('youUploadButton');
 export const meUploadButton = document.getElementById('meUploadButton');
 export const youUploadInput = document.getElementById('youUploadInput');

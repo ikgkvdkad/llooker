@@ -173,6 +173,17 @@ body {
     background: rgba(255, 255, 255, 0.28);
 }
 
+.description-upload-button.camera-active {
+    background: rgba(255, 77, 77, 0.25);
+    border-color: rgba(255, 77, 77, 0.5);
+    color: rgba(255, 120, 120, 0.95);
+}
+
+.description-upload-button.camera-active:hover {
+    background: rgba(255, 77, 77, 0.35);
+    border-color: rgba(255, 77, 77, 0.65);
+}
+
 .description-upload-input {
     display: none;
 }

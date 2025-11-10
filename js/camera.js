@@ -416,6 +416,11 @@ async function activateBackStream(stream) {
     }, 1000);
     setBackInitializationTimeoutId(timeoutId);
 
+    // Notify button state change
+    if (dom.youCameraButton) {
+        updateCameraButtonState('you', dom.youCameraButton);
+    }
+
     return true;
 }
 
@@ -500,6 +505,11 @@ async function activateSelfieStream(stream) {
     }
     setIsSelfieActive(true);
     dom.selfiePlaceholder.classList.add('hidden');
+
+    // Notify button state change
+    if (dom.meCameraButton) {
+        updateCameraButtonState('me', dom.meCameraButton);
+    }
 
     return true;
 }
@@ -723,6 +733,11 @@ export function captureBackPhoto() {
     
     // Stop camera
     stopAllCameras();
+    
+    // Update button state
+    if (dom.youCameraButton) {
+        updateCameraButtonState('you', dom.youCameraButton);
+    }
 }
 
 /**
@@ -762,6 +777,11 @@ export function captureSelfiePhoto() {
     
     // Stop camera
     stopAllCameras();
+    
+    // Update button state
+    if (dom.meCameraButton) {
+        updateCameraButtonState('me', dom.meCameraButton);
+    }
 }
 
 /**
@@ -773,6 +793,11 @@ export function resetBackCamera() {
     initializePhotoSlot('back');
     setIsBackFrozen(false);
     resetDescriptionState('you');
+    
+    // Update button state
+    if (dom.youCameraButton) {
+        updateCameraButtonState('you', dom.youCameraButton);
+    }
 }
 
 /**
@@ -784,5 +809,66 @@ export function resetSelfieCamera() {
     initializePhotoSlot('selfie');
     setIsSelfieFrozen(false);
     resetDescriptionState('me');
+    
+    // Update button state
+    if (dom.meCameraButton) {
+        updateCameraButtonState('me', dom.meCameraButton);
+    }
+}
+
+/**
+ * Toggle camera button - open camera or capture photo
+ */
+export function handleCameraButtonClick(side) {
+    const slotKey = side === 'you' ? 'back' : 'selfie';
+    const isActive = isCameraActive(slotKey);
+    const isFrozen = isCameraFrozen(slotKey);
+
+    if (isActive) {
+        // Camera is active, capture photo
+        if (side === 'you') {
+            captureBackPhoto();
+        } else {
+            captureSelfiePhoto();
+        }
+    } else if (isFrozen) {
+        // Photo is frozen, reset and open camera
+        if (side === 'you') {
+            resetBackCamera();
+            openBackCamera().catch(error => console.error('Failed to open back camera:', error));
+        } else {
+            resetSelfieCamera();
+            openSelfieCamera().catch(error => console.error('Failed to open selfie camera:', error));
+        }
+    } else {
+        // Nothing active, open camera
+        if (side === 'you') {
+            openBackCamera().catch(error => console.error('Failed to open back camera:', error));
+        } else {
+            openSelfieCamera().catch(error => console.error('Failed to open selfie camera:', error));
+        }
+    }
+}
+
+/**
+ * Update camera button appearance based on state
+ */
+export function updateCameraButtonState(side, button) {
+    if (!button) return;
+    
+    const slotKey = side === 'you' ? 'back' : 'selfie';
+    const isActive = isCameraActive(slotKey);
+    const isFrozen = isCameraFrozen(slotKey);
+
+    if (isActive) {
+        button.textContent = 'Capture';
+        button.classList.add('camera-active');
+    } else if (isFrozen) {
+        button.textContent = 'Recapture';
+        button.classList.remove('camera-active');
+    } else {
+        button.textContent = 'Camera';
+        button.classList.remove('camera-active');
+    }
 }
 

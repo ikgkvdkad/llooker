@@ -4,7 +4,7 @@ import { DEFAULT_BACK_ASPECT, DEFAULT_SELFIE_ASPECT } from './config.js';
 import * as dom from './dom.js';
 import { initializePhotoSlot } from './photo.js';
 import { setupSelectionInteractions, updateSelectionStyles } from './selection.js';
-import { updateCameraHalfAspect, stopAllCameras } from './camera.js';
+import { updateCameraHalfAspect, stopAllCameras, handleCameraButtonClick } from './camera.js';
 import { renderAppVersion } from './ui.js';
 import { resetDescriptionState } from './description-api.js';
 import { attachUploadHandler, attachResubmitHandlers } from './upload.js';
@@ -41,6 +41,23 @@ function init() {
     attachResubmitHandlers(dom.meResubmitButton, 'me');
     attachUploadHandler(dom.youUploadButton, dom.youUploadInput, 'you');
     attachUploadHandler(dom.meUploadButton, dom.meUploadInput, 'me');
+    
+    // Setup camera button handlers
+    if (dom.youCameraButton) {
+        dom.youCameraButton.addEventListener('click', () => handleCameraButtonClick('you'));
+        dom.youCameraButton.addEventListener('touchstart', (event) => {
+            event.preventDefault();
+            handleCameraButtonClick('you');
+        }, { passive: false });
+    }
+    
+    if (dom.meCameraButton) {
+        dom.meCameraButton.addEventListener('click', () => handleCameraButtonClick('me'));
+        dom.meCameraButton.addEventListener('touchstart', (event) => {
+            event.preventDefault();
+            handleCameraButtonClick('me');
+        }, { passive: false });
+    }
     
     // Setup selection interactions
     setupSelectionInteractions('back');
