@@ -859,15 +859,23 @@ export function updateCameraButtonState(side, button) {
     const slotKey = side === 'you' ? 'back' : 'selfie';
     const isActive = isCameraActive(slotKey);
     const isFrozen = isCameraFrozen(slotKey);
+    const labelEl = button.querySelector('.camera-button-label');
+
+    const updateAccessibleLabel = (label) => {
+        button.setAttribute('aria-label', label);
+        if (labelEl) {
+            labelEl.textContent = label;
+        }
+    };
 
     if (isActive) {
-        button.textContent = 'Capture';
+        updateAccessibleLabel('Capture');
         button.classList.add('camera-active');
     } else if (isFrozen) {
-        button.textContent = 'Recapture';
+        updateAccessibleLabel('Recapture');
         button.classList.remove('camera-active');
     } else {
-        button.textContent = 'Camera';
+        updateAccessibleLabel('Camera');
         button.classList.remove('camera-active');
     }
 }
