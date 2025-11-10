@@ -48,11 +48,12 @@
             width: 50%;
             height: 100%;
             overflow: hidden;
-            background: #000;
+            background: radial-gradient(circle at center, rgba(36, 38, 62, 0.65), rgba(5, 5, 12, 0.95));
             border: 3px solid rgba(255, 255, 255, 0.3);
             display: flex;
             align-items: center;
             justify-content: center;
+            backdrop-filter: blur(4px);
         }
 
         .camera-half.left {
@@ -222,8 +223,7 @@
             display: block;
         }
 
-        .camera-half.initializing .video-element.active,
-        .camera-half.initializing .crosshair.active {
+        .camera-half.initializing .video-element.active {
             visibility: hidden;
         }
         .captured-photo {
@@ -237,48 +237,12 @@
             top: 0;
             left: 0;
             will-change: transform;
+            box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+            transition: transform 0.08s ease-out;
         }
 
         .captured-photo.active {
             display: block;
-        }
-
-        .crosshair {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 80px;
-            height: 80px;
-            pointer-events: none;
-            z-index: 1001;
-            display: none;
-        }
-
-        .crosshair.active {
-            display: block;
-        }
-
-        .crosshair::before,
-        .crosshair::after {
-            content: '';
-            position: absolute;
-            background: rgba(255, 255, 255, 0.92);
-            box-shadow: 0 0 6px rgba(0, 0, 0, 0.65), 0 0 8px rgba(255, 255, 255, 0.75);
-        }
-
-        .crosshair::before {
-            width: 3px;
-            height: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-        }
-
-        .crosshair::after {
-            width: 100%;
-            height: 3px;
-            top: 50%;
-            transform: translateY(-50%);
         }
 
         .error-message {
@@ -307,15 +271,17 @@
 
         .version-badge {
             position: absolute;
-            bottom: 18px;
+            bottom: 14px;
             left: 50%;
             transform: translateX(-50%);
             color: #ff4d4d;
-            font-size: 26px;
+            font-size: 14px;
             font-family: 'IBM Plex Mono', 'Courier New', monospace;
-            letter-spacing: 0.08em;
-            text-shadow: 0 0 10px rgba(255, 77, 77, 0.6);
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            text-shadow: 0 0 6px rgba(255, 77, 77, 0.45);
             pointer-events: none;
+            opacity: 0.85;
             z-index: 1500;
         }
     </style>
@@ -327,14 +293,12 @@
                     <div class="placeholder-text" id="backPlaceholder">You</div>
                 <video id="backVideoElement" class="video-element" autoplay playsinline></video>
                 <img id="backCapturedPhoto" class="captured-photo" alt="Back camera photo">
-                <div class="crosshair" id="backCrosshair"></div>
             </div>
 
                 <div class="camera-half right" id="selfieCameraHalf">
                     <div class="placeholder-text" id="selfiePlaceholder">Me</div>
                 <video id="selfieVideoElement" class="video-element" autoplay playsinline></video>
                 <img id="selfieCapturedPhoto" class="captured-photo" alt="Selfie photo">
-                <div class="crosshair" id="selfieCrosshair"></div>
             </div>
         </div>
 
@@ -369,8 +333,6 @@
         const backCapturedPhoto = document.getElementById('backCapturedPhoto');
         const backCameraHalf = document.getElementById('backCameraHalf');
         const backPlaceholder = document.getElementById('backPlaceholder');
-        const backCrosshair = document.getElementById('backCrosshair');
-        
         // Selfie camera elements
         const selfieVideoElement = document.getElementById('selfieVideoElement');
         const selfieCapturedPhoto = document.getElementById('selfieCapturedPhoto');
@@ -382,13 +344,10 @@ const DEFAULT_IMAGES = {
     selfie: 'mephoto.jpg'
 };
 
-const selfieCrosshair = document.getElementById('selfieCrosshair');
-
 const photoSlots = {
     back: {
         imageEl: backCapturedPhoto,
         placeholderEl: backPlaceholder,
-        crosshairEl: backCrosshair,
         defaultSrc: DEFAULT_IMAGES.back,
         defaultDescriptionRequested: false,
         lastPhotoDataUrl: null
@@ -396,7 +355,6 @@ const photoSlots = {
     selfie: {
         imageEl: selfieCapturedPhoto,
         placeholderEl: selfiePlaceholder,
-        crosshairEl: selfieCrosshair,
         defaultSrc: DEFAULT_IMAGES.selfie,
         defaultDescriptionRequested: false,
         lastPhotoDataUrl: null
@@ -449,8 +407,13 @@ function requestDefaultDescription(side) {
             .then((dataUrl) => {
                 slot.lastPhotoDataUrl = dataUrl;
                 const role = side === 'back' ? 'you' : 'me';
-                    const viewport = snapshotViewportState(side);
-                    enqueueDescription(role, dataUrl, { x: 0.5, y: 0.5 }, viewport);
+                const viewport = snapshotViewportState(side);
+                const state = interactionState[side];
+                if (state) {
+                    state.lastSubmittedSignature = buildViewportSignature(dataUrl, viewport);
+                }
+                setDescriptionState(role, 'loading', WAITING_FOR_DESCRIPTION_MESSAGE, WAITING_FOR_DESCRIPTION_MESSAGE);
+                enqueueDescription(role, dataUrl, viewport, { reason: 'default-photo', force: true });
             })
             .catch(error => {
                 console.error(`Failed to describe default ${side} image:`, error);
@@ -498,13 +461,11 @@ function showDefaultPhoto(side) {
             placeholderEl.classList.add('hidden');
         }
         resetPhotoTransform(side);
-        setCrosshairVisibility(side, false);
         const state = interactionState[side];
         if (state) {
-            state.selectionPending = false;
-            state.pendingDescription = null;
-            state.selectionPoint = null;
             state.lastTap = null;
+            state.lastSubmittedSignature = null;
+            clearMovementDebounce(side);
         }
         requestDefaultDescription(side);
         return;
@@ -519,13 +480,11 @@ function showDefaultPhoto(side) {
         placeholderEl.classList.add('hidden');
     }
     resetPhotoTransform(side);
-    setCrosshairVisibility(side, false);
     const state = interactionState[side];
     if (state) {
-        state.selectionPending = false;
-        state.pendingDescription = null;
-        state.selectionPoint = null;
         state.lastTap = null;
+        state.lastSubmittedSignature = null;
+        clearMovementDebounce(side);
     }
     requestDefaultDescription(side);
 }
@@ -580,8 +539,13 @@ function hideDefaultPhoto(side) {
       slot.imageEl.src = dataUrl;
       slot.imageEl.classList.add('active');
       delete slot.imageEl.dataset.defaultPhoto;
-        resetPhotoTransform(slotKey);
-        prepareSelection(slotKey, side, dataUrl);
+    resetPhotoTransform(slotKey);
+    const state = interactionState[slotKey];
+    if (state) {
+        state.lastTap = null;
+        state.lastSubmittedSignature = null;
+        clearMovementDebounce(slotKey);
+    }
 
       if (slot.placeholderEl) {
           slot.placeholderEl.classList.add('hidden');
@@ -592,14 +556,21 @@ function hideDefaultPhoto(side) {
           backPlaceholder.classList.add('hidden');
           backCameraHalf.classList.remove('initializing');
           isBackFrozen = true;
-            setCrosshairVisibility(slotKey, true);
       } else if (slotKey === 'selfie') {
           selfieVideoElement.classList.remove('active');
           selfiePlaceholder.classList.add('hidden');
           isSelfieFrozen = true;
-            setCrosshairVisibility(slotKey, true);
       }
-          tryAutoSubmitSelection(slotKey);
+    const schedule = () => scheduleViewportDescription(slotKey, { immediate: true, force: true, reason: 'photo-load' });
+    if (slot.imageEl.complete && slot.imageEl.naturalWidth > 0) {
+        schedule();
+    } else {
+        const handleImageLoad = () => {
+            slot.imageEl.removeEventListener('load', handleImageLoad);
+            schedule();
+        };
+        slot.imageEl.addEventListener('load', handleImageLoad, { once: true });
+    }
   }
         
         const errorMessage = document.getElementById('errorMessage');
@@ -617,7 +588,7 @@ function hideDefaultPhoto(side) {
         const youUploadInput = document.getElementById('youUploadInput');
         const meUploadInput = document.getElementById('meUploadInput');
 
-        const APP_VERSION = 1;
+        const APP_VERSION = 2;
         const DEFAULT_BACK_ASPECT = 16 / 9;
         const DEFAULT_SELFIE_ASPECT = 16 / 9;
 
@@ -647,15 +618,14 @@ function createInteractionState() {
             maxScale: 4
         },
         panStart: null,
-        selectionPending: false,
-        selectionPoint: null,
-        crosshairPosition: { x: 0.5, y: 0.5 },
-        pendingDescription: null,
         tapCandidate: null,
         pendingZoom: null,
         zoomUpdateFrame: null,
         zoomUpdateInFlight: false,
-        lastTap: null
+        lastTap: null,
+        movementDebounceId: null,
+        lastSubmittedSignature: null,
+        lastInteractionAt: 0
     };
 }
 
@@ -725,39 +695,6 @@ function snapshotViewportState(slotKey) {
     const transformTranslateX = Number.isFinite(state.transform?.translateX) ? state.transform.translateX : 0;
     const transformTranslateY = Number.isFinite(state.transform?.translateY) ? state.transform.translateY : 0;
 
-    let crosshairSnapshot = null;
-    const crosshairEl = slot.crosshairEl;
-    if (crosshairEl && typeof crosshairEl.getBoundingClientRect === 'function') {
-        const crosshairRect = crosshairEl.getBoundingClientRect();
-        if (crosshairRect.width && crosshairRect.height) {
-            const centerX = (crosshairRect.left + crosshairRect.width / 2) - rect.left;
-            const centerY = (crosshairRect.top + crosshairRect.height / 2) - rect.top;
-            const normalizedCenterX = centerX / containerWidth;
-            const normalizedCenterY = centerY / containerHeight;
-            let lineThickness = null;
-            try {
-                const beforeStyle = window.getComputedStyle(crosshairEl, '::before');
-                const afterStyle = window.getComputedStyle(crosshairEl, '::after');
-                const beforeWidth = parseFloat(beforeStyle?.width || '');
-                const afterHeight = parseFloat(afterStyle?.height || '');
-                if (Number.isFinite(beforeWidth) && beforeWidth > 0) {
-                    lineThickness = beforeWidth;
-                } else if (Number.isFinite(afterHeight) && afterHeight > 0) {
-                    lineThickness = afterHeight;
-                }
-            } catch (error) {
-                console.warn('Unable to snapshot crosshair style:', error);
-            }
-            crosshairSnapshot = {
-                pixelWidth: crosshairRect.width,
-                pixelHeight: crosshairRect.height,
-                normalizedCenterX: Math.min(1, Math.max(0, normalizedCenterX)),
-                normalizedCenterY: Math.min(1, Math.max(0, normalizedCenterY)),
-                lineThickness: lineThickness && Number.isFinite(lineThickness) ? lineThickness : null
-            };
-        }
-    }
-
     return {
         containerWidth,
         containerHeight,
@@ -771,57 +708,7 @@ function snapshotViewportState(slotKey) {
         },
         devicePixelRatio: window.devicePixelRatio && Number.isFinite(window.devicePixelRatio)
             ? Math.max(1, window.devicePixelRatio)
-            : 1,
-        crosshair: crosshairSnapshot
-    };
-}
-
-function setCrosshairVisibility(slotKey, isVisible) {
-    const slot = photoSlots[slotKey];
-    if (!slot?.crosshairEl) {
-        return;
-    }
-    if (isVisible) {
-        slot.crosshairEl.classList.add('active');
-    } else {
-        slot.crosshairEl.classList.remove('active');
-    }
-}
-
-function updateCrosshairPosition(slotKey, normalizedX, normalizedY) {
-    const state = interactionState[slotKey];
-    const slot = photoSlots[slotKey];
-    const container = getCameraHalfElement(slotKey);
-    if (!state || !slot?.crosshairEl || !container) {
-        return;
-    }
-
-    const clampedX = Math.min(1, Math.max(0, normalizedX));
-    const clampedY = Math.min(1, Math.max(0, normalizedY));
-    state.crosshairPosition = { x: clampedX, y: clampedY };
-
-    slot.crosshairEl.style.left = `${clampedX * 100}%`;
-    slot.crosshairEl.style.top = `${clampedY * 100}%`;
-}
-
-function resetCrosshair(slotKey) {
-    updateCrosshairPosition(slotKey, 0.5, 0.5);
-}
-
-function getNormalizedCoordinates(slotKey, clientX, clientY) {
-    const container = getCameraHalfElement(slotKey);
-    if (!container) {
-        return { x: 0.5, y: 0.5 };
-    }
-    const rect = container.getBoundingClientRect();
-    if (!rect.width || !rect.height) {
-        return { x: 0.5, y: 0.5 };
-    }
-    const normalizedX = (clientX - rect.left) / rect.width;
-    const normalizedY = (clientY - rect.top) / rect.height;
-    return {
-        x: Math.min(1, Math.max(0, normalizedX)),
-        y: Math.min(1, Math.max(0, normalizedY))
+            : 1
     };
 }
 
@@ -846,20 +733,19 @@ function clampPhotoTranslation(slotKey) {
     }
 
     const { scale } = state.transform;
-    if (!scale || scale <= 1) {
-        state.transform.translateX = 0;
-        state.transform.translateY = 0;
-        return;
-    }
-
     const boundsWidth = container.clientWidth;
     const boundsHeight = container.clientHeight;
     if (!boundsWidth || !boundsHeight) {
         return;
     }
 
-    const maxOffsetX = ((scale - 1) * boundsWidth) / 2;
-    const maxOffsetY = ((scale - 1) * boundsHeight) / 2;
+    const overflowX = Math.max(0, ((scale - 1) * boundsWidth) / 2);
+    const overflowY = Math.max(0, ((scale - 1) * boundsHeight) / 2);
+    const freeTravelX = boundsWidth * 0.75;
+    const freeTravelY = boundsHeight * 0.75;
+
+    const maxOffsetX = overflowX + freeTravelX;
+    const maxOffsetY = overflowY + freeTravelY;
 
     state.transform.translateX = Math.min(
         Math.max(state.transform.translateX, -maxOffsetX),
@@ -884,41 +770,80 @@ function applyPhotoTransform(slotKey) {
     slot.imageEl.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
 }
 
-function prepareSelection(slotKey, side, photoDataUrl) {
+const DESCRIPTION_MOVEMENT_DEBOUNCE_MS = 2000;
+
+function clearMovementDebounce(slotKey) {
     const state = interactionState[slotKey];
     if (!state) {
         return;
     }
-    state.selectionPending = true;
-    state.pendingDescription = { side, photoDataUrl, selection: null };
-    state.selectionPoint = null;
-    resetCrosshair(slotKey);
-    setCrosshairVisibility(slotKey, true);
-    state.lastTap = null;
+    if (state.movementDebounceId !== null) {
+        window.clearTimeout(state.movementDebounceId);
+        state.movementDebounceId = null;
+    }
 }
 
-  function tryAutoSubmitSelection(slotKey) {
-      const state = interactionState[slotKey];
-      if (!state?.pendingDescription) {
-          return;
-      }
-      const crosshair = state.crosshairPosition;
-      if (
-          !crosshair ||
-          typeof crosshair.x !== 'number' ||
-          typeof crosshair.y !== 'number'
-      ) {
-          state.crosshairPosition = { x: 0.5, y: 0.5 };
-      }
-      submitSelection(slotKey, state.crosshairPosition);
-  }
+function buildViewportSignature(photoDataUrl, viewportSnapshot) {
+    if (typeof photoDataUrl !== 'string' || !photoDataUrl.length || !viewportSnapshot) {
+        return null;
+    }
+    const { containerWidth, containerHeight, naturalWidth, naturalHeight, transform } = viewportSnapshot;
+    const parts = [
+        containerWidth && Number.isFinite(containerWidth) ? containerWidth.toFixed(1) : 'cw',
+        containerHeight && Number.isFinite(containerHeight) ? containerHeight.toFixed(1) : 'ch',
+        naturalWidth && Number.isFinite(naturalWidth) ? naturalWidth.toFixed(1) : 'nw',
+        naturalHeight && Number.isFinite(naturalHeight) ? naturalHeight.toFixed(1) : 'nh',
+        transform && Number.isFinite(transform.scale) ? transform.scale.toFixed(3) : 's',
+        transform && Number.isFinite(transform.translateX) ? transform.translateX.toFixed(1) : 'tx',
+        transform && Number.isFinite(transform.translateY) ? transform.translateY.toFixed(1) : 'ty'
+    ];
+    const prefix = photoDataUrl.length > 64 ? photoDataUrl.slice(0, 64) : photoDataUrl;
+    return `${prefix}|${parts.join('|')}`;
+}
 
-function markSelectionComplete(slotKey) {
+function submitViewportDescription(slotKey, { force = false, reason = 'interaction' } = {}) {
+    const slot = photoSlots[slotKey];
+    const state = interactionState[slotKey];
+    if (!slot || !state) {
+        return;
+    }
+
+    const photoDataUrl = slot.lastPhotoDataUrl;
+    if (typeof photoDataUrl !== 'string' || !photoDataUrl.length) {
+        return;
+    }
+
+    const side = slotKey === 'back' ? 'you' : 'me';
+    const viewport = snapshotViewportState(slotKey);
+    if (!viewport) {
+        return;
+    }
+
+    const signature = buildViewportSignature(photoDataUrl, viewport);
+    if (!force && signature && state.lastSubmittedSignature === signature) {
+        return;
+    }
+
+    state.lastSubmittedSignature = signature;
+    const label = side === 'you' ? 'You' : 'Me';
+    setDescriptionState(side, 'loading', WAITING_FOR_DESCRIPTION_MESSAGE, WAITING_FOR_DESCRIPTION_MESSAGE);
+    enqueueDescription(side, photoDataUrl, viewport, { reason, signature });
+}
+
+function scheduleViewportDescription(slotKey, options = {}) {
     const state = interactionState[slotKey];
     if (!state) {
         return;
     }
-    state.selectionPending = false;
+    clearMovementDebounce(slotKey);
+    const delay = options.immediate ? 0 : DESCRIPTION_MOVEMENT_DEBOUNCE_MS;
+    state.movementDebounceId = window.setTimeout(() => {
+        state.movementDebounceId = null;
+        submitViewportDescription(slotKey, {
+            force: options.force === true,
+            reason: options.reason || 'interaction'
+        });
+    }, delay);
 }
 
 function resetPointerTracking(slotKey) {
@@ -938,38 +863,7 @@ function resetPointerTracking(slotKey) {
     }
     state.zoomUpdateInFlight = false;
     state.lastTap = null;
-}
-
-function submitSelection(slotKey, normalizedPoint) {
-    const state = interactionState[slotKey];
-    const slot = photoSlots[slotKey];
-    if (!state || !slot) {
-        return;
-    }
-
-    setCrosshairVisibility(slotKey, true);
-    updateCrosshairPosition(slotKey, normalizedPoint.x, normalizedPoint.y);
-    state.selectionPoint = normalizedPoint;
-
-    const pending = state.pendingDescription;
-    const derivedSide = pending?.side || (slotKey === 'back' ? 'you' : slotKey === 'selfie' ? 'me' : null);
-    const photoDataUrl = pending?.photoDataUrl || slot.lastPhotoDataUrl || null;
-
-    if (state.selectionPending) {
-        markSelectionComplete(slotKey);
-    }
-    state.pendingDescription = null;
-
-    if (!derivedSide || typeof photoDataUrl !== 'string' || photoDataUrl.length === 0) {
-        const errorSide = derivedSide || (slotKey === 'back' ? 'you' : 'me');
-        const label = errorSide === 'you' ? 'You' : 'Me';
-        setDescriptionState(errorSide, 'error', `${label} description unavailable: no photo data to analyze. Capture or upload again.`);
-        return;
-    }
-
-    const viewport = snapshotViewportState(slotKey);
-    setDescriptionState(derivedSide, 'loading', WAITING_FOR_DESCRIPTION_MESSAGE, WAITING_FOR_DESCRIPTION_MESSAGE);
-    enqueueDescription(derivedSide, photoDataUrl, normalizedPoint, viewport);
+    clearMovementDebounce(slotKey);
 }
 
 function calculateDistance(pointerA, pointerB) {
@@ -1182,6 +1076,7 @@ function handlePointerMoveOnHalf(slotKey, event) {
     }
 
     updatePointer(state, event);
+    let viewportChanged = false;
 
     if (state.pointerMap.size === 2 && state.baseDistance) {
         const pointers = getPointerEntries(state);
@@ -1199,6 +1094,7 @@ function handlePointerMoveOnHalf(slotKey, event) {
                 if (Math.abs(targetScale - state.transform.scale) > 0.005) {
                     state.transform.scale = targetScale;
                     applyPhotoTransform(slotKey);
+                    viewportChanged = true;
                 }
             }
         }
@@ -1214,6 +1110,7 @@ function handlePointerMoveOnHalf(slotKey, event) {
         state.transform.translateX = state.panStart.originX + deltaX;
         state.transform.translateY = state.panStart.originY + deltaY;
         applyPhotoTransform(slotKey);
+        viewportChanged = true;
     }
 
     if (state.tapCandidate && state.tapCandidate.pointerId === event.pointerId) {
@@ -1222,6 +1119,11 @@ function handlePointerMoveOnHalf(slotKey, event) {
         if (Math.hypot(dx, dy) > TAP_MAX_MOVEMENT_PX) {
             state.tapCandidate = null;
         }
+    }
+
+    if (viewportChanged) {
+        state.lastInteractionAt = performance.now();
+        scheduleViewportDescription(slotKey, { reason: 'interaction' });
     }
 }
 
@@ -1317,7 +1219,6 @@ function handleTapOnHalf(slotKey, event) {
     }
 
     const now = performance.now();
-    const normalized = getNormalizedCoordinates(slotKey, event.clientX, event.clientY);
     const isFrozen = isCameraFrozen(slotKey);
     const isActive = isCameraActive(slotKey);
 
@@ -1327,11 +1228,11 @@ function handleTapOnHalf(slotKey, event) {
             lastTap &&
             now - lastTap.time < 400 &&
             Math.hypot(
-                normalized.x - lastTap.x,
-                normalized.y - lastTap.y
-            ) < 0.05;
+                event.clientX - lastTap.clientX,
+                event.clientY - lastTap.clientY
+            ) < 48;
 
-        state.lastTap = { time: now, x: normalized.x, y: normalized.y };
+        state.lastTap = { time: now, clientX: event.clientX, clientY: event.clientY };
 
         if (isDoubleTap) {
             if (slotKey === 'back') {
@@ -1344,11 +1245,11 @@ function handleTapOnHalf(slotKey, event) {
             return;
         }
 
-        submitSelection(slotKey, normalized);
+        submitViewportDescription(slotKey, { force: true, reason: 'tap' });
         return;
     }
 
-    state.lastTap = { time: now, x: normalized.x, y: normalized.y };
+    state.lastTap = { time: now, clientX: event.clientX, clientY: event.clientY };
 
     if (isActive) {
         if (slotKey === 'back') {
@@ -1406,8 +1307,7 @@ showDefaultPhoto('selfie');
                   contentEl: meDescriptionContent
               }
           };
-            const WAITING_FOR_DESCRIPTION_MESSAGE = 'Analyzing the crosshair target... tap elsewhere to retarget or double-tap to retake.';
-            const WAITING_FOR_SELECTION_MESSAGE = 'Tap the photo to position the crosshair before describing. Double-tap to retake.';
+            const WAITING_FOR_DESCRIPTION_MESSAGE = 'Analyzing the framed subject... adjust the photo and hold steady to refresh.';
           const TAP_MAX_MOVEMENT_PX = 12;
           const TAP_MAX_DURATION_MS = 350;
 
@@ -1416,8 +1316,8 @@ showDefaultPhoto('selfie');
               if (!state) return;
               state.panel.classList.remove('loading', 'error', 'success');
               state.statusEl.textContent = side === 'you'
-                  ? 'Waiting for a You capture. The crosshair marks the intended recipient.'
-                  : 'Waiting for a Me capture. Capture a clear selfie for routing.';
+                    ? 'Waiting for a You capture. Capture or upload a photo, then pan and zoom to center the subject.'
+                    : 'Waiting for a Me capture. Capture or upload your selfie, then center yourself in the frame.';
               state.contentEl.textContent = '';
           }
 
@@ -1436,10 +1336,6 @@ showDefaultPhoto('selfie');
                   state.statusEl.textContent = message;
               }
               state.contentEl.textContent = descriptionText;
-          }
-
-          function promptForSelection(side) {
-              setDescriptionState(side, null, WAITING_FOR_SELECTION_MESSAGE, WAITING_FOR_SELECTION_MESSAGE);
           }
 
             function handleResubmitDescription(side) {
@@ -1464,20 +1360,24 @@ showDefaultPhoto('selfie');
 
                 const slotKey = side === 'you' ? 'back' : 'selfie';
                 const interaction = interactionState[slotKey];
-              if (interaction?.selectionPending) {
-                  promptForSelection(side);
-                  return;
-              }
+                if (interaction) {
+                    interaction.lastSubmittedSignature = null;
+                    clearMovementDebounce(slotKey);
+                }
 
-              if (!interaction?.selectionPoint) {
-                  setDescriptionState(side, 'error', `Tap the photo to position the crosshair before requesting a ${label.toLowerCase()} description.`);
-                  promptForSelection(side);
-                  return;
-              }
+                const submit = () => submitViewportDescription(slotKey, { force: true, reason: 'resubmit' });
 
-                setDescriptionState(side, 'loading', WAITING_FOR_DESCRIPTION_MESSAGE, WAITING_FOR_DESCRIPTION_MESSAGE);
-      const viewport = snapshotViewportState(slotKey);
-      enqueueDescription(side, photoDataUrl, interaction.selectionPoint, viewport);
+                if (slot.imageEl && slot.imageEl.complete && slot.imageEl.naturalWidth > 0) {
+                    submit();
+                } else if (slot.imageEl) {
+                    const handleLoad = () => {
+                        slot.imageEl.removeEventListener('load', handleLoad);
+                        submit();
+                    };
+                    slot.imageEl.addEventListener('load', handleLoad, { once: true });
+                } else {
+                    submit();
+                }
             }
 
             function attachResubmitHandlers(button, side) {
@@ -1568,140 +1468,28 @@ showDefaultPhoto('selfie');
               });
           }
 
-            function normalizeSelectionPoint(selection) {
-                const fallback = { x: 0.5, y: 0.5 };
-                if (
-                    !selection ||
-                    typeof selection.x !== 'number' ||
-                    typeof selection.y !== 'number' ||
-                    !Number.isFinite(selection.x) ||
-                    !Number.isFinite(selection.y)
-                ) {
-                    return fallback;
-                }
-                return {
-                    x: Math.min(1, Math.max(0, selection.x)),
-                    y: Math.min(1, Math.max(0, selection.y))
-                };
-            }
-
-            function loadImageForAnnotation(dataUrl) {
+            function loadImageElement(dataUrl) {
                 return new Promise((resolve, reject) => {
                     const image = new Image();
                     image.decoding = 'async';
                     image.onload = () => resolve(image);
-                    image.onerror = () => reject(new Error('Failed to load photo for crosshair overlay.'));
+                    image.onerror = () => reject(new Error('Failed to load photo data for rendering.'));
                     image.src = dataUrl;
                 });
             }
 
-            function drawCrosshairOverlay(ctx, width, height, crosshairInfo, devicePixelRatio = 1) {
-                if (!ctx) {
-                    return;
-                }
-
-                const normalizedCenterX = crosshairInfo && Number.isFinite(crosshairInfo.normalizedCenterX)
-                    ? crosshairInfo.normalizedCenterX
-                    : 0.5;
-                const normalizedCenterY = crosshairInfo && Number.isFinite(crosshairInfo.normalizedCenterY)
-                    ? crosshairInfo.normalizedCenterY
-                    : 0.5;
-
-                const centerX = normalizedCenterX * width;
-                const centerY = normalizedCenterY * height;
-
-                const targetPixelWidth = crosshairInfo?.pixelWidth && crosshairInfo.pixelWidth > 0
-                    ? crosshairInfo.pixelWidth
-                    : 80;
-                const targetPixelHeight = crosshairInfo?.pixelHeight && crosshairInfo.pixelHeight > 0
-                    ? crosshairInfo.pixelHeight
-                    : 80;
-
-                const crosshairWidth = Math.min(width, Math.max(20, targetPixelWidth));
-                const crosshairHeight = Math.min(height, Math.max(20, targetPixelHeight));
-
-                const baseLine = crosshairInfo?.lineThickness && crosshairInfo.lineThickness > 0
-                    ? crosshairInfo.lineThickness
-                    : 2;
-
-                const lineThickness = Math.max(1.5, baseLine);
-                const outlineThickness = Math.max(lineThickness + 1.5, lineThickness * 1.8);
-
-        const majorAxis = Math.max(crosshairWidth, crosshairHeight);
-        const focusRadius = Math.min(Math.max(majorAxis * 0.75, 36), Math.min(width, height) * 0.45);
-        const haloRadius = Math.min(Math.max(majorAxis * 0.95, focusRadius + 10), Math.min(width, height) * 0.48);
-        const haloThickness = Math.max(3, lineThickness * 1.6);
-
-        ctx.save();
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
-        ctx.fillRect(0, 0, width, height);
-        ctx.globalCompositeOperation = 'destination-out';
-        const gradient = ctx.createRadialGradient(centerX, centerY, focusRadius * 0.45, centerX, centerY, focusRadius);
-        gradient.addColorStop(0, 'rgba(0, 0, 0, 1)');
-        gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, focusRadius, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-
-        ctx.save();
-        ctx.lineCap = 'round';
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.65)';
-        ctx.shadowBlur = haloThickness * 3.2;
-        ctx.lineWidth = haloThickness;
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, haloRadius, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.restore();
-
-        ctx.save();
-        ctx.lineCap = 'round';
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.75)';
-        ctx.shadowBlur = lineThickness * 2.5;
-        const crosshairGlow = Math.max(lineThickness * 1.2, 2.5);
-
-                const drawLine = (thickness, strokeStyle) => {
-                    ctx.beginPath();
-                    ctx.lineWidth = thickness;
-                    ctx.strokeStyle = strokeStyle;
-                    ctx.moveTo(centerX, centerY - crosshairHeight / 2);
-                    ctx.lineTo(centerX, centerY + crosshairHeight / 2);
-                    ctx.moveTo(centerX - crosshairWidth / 2, centerY);
-                    ctx.lineTo(centerX + crosshairWidth / 2, centerY);
-                    ctx.stroke();
-                };
-
-        ctx.shadowBlur = 0;
-                drawLine(outlineThickness, 'rgba(0, 0, 0, 0.82)');
-        ctx.shadowBlur = crosshairGlow;
-                drawLine(lineThickness, 'rgba(255, 255, 255, 0.94)');
-
-                ctx.restore();
-            }
-
-            async function createAnnotatedDataUrl(photoDataUrl, selection, viewportSnapshot) {
+            async function createViewportDataUrl(photoDataUrl, viewportSnapshot) {
                 if (typeof photoDataUrl !== 'string' || photoDataUrl.length === 0) {
                     throw new Error('Photo data unavailable.');
                 }
 
-                const normalized = normalizeSelectionPoint(selection);
-                const image = await loadImageForAnnotation(photoDataUrl);
+                const image = await loadImageElement(photoDataUrl);
                 const naturalWidth = image.naturalWidth || image.width;
                 const naturalHeight = image.naturalHeight || image.height;
 
                 if (!naturalWidth || !naturalHeight) {
                     throw new Error('Photo dimensions unavailable.');
                 }
-
-                const overlayCrosshair = {
-                    normalizedCenterX: viewportSnapshot?.crosshair?.normalizedCenterX ?? normalized.x,
-                    normalizedCenterY: viewportSnapshot?.crosshair?.normalizedCenterY ?? normalized.y,
-                    pixelWidth: viewportSnapshot?.crosshair?.pixelWidth ?? null,
-                    pixelHeight: viewportSnapshot?.crosshair?.pixelHeight ?? null,
-                    lineThickness: viewportSnapshot?.crosshair?.lineThickness ?? null
-                };
 
                 const viewportReady =
                     viewportSnapshot &&
@@ -1737,11 +1525,11 @@ showDefaultPhoto('selfie');
                         const ctx = canvas.getContext('2d');
 
                         if (!ctx) {
-                            throw new Error('Canvas context unavailable for annotation.');
+                            throw new Error('Canvas context unavailable for rendering.');
                         }
 
                         ctx.scale(devicePixelRatio, devicePixelRatio);
-                        ctx.fillStyle = '#000';
+                        ctx.fillStyle = '#05050c';
                         ctx.fillRect(0, 0, containerWidth, containerHeight);
                         ctx.imageSmoothingQuality = 'high';
 
@@ -1758,8 +1546,6 @@ showDefaultPhoto('selfie');
                         );
                         ctx.restore();
 
-                        drawCrosshairOverlay(ctx, containerWidth, containerHeight, overlayCrosshair, devicePixelRatio);
-
                         return canvas.toDataURL('image/png');
                     }
                 }
@@ -1770,28 +1556,22 @@ showDefaultPhoto('selfie');
                 const fallbackCtx = canvas.getContext('2d');
 
                 if (!fallbackCtx) {
-                    throw new Error('Canvas context unavailable for fallback annotation.');
+                    throw new Error('Canvas context unavailable for fallback rendering.');
                 }
 
+                fallbackCtx.fillStyle = '#05050c';
+                fallbackCtx.fillRect(0, 0, naturalWidth, naturalHeight);
                 fallbackCtx.drawImage(image, 0, 0, naturalWidth, naturalHeight);
-                const fallbackCrosshair = {
-                    normalizedCenterX: overlayCrosshair.normalizedCenterX,
-                    normalizedCenterY: overlayCrosshair.normalizedCenterY,
-                    pixelWidth: overlayCrosshair.pixelWidth ?? Math.min(naturalWidth, naturalHeight) * 0.2,
-                    pixelHeight: overlayCrosshair.pixelHeight ?? Math.min(naturalWidth, naturalHeight) * 0.2,
-                    lineThickness: overlayCrosshair.lineThickness ?? Math.max(2, Math.min(naturalWidth, naturalHeight) * 0.005)
-                };
-                drawCrosshairOverlay(fallbackCtx, naturalWidth, naturalHeight, fallbackCrosshair, 1);
 
                 return canvas.toDataURL('image/png');
             }
 
-            function enqueueDescription(side, photoDataUrl, selection = null, viewportSnapshot = null) {
+            function enqueueDescription(side, photoDataUrl, viewportSnapshot = null, options = {}) {
               const slot = getPhotoSlotByDescriptionSide(side);
               if (slot && typeof photoDataUrl === 'string' && photoDataUrl.length > 0) {
                   slot.lastPhotoDataUrl = photoDataUrl;
               }
-                descriptionQueue.push({ side, photoDataUrl, selection, viewport: viewportSnapshot });
+                descriptionQueue.push({ side, photoDataUrl, viewport: viewportSnapshot, options });
               processDescriptionQueue();
           }
 
@@ -1806,7 +1586,7 @@ showDefaultPhoto('selfie');
                 }
   
                 isDescriptionInFlight = true;
-                requestDescription(next.side, next.photoDataUrl, next.selection, next.viewport)
+                requestDescription(next.side, next.photoDataUrl, next.viewport, next.options)
                   .catch(error => {
                       console.error('Description request failed:', error);
                   })
@@ -1816,7 +1596,7 @@ showDefaultPhoto('selfie');
                   });
           }
 
-            async function requestDescription(side, photoDataUrl, selection, viewportSnapshot) {
+            async function requestDescription(side, photoDataUrl, viewportSnapshot, options = {}) {
                 const state = descriptionState[side];
                 if (!state) {
                     return;
@@ -1831,23 +1611,16 @@ showDefaultPhoto('selfie');
 
                 setDescriptionState(side, 'loading', WAITING_FOR_DESCRIPTION_MESSAGE, WAITING_FOR_DESCRIPTION_MESSAGE);
 
-        const normalizedSelection = normalizeSelectionPoint(selection);
-        const selectionPayload = normalizedSelection
-            ? {
-                x: Number(normalizedSelection.x.toFixed(4)),
-                y: Number(normalizedSelection.y.toFixed(4))
-            }
-            : null;
-                let annotatedPhotoDataUrl;
+                let renderedViewportDataUrl;
 
                 try {
-                      annotatedPhotoDataUrl = await createAnnotatedDataUrl(photoDataUrl, normalizedSelection, viewportSnapshot);
-                } catch (annotationError) {
-                    const message = `${label} description failed: unable to render the crosshair overlay (${annotationError?.message || 'unknown error.'})`;
+                    renderedViewportDataUrl = await createViewportDataUrl(photoDataUrl, viewportSnapshot);
+                } catch (renderError) {
+                    const message = `${label} description failed: unable to render the framed view (${renderError?.message || 'unknown error.'})`;
                     setDescriptionState(side, 'error', message);
-                    const error = new Error(annotationError?.message || 'Crosshair overlay failed.');
-                    error.name = 'CrosshairOverlayError';
-                    error.cause = annotationError;
+                    const error = new Error(renderError?.message || 'Viewport rendering failed.');
+                    error.name = 'ViewportRenderingError';
+                    error.cause = renderError;
                     throw error;
                 }
 
@@ -1862,8 +1635,10 @@ showDefaultPhoto('selfie');
                         },
                         body: JSON.stringify({
                             role: side,
-                            image: annotatedPhotoDataUrl,
-                            selection: selectionPayload
+                            image: renderedViewportDataUrl,
+                            viewport: viewportSnapshot,
+                            reason: options.reason || 'interaction',
+                            signature: options.signature || null
                         }),
                         signal: controller.signal
                     });
@@ -1899,7 +1674,7 @@ showDefaultPhoto('selfie');
 
                     throw new Error('API response did not include a usable description.');
                 } catch (error) {
-                    if (error?.name !== 'CrosshairOverlayError') {
+                    if (error?.name !== 'ViewportRenderingError') {
                         const message = error?.name === 'AbortError'
                             ? `${label} description request timed out after ${Math.round(DESCRIPTION_API_TIMEOUT_MS / 1000)}s.`
                             : `${label} description failed: ${error?.message || 'Unknown error.'}`;
@@ -2188,12 +1963,11 @@ showDefaultPhoto('selfie');
             backCameraHalf.classList.add('initializing');
             hideDefaultPhoto('back');
             backVideoElement.classList.add('active');
-          resetCrosshair('back');
-          setCrosshairVisibility('back', true);
           const backState = interactionState.back;
           if (backState) {
-              backState.selectionPending = false;
-              backState.pendingDescription = null;
+                backState.lastTap = null;
+                backState.lastSubmittedSignature = null;
+                clearMovementDebounce('back');
           }
             isBackActive = true;
             backPlaceholder.classList.add('hidden');
@@ -2280,12 +2054,11 @@ showDefaultPhoto('selfie');
             }
             hideDefaultPhoto('selfie');
             selfieVideoElement.classList.add('active');
-          resetCrosshair('selfie');
-          setCrosshairVisibility('selfie', true);
           const selfieState = interactionState.selfie;
           if (selfieState) {
-              selfieState.selectionPending = false;
-              selfieState.pendingDescription = null;
+                selfieState.lastTap = null;
+                selfieState.lastSubmittedSignature = null;
+                clearMovementDebounce('selfie');
           }
             isSelfieActive = true;
             selfiePlaceholder.classList.add('hidden');
@@ -2318,6 +2091,7 @@ showDefaultPhoto('selfie');
               backState.streamZoom.min = 1;
               backState.streamZoom.max = 1;
               backState.streamZoom.current = 1;
+        backState.lastSubmittedSignature = null;
           }
 
               if (backInitializationTimeoutId !== null) {
@@ -2340,16 +2114,15 @@ showDefaultPhoto('selfie');
               selfieState.streamZoom.min = 1;
               selfieState.streamZoom.max = 1;
               selfieState.streamZoom.current = 1;
+        selfieState.lastSubmittedSignature = null;
           }
             
             if (!isBackFrozen) {
                 showDefaultPhoto('back');
-              setCrosshairVisibility('back', false);
             }
 
             if (!isSelfieFrozen) {
                 showDefaultPhoto('selfie');
-              setCrosshairVisibility('selfie', false);
             }
             
         }
@@ -2642,9 +2415,9 @@ showDefaultPhoto('selfie');
             if (!versionDisplay) {
                 return;
             }
-            const label = `Version ${APP_VERSION}`;
+            const label = `v${APP_VERSION}`;
             versionDisplay.textContent = label;
-            versionDisplay.setAttribute('aria-label', `Application ${label}`);
+            versionDisplay.setAttribute('aria-label', `Application version ${APP_VERSION}`);
         }
 
         renderAppVersion();
