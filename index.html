@@ -2142,7 +2142,33 @@ showDefaultPhoto('selfie');
         );
         ctx.restore();
 
-        return canvas.toDataURL('image/png');
+        let outputCanvas = canvas;
+        const maxSide = Math.max(canvas.width, canvas.height);
+        if (maxSide > 640) {
+            const scaleFactor = 640 / maxSide;
+            const resizedCanvas = document.createElement('canvas');
+            resizedCanvas.width = Math.max(1, Math.round(canvas.width * scaleFactor));
+            resizedCanvas.height = Math.max(1, Math.round(canvas.height * scaleFactor));
+            const resizedCtx = resizedCanvas.getContext('2d');
+            if (!resizedCtx) {
+                throw new Error('Canvas context unavailable for resizing.');
+            }
+            resizedCtx.imageSmoothingQuality = 'high';
+            resizedCtx.drawImage(
+                canvas,
+                0,
+                0,
+                canvas.width,
+                canvas.height,
+                0,
+                0,
+                resizedCanvas.width,
+                resizedCanvas.height
+            );
+            outputCanvas = resizedCanvas;
+        }
+
+        return outputCanvas.toDataURL('image/png');
     }
 
             function enqueueDescription(side, photoDataUrl, viewportSnapshot = null, options = {}) {
