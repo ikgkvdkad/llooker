@@ -432,7 +432,7 @@ function requestDefaultDescription(side) {
             .then((dataUrl) => {
                 slot.lastPhotoDataUrl = dataUrl;
                 const role = side === 'back' ? 'you' : 'me';
-                enqueueDescription(role, dataUrl);
+                  enqueueDescription(role, dataUrl, { x: 0.5, y: 0.5 });
             })
             .catch(error => {
                 console.error(`Failed to describe default ${side} image:`, error);
@@ -824,7 +824,8 @@ function resetPointerTracking(slotKey) {
 
 function submitSelection(slotKey, normalizedPoint) {
     const state = interactionState[slotKey];
-    if (!state) {
+    const slot = photoSlots[slotKey];
+    if (!state || !slot) {
         return;
     }
 
@@ -832,22 +833,24 @@ function submitSelection(slotKey, normalizedPoint) {
     updateCrosshairPosition(slotKey, normalizedPoint.x, normalizedPoint.y);
     state.selectionPoint = normalizedPoint;
 
-    if (!state.pendingDescription) {
-        return;
-    }
-
     const pending = state.pendingDescription;
-    pending.selection = normalizedPoint;
-    markSelectionComplete(slotKey);
+    const derivedSide = pending?.side || (slotKey === 'back' ? 'you' : slotKey === 'selfie' ? 'me' : null);
+    const photoDataUrl = pending?.photoDataUrl || slot.lastPhotoDataUrl || null;
+
+    if (state.selectionPending) {
+        markSelectionComplete(slotKey);
+    }
     state.pendingDescription = null;
 
-    const { side, photoDataUrl } = pending;
-    if (!photoDataUrl) {
+    if (!derivedSide || typeof photoDataUrl !== 'string' || photoDataUrl.length === 0) {
+        const errorSide = derivedSide || (slotKey === 'back' ? 'you' : 'me');
+        const label = errorSide === 'you' ? 'You' : 'Me';
+        setDescriptionState(errorSide, 'error', `${label} description unavailable: no photo data to analyze. Capture or upload again.`);
         return;
     }
 
-    setDescriptionState(side, 'loading', WAITING_FOR_DESCRIPTION_MESSAGE, WAITING_FOR_DESCRIPTION_MESSAGE);
-    enqueueDescription(side, photoDataUrl, normalizedPoint);
+    setDescriptionState(derivedSide, 'loading', WAITING_FOR_DESCRIPTION_MESSAGE, WAITING_FOR_DESCRIPTION_MESSAGE);
+    enqueueDescription(derivedSide, photoDataUrl, normalizedPoint);
 }
 
 function calculateDistance(pointerA, pointerB) {
@@ -1342,13 +1345,19 @@ showDefaultPhoto('selfie');
 
                 const slotKey = side === 'you' ? 'back' : 'selfie';
                 const interaction = interactionState[slotKey];
-                if (interaction?.selectionPending) {
-                    promptForSelection(side);
-                    return;
-                }
+              if (interaction?.selectionPending) {
+                  promptForSelection(side);
+                  return;
+              }
+
+              if (!interaction?.selectionPoint) {
+                  setDescriptionState(side, 'error', `Tap the photo to position the crosshair before requesting a ${label.toLowerCase()} description.`);
+                  promptForSelection(side);
+                  return;
+              }
 
                 setDescriptionState(side, 'loading', WAITING_FOR_DESCRIPTION_MESSAGE, WAITING_FOR_DESCRIPTION_MESSAGE);
-              enqueueDescription(side, photoDataUrl, interaction?.selectionPoint || null);
+            enqueueDescription(side, photoDataUrl, interaction.selectionPoint);
             }
 
             function attachResubmitHandlers(button, side) {
@@ -1379,7 +1388,7 @@ showDefaultPhoto('selfie');
                     }
                 });
 
-              input.addEventListener('change', async () => {
+                input.addEventListener('change', async () => {
                   const file = input.files && input.files[0];
                   if (!file) {
                       return;
@@ -1396,15 +1405,13 @@ showDefaultPhoto('selfie');
                       return;
                   }
 
-                  try {
-                      setDescriptionState(side, 'loading', WAITING_FOR_DESCRIPTION_MESSAGE, WAITING_FOR_DESCRIPTION_MESSAGE);
+                    try {
                       const dataUrl = await readFileAsDataUrl(file);
                       if (typeof dataUrl !== 'string') {
                           throw new Error('Uploaded data unavailable.');
                       }
                       displayPhotoForSide(side, dataUrl);
                       stopAllCameras();
-                      enqueueDescription(side, dataUrl);
                       hideError();
                   } catch (error) {
                       console.error(`${label} photo upload failed:`, error);
