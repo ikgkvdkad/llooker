@@ -495,24 +495,15 @@ const selfieSelectionHandles = {
     'bottom-right': selfieSelectionBox?.querySelector('.corner-handle.bottom-right') || null
 };
         
-const DEFAULT_IMAGES = {
-    back: 'youphoto.jpg',
-    selfie: 'mephoto.jpg'
-};
-
 const photoSlots = {
     back: {
         imageEl: backCapturedPhoto,
         placeholderEl: backPlaceholder,
-        defaultSrc: DEFAULT_IMAGES.back,
-        defaultDescriptionRequested: false,
         lastPhotoDataUrl: null
     },
     selfie: {
         imageEl: selfieCapturedPhoto,
         placeholderEl: selfiePlaceholder,
-        defaultSrc: DEFAULT_IMAGES.selfie,
-        defaultDescriptionRequested: false,
         lastPhotoDataUrl: null
     }
 };
@@ -527,133 +518,11 @@ function getPhotoSlotByDescriptionSide(side) {
     return null;
 }
 
-function fetchImageAsDataUrl(src) {
-    return fetch(src, { cache: 'no-cache' })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`Failed to fetch image ${src}: HTTP ${response.status}`);
-            }
-            return response.blob();
-        })
-        .then(blob => new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-        }));
-}
-
-function requestDefaultDescription(side) {
-    const slot = photoSlots[side];
-    if (!slot || slot.defaultDescriptionRequested) {
-        return;
-    }
-
-    const { imageEl, defaultSrc } = slot;
-    if (!imageEl || !defaultSrc) {
-        return;
-    }
-
-    const describe = () => {
-        if (slot.defaultDescriptionRequested) {
-            return;
-        }
-        slot.defaultDescriptionRequested = true;
-        fetchImageAsDataUrl(defaultSrc)
-            .then((dataUrl) => {
-                slot.lastPhotoDataUrl = dataUrl;
-                const role = side === 'back' ? 'you' : 'me';
-                const viewport = snapshotViewportState(side);
-                const state = interactionState[side];
-                if (state) {
-                    state.lastSubmittedSignature = buildViewportSignature(dataUrl, viewport);
-                }
-                setDescriptionState(role, 'loading', WAITING_FOR_DESCRIPTION_MESSAGE, WAITING_FOR_DESCRIPTION_MESSAGE);
-                enqueueDescription(role, dataUrl, viewport, { reason: 'default-photo', force: true });
-            })
-            .catch(error => {
-                console.error(`Failed to describe default ${side} image:`, error);
-                slot.defaultDescriptionRequested = false;
-            });
-    };
-
-    if (imageEl.complete && imageEl.naturalWidth > 0) {
-        describe();
-        return;
-    }
-
-    const handleLoad = () => {
-        imageEl.removeEventListener('load', handleLoad);
-        imageEl.removeEventListener('error', handleError);
-        describe();
-    };
-
-    const handleError = (event) => {
-        imageEl.removeEventListener('load', handleLoad);
-        imageEl.removeEventListener('error', handleError);
-        console.error(`Failed to load default ${side} image.`, event?.error || event);
-    };
-
-    imageEl.addEventListener('load', handleLoad, { once: true });
-    imageEl.addEventListener('error', handleError, { once: true });
-}
-
-function showDefaultPhoto(side) {
-    const slot = photoSlots[side];
-    if (!slot) {
-        return;
-    }
-
-    const { imageEl, placeholderEl, defaultSrc } = slot;
-    if (!imageEl || !defaultSrc) {
-        return;
-    }
-
-    if (
-        imageEl.dataset.defaultPhoto === 'true' &&
-        imageEl.classList.contains('active')
-    ) {
-        if (placeholderEl) {
-            placeholderEl.classList.add('hidden');
-        }
-        resetSelectionRect(side, { notify: false });
-        resetPhotoTransform(side);
-        const state = interactionState[side];
-        if (state) {
-            state.lastTap = null;
-            state.lastSubmittedSignature = null;
-            clearMovementDebounce(side);
-        }
-        requestDefaultDescription(side);
-        return;
-    }
-
-    slot.lastPhotoDataUrl = null;
-    imageEl.src = defaultSrc;
-    imageEl.dataset.defaultPhoto = 'true';
-    imageEl.classList.add('active');
-    slot.defaultDescriptionRequested = false;
-    if (placeholderEl) {
-        placeholderEl.classList.add('hidden');
-    }
-    resetSelectionRect(side, { notify: false });
-    resetPhotoTransform(side);
-    const state = interactionState[side];
-    if (state) {
-        state.lastTap = null;
-        state.lastSubmittedSignature = null;
-        clearMovementDebounce(side);
-    }
-    requestDefaultDescription(side);
-}
-
 function markPhotoCaptured(side) {
     const slot = photoSlots[side];
     if (!slot || !slot.imageEl) {
         return;
     }
-    delete slot.imageEl.dataset.defaultPhoto;
-    slot.defaultDescriptionRequested = false;
 }
 
 function hideDefaultPhoto(side) {
@@ -2091,9 +1960,6 @@ showDefaultPhoto('selfie');
             throw error;
         }
 
-        const devicePixelRatio = Number.isFinite(viewportSnapshot.devicePixelRatio)
-            ? Math.max(1, viewportSnapshot.devicePixelRatio)
-            : 1;
         const objectFit = (viewportSnapshot.objectFit || 'cover').toLowerCase();
         const transform = viewportSnapshot.transform || {};
         const userScale = Number.isFinite(transform.scale) ? Math.max(0.01, transform.scale) : 1;
@@ -2115,18 +1981,23 @@ showDefaultPhoto('selfie');
 
         const finalScale = baseScale * userScale;
         const canvas = document.createElement('canvas');
-        canvas.width = Math.max(1, Math.round(selectionWidthPx * devicePixelRatio));
-        canvas.height = Math.max(1, Math.round(selectionHeightPx * devicePixelRatio));
+        const targetWidth = Math.max(1, Math.round(selectionWidthPx));
+        const targetHeight = Math.max(1, Math.round(selectionHeightPx));
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
         const ctx = canvas.getContext('2d');
 
         if (!ctx) {
             throw new Error('Canvas context unavailable for rendering.');
         }
 
-        ctx.scale(devicePixelRatio, devicePixelRatio);
+        ctx.imageSmoothingQuality = 'high';
+
+        const scaleX = targetWidth / selectionWidthPx;
+        const scaleY = targetHeight / selectionHeightPx;
+        ctx.scale(scaleX, scaleY);
         ctx.fillStyle = '#05050c';
         ctx.fillRect(0, 0, selectionWidthPx, selectionHeightPx);
-        ctx.imageSmoothingQuality = 'high';
 
         ctx.save();
         ctx.translate(-selection.x * containerWidth, -selection.y * containerHeight);
@@ -2142,7 +2013,34 @@ showDefaultPhoto('selfie');
         );
         ctx.restore();
 
-        return canvas.toDataURL('image/png');
+        let outputCanvas = canvas;
+
+        const maxSide = Math.max(canvas.width, canvas.height);
+        if (maxSide > 640) {
+            const scaleFactor = 640 / maxSide;
+            const resizedCanvas = document.createElement('canvas');
+            resizedCanvas.width = Math.max(1, Math.round(canvas.width * scaleFactor));
+            resizedCanvas.height = Math.max(1, Math.round(canvas.height * scaleFactor));
+            const resizedCtx = resizedCanvas.getContext('2d');
+            if (!resizedCtx) {
+                throw new Error('Canvas context unavailable for resizing.');
+            }
+            resizedCtx.imageSmoothingQuality = 'high';
+            resizedCtx.drawImage(
+                canvas,
+                0,
+                0,
+                canvas.width,
+                canvas.height,
+                0,
+                0,
+                resizedCanvas.width,
+                resizedCanvas.height
+            );
+            outputCanvas = resizedCanvas;
+        }
+
+        return outputCanvas.toDataURL('image/png');
     }
 
             function enqueueDescription(side, photoDataUrl, viewportSnapshot = null, options = {}) {

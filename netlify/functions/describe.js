@@ -102,14 +102,14 @@ exports.handler = async (event, context) => {
               {
                 role: 'system',
                 content: [
-                  'You provide richly detailed, respectful descriptions of people in images, focusing strictly on non-identifying physical and stylistic attributes.',
+                  'You provide richly detailed, respectful descriptions of people in images, focusing strictly on clothing, colors, accessories, and other visible traits while avoiding any identity guesses.',
                   'Always assess only the individual highlighted by the white crosshair overlay rendered on the submitted image. Treat the crosshair location as authoritative even if multiple subjects are visible.',
                   'If the crosshair does not rest on a clearly discernible person—or the marked subject is distant, blurred, obstructed, poorly lit, or otherwise indiscernible—respond only with the JSON object {"status":"unclear","description":"Unclear photo"}.',
                   'Otherwise respond with a single JSON object (no code block) shaped exactly as {"status":"ok","description":"Basics: ...\\nClothing & Style: ...\\nAdditional Notes: ..."} and nothing else.',
-                    'Within Basics list, in order, apparent age range (or "not clearly visible"), apparent gender (or "not clearly visible"), build, height impression, posture, skin tone, and hairstyle or facial hair. Use concise witness-style phrases and write "not clearly visible" for any detail you cannot confirm.',
-                  'Within Clothing & Style summarize visible layers from outermost to innermost, including colors, textures, fit, footwear, and accessories. Always mention dominant colors and say "not clearly visible" when coverage is missing.',
-                    'Within Additional Notes add lighting, mood, notable props, or immediate context only when directly observed, and always note distinctive traits that help recognize the same person again (e.g., eye color, facial structure cues, scars, tattoos, piercings) when visible; write "not clearly visible" for any expected detail you cannot confirm, and use "none noted" only when no such observations apply.',
-                  'Never guess identities, names, or personal data. Keep clothing colors, textures, posture, lighting, and mood details accurate to what you can see, and always supply all three sections even when details are limited.'
+                  'Within Basics list, in order, apparent age range (or "not clearly visible"), perceived gender presentation (or "not clearly visible"), build, height impression, posture, skin tone, and hairstyle or facial hair. Use concise witness-style phrases and write "not clearly visible" for any detail you cannot confirm.',
+                  'Within Clothing & Style summarize visible layers from outermost to innermost, calling out garment types, colors, patterns, fabrics, footwear, and accessories (bags, jewelry, eyewear, tech). Always mention dominant colors and say "not clearly visible" when coverage is missing.',
+                  'Within Additional Notes include distinctive physical traits (scars, tattoos, piercings, nail or makeup details) and notable held items when visible, or write "none noted" if nothing stands out. Mention background context only when it directly helps recognize the outfit.',
+                  'Never guess identities, names, or personal data. Keep the description grounded strictly in visible evidence and always supply all three sections even when details are limited.'
                 ].join(' ')
               },
           {
@@ -119,9 +119,9 @@ exports.handler = async (event, context) => {
                     type: 'text',
                     text: (
                         role === 'you'
-                          ? 'Describe only the person marked by the white crosshair overlay in this \"You\" photo so an artist could recreate them.'
-                          : 'Describe only the sender marked by the white crosshair overlay in this \"Me\" selfie.'
-                      ) + ' ' + crosshairInstruction + ' Confirm that the crosshair aligns with a clearly visible person; if the marked subject is too far, obstructed, or blurred to describe responsibly, reply with {\"status\":\"unclear\",\"description\":\"Unclear photo\"}. When the subject is clear, respond with {\"status\":\"ok\",\"description\":\"Basics: ...\nClothing & Style: ...\nAdditional Notes: ...\"} using that order and headings. In Basics, provide apparent age range, build, height impression, posture, skin tone, and hairstyle or facial hair; write \"not clearly visible\" for any detail you cannot confirm. In Clothing & Style, cover layers from outermost to innermost with colors, textures, fit, footwear, and accessories, noting \"not clearly visible\" when information is missing. In Additional Notes, give lighting, mood, or immediate context only if directly observed; otherwise write \"none noted\". Keep the description non-identifying and grounded in visible evidence.'
+                          ? 'Describe only the person marked by the white crosshair overlay in this "You" photo so their look can be matched later.'
+                          : 'Describe only the sender marked by the white crosshair overlay in this "Me" selfie so their look can be matched later.'
+                      ) + ' ' + crosshairInstruction + ' Confirm that the crosshair aligns with a clearly visible person; if the marked subject is too far, obstructed, or blurred to describe responsibly, reply with {"status":"unclear","description":"Unclear photo"}. When the subject is clear, respond with {"status":"ok","description":"Basics: ...\nClothing & Style: ...\nAdditional Notes: ..."} using that order and headings. In Basics, provide apparent age range, perceived gender presentation, build, height impression, posture, skin tone, and hairstyle or facial hair; write "not clearly visible" for any detail you cannot confirm. In Clothing & Style, cover garments from outermost to innermost with colors, patterns, fabrics, footwear, and accessories, noting "not clearly visible" when information is missing. In Additional Notes, capture distinctive physical traits or carried items that help recognize the person again; otherwise write "none noted". Keep the entire description non-identifying and grounded in visible evidence.'
                 },
               {
                 type: 'image_url',
