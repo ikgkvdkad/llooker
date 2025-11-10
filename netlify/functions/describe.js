@@ -75,7 +75,7 @@ exports.handler = async (event, context) => {
 
     const apiKey = process.env.OPENAI_API_KEY || process.env.OPENAIKEY;
     const selectionInstructionBase =
-      'Focus exclusively on the individual within the selected area that has been extracted from the original image. The framing you see reflects the user's chosen view. Describe only the person visible in this extracted region.';
+      'Focus exclusively on the individual within the selected area that has been extracted from the original image. The framing you see reflects the user\'s chosen view. Describe only the person visible in this extracted region.';
     const coordinateInstruction = normalizedSelection
       ? ` The normalized selection center (relative to the original image width and height) is approximately x=${normalizedSelection.x.toFixed(3)}, y=${normalizedSelection.y.toFixed(3)}.`
       : '';
