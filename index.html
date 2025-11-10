@@ -1396,10 +1396,34 @@ showDefaultPhoto('selfie');
                     input.click();
                 };
 
-                button.addEventListener('click', triggerInputSelection);
+                let suppressNextClick = false;
+                let suppressTimerId = null;
+
+                const clearSuppressTimer = () => {
+                    if (suppressTimerId !== null) {
+                        window.clearTimeout(suppressTimerId);
+                        suppressTimerId = null;
+                    }
+                };
+
+                button.addEventListener('click', (event) => {
+                    if (suppressNextClick) {
+                        suppressNextClick = false;
+                        clearSuppressTimer();
+                        return;
+                    }
+                    triggerInputSelection();
+                });
+
                 button.addEventListener('pointerup', (event) => {
                     if (event.pointerType === 'touch') {
                         event.preventDefault();
+                        suppressNextClick = true;
+                        clearSuppressTimer();
+                        suppressTimerId = window.setTimeout(() => {
+                            suppressNextClick = false;
+                            suppressTimerId = null;
+                        }, 300);
                         triggerInputSelection();
                     }
                 });
