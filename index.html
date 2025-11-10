@@ -263,11 +263,12 @@
         .crosshair::after {
             content: '';
             position: absolute;
-            background: rgba(255, 255, 255, 0.8);
+            background: rgba(255, 255, 255, 0.92);
+            box-shadow: 0 0 6px rgba(0, 0, 0, 0.65), 0 0 8px rgba(255, 255, 255, 0.75);
         }
 
         .crosshair::before {
-            width: 2px;
+            width: 3px;
             height: 100%;
             left: 50%;
             transform: translateX(-50%);
@@ -275,7 +276,7 @@
 
         .crosshair::after {
             width: 100%;
-            height: 2px;
+            height: 3px;
             top: 50%;
             transform: translateY(-50%);
         }
@@ -304,7 +305,7 @@
             color: rgba(0, 0, 0, 0.9);
         }
 
-        .git-time-display {
+        .version-badge {
             position: absolute;
             bottom: 18px;
             left: 50%;
@@ -358,7 +359,7 @@
                 </div>
             </div>
 
-        <div id="gitTimeDisplay" class="git-time-display" aria-live="polite"></div>
+        <div id="versionDisplay" class="version-badge" aria-live="polite"></div>
         <div id="errorMessage" class="error-message"></div>
     </div>
 
@@ -602,7 +603,7 @@ function hideDefaultPhoto(side) {
   }
         
         const errorMessage = document.getElementById('errorMessage');
-        const gitTimeDisplay = document.getElementById('gitTimeDisplay');
+        const versionDisplay = document.getElementById('versionDisplay');
           const youDescriptionPanel = document.getElementById('youDescriptionPanel');
           const meDescriptionPanel = document.getElementById('meDescriptionPanel');
           const youDescriptionStatus = document.getElementById('youDescriptionStatus');
@@ -616,6 +617,7 @@ function hideDefaultPhoto(side) {
         const youUploadInput = document.getElementById('youUploadInput');
         const meUploadInput = document.getElementById('meUploadInput');
 
+        const APP_VERSION = 1;
         const DEFAULT_BACK_ASPECT = 16 / 9;
         const DEFAULT_SELFIE_ASPECT = 16 / 9;
 
@@ -1625,8 +1627,40 @@ showDefaultPhoto('selfie');
                 const lineThickness = Math.max(1.5, baseLine);
                 const outlineThickness = Math.max(lineThickness + 1.5, lineThickness * 1.8);
 
-                ctx.save();
-                ctx.lineCap = 'round';
+        const majorAxis = Math.max(crosshairWidth, crosshairHeight);
+        const focusRadius = Math.min(Math.max(majorAxis * 0.75, 36), Math.min(width, height) * 0.45);
+        const haloRadius = Math.min(Math.max(majorAxis * 0.95, focusRadius + 10), Math.min(width, height) * 0.48);
+        const haloThickness = Math.max(3, lineThickness * 1.6);
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+        ctx.fillRect(0, 0, width, height);
+        ctx.globalCompositeOperation = 'destination-out';
+        const gradient = ctx.createRadialGradient(centerX, centerY, focusRadius * 0.45, centerX, centerY, focusRadius);
+        gradient.addColorStop(0, 'rgba(0, 0, 0, 1)');
+        gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, focusRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.65)';
+        ctx.shadowBlur = haloThickness * 3.2;
+        ctx.lineWidth = haloThickness;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, haloRadius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.75)';
+        ctx.shadowBlur = lineThickness * 2.5;
+        const crosshairGlow = Math.max(lineThickness * 1.2, 2.5);
 
                 const drawLine = (thickness, strokeStyle) => {
                     ctx.beginPath();
@@ -1639,8 +1673,9 @@ showDefaultPhoto('selfie');
                     ctx.stroke();
                 };
 
-                ctx.shadowBlur = 0;
+        ctx.shadowBlur = 0;
                 drawLine(outlineThickness, 'rgba(0, 0, 0, 0.82)');
+        ctx.shadowBlur = crosshairGlow;
                 drawLine(lineThickness, 'rgba(255, 255, 255, 0.94)');
 
                 ctx.restore();
@@ -1796,7 +1831,13 @@ showDefaultPhoto('selfie');
 
                 setDescriptionState(side, 'loading', WAITING_FOR_DESCRIPTION_MESSAGE, WAITING_FOR_DESCRIPTION_MESSAGE);
 
-                const normalizedSelection = normalizeSelectionPoint(selection);
+        const normalizedSelection = normalizeSelectionPoint(selection);
+        const selectionPayload = normalizedSelection
+            ? {
+                x: Number(normalizedSelection.x.toFixed(4)),
+                y: Number(normalizedSelection.y.toFixed(4))
+            }
+            : null;
                 let annotatedPhotoDataUrl;
 
                 try {
@@ -1821,7 +1862,8 @@ showDefaultPhoto('selfie');
                         },
                         body: JSON.stringify({
                             role: side,
-                            image: annotatedPhotoDataUrl
+                            image: annotatedPhotoDataUrl,
+                            selection: selectionPayload
                         }),
                         signal: controller.signal
                     });
@@ -2596,34 +2638,16 @@ showDefaultPhoto('selfie');
           attachUploadHandler(youUploadButton, youUploadInput, 'you');
         attachUploadHandler(meUploadButton, meUploadInput, 'me');
 
-        function formatGitUploadTime(date = new Date()) {
-            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-        }
-
-        function updateGitTimeDisplay() {
-            if (!gitTimeDisplay) {
+        function renderAppVersion() {
+            if (!versionDisplay) {
                 return;
             }
-            gitTimeDisplay.textContent = formatGitUploadTime();
+            const label = `Version ${APP_VERSION}`;
+            versionDisplay.textContent = label;
+            versionDisplay.setAttribute('aria-label', `Application ${label}`);
         }
 
-        function startGitTimeTicker() {
-            if (!gitTimeDisplay) {
-                return;
-            }
-            updateGitTimeDisplay();
-            const alignToMinute = () => {
-                const now = Date.now();
-                const msUntilNextMinute = 60000 - (now % 60000);
-                window.setTimeout(() => {
-                    updateGitTimeDisplay();
-                    alignToMinute();
-                }, msUntilNextMinute);
-            };
-            alignToMinute();
-        }
-
-        startGitTimeTicker();
+        renderAppVersion();
 
             resetDescriptionState('you');
             resetDescriptionState('me');

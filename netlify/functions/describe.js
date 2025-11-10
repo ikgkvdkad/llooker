@@ -36,13 +36,33 @@ exports.handler = async (event, context) => {
     };
   }
 
-  const { role, image } = requestPayload;
+  const { role, image, selection } = requestPayload;
+
+  const normalizeSelectionValue = (value) => {
+    const numeric = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(numeric)) {
+      return null;
+    }
+    return Math.min(1, Math.max(0, numeric));
+  };
+
+  const normalizedSelection = selection && typeof selection === 'object'
+    ? (() => {
+        const x = normalizeSelectionValue(selection.x);
+        const y = normalizeSelectionValue(selection.y);
+        if (x === null || y === null) {
+          return null;
+        }
+        return { x, y };
+      })()
+    : null;
 
   const requestMeta = {
     role: typeof role === 'string' ? role : null,
     imageProvided: typeof image === 'string',
     imageLength: typeof image === 'string' ? image.length : null,
-    imageBytesEstimated: estimateImageBytesFromDataUrl(image)
+    imageBytesEstimated: estimateImageBytesFromDataUrl(image),
+    selection: normalizedSelection
   };
 
   try {
@@ -54,8 +74,12 @@ exports.handler = async (event, context) => {
     }
 
     const apiKey = process.env.OPENAI_API_KEY || process.env.OPENAIKEY;
-    const crosshairInstruction =
+    const crosshairInstructionBase =
       'Focus exclusively on the individual positioned beneath the white crosshair overlay that is already drawn onto the submitted image. The framing you see reflects the user’s chosen view. Do not rely on coordinates or alternate pointers—use only the visible overlay.';
+    const coordinateInstruction = normalizedSelection
+      ? ` The normalized crosshair center (relative to the image width and height) is approximately x=${normalizedSelection.x.toFixed(3)}, y=${normalizedSelection.y.toFixed(3)}; when multiple people are visible, confirm the person closest to that point aligns with the overlay.`
+      : '';
+    const crosshairInstruction = `${crosshairInstructionBase}${coordinateInstruction}`;
 
     // Check if API key is configured
     if (!apiKey) {
