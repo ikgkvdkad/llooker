@@ -270,6 +270,134 @@
             display: block;
         }
 
+        .selection-overlay {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 750;
+        }
+
+        .selection-box {
+            position: absolute;
+            border-radius: 22px;
+            border: 4px solid rgba(255, 255, 255, 0.9);
+            box-shadow: 0 0 0 9999px rgba(5, 5, 12, 0.68);
+            background: rgba(255, 255, 255, 0.04);
+            pointer-events: auto;
+            touch-action: none;
+            cursor: grab;
+            transition: background 0.18s ease, border-color 0.18s ease;
+            user-select: none;
+        }
+
+        .selection-box.is-moving {
+            cursor: grabbing;
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.95);
+        }
+
+        .selection-box.is-resizing {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 1);
+        }
+
+        .corner-handle {
+            position: absolute;
+            width: 46px;
+            height: 46px;
+            pointer-events: auto;
+            touch-action: none;
+            user-select: none;
+        }
+
+        .corner-handle::before,
+        .corner-handle::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 255, 255, 0.96);
+            border-radius: 999px;
+        }
+
+        .corner-handle.top-left {
+            top: -23px;
+            left: -23px;
+            cursor: nwse-resize;
+        }
+
+        .corner-handle.top-left::before {
+            width: 32px;
+            height: 6px;
+            top: 0;
+            left: 0;
+        }
+
+        .corner-handle.top-left::after {
+            width: 6px;
+            height: 32px;
+            top: 0;
+            left: 0;
+        }
+
+        .corner-handle.top-right {
+            top: -23px;
+            right: -23px;
+            cursor: nesw-resize;
+        }
+
+        .corner-handle.top-right::before {
+            width: 32px;
+            height: 6px;
+            top: 0;
+            right: 0;
+        }
+
+        .corner-handle.top-right::after {
+            width: 6px;
+            height: 32px;
+            top: 0;
+            right: 0;
+        }
+
+        .corner-handle.bottom-left {
+            bottom: -23px;
+            left: -23px;
+            cursor: nesw-resize;
+        }
+
+        .corner-handle.bottom-left::before {
+            width: 32px;
+            height: 6px;
+            bottom: 0;
+            left: 0;
+        }
+
+        .corner-handle.bottom-left::after {
+            width: 6px;
+            height: 32px;
+            bottom: 0;
+            left: 0;
+        }
+
+        .corner-handle.bottom-right {
+            bottom: -23px;
+            right: -23px;
+            cursor: nwse-resize;
+        }
+
+        .corner-handle.bottom-right::before {
+            width: 32px;
+            height: 6px;
+            bottom: 0;
+            right: 0;
+        }
+
+        .corner-handle.bottom-right::after {
+            width: 6px;
+            height: 32px;
+            bottom: 0;
+            right: 0;
+        }
+
         .error-message {
             position: absolute;
             top: 50%;
@@ -318,12 +446,28 @@
                     <div class="placeholder-text" id="backPlaceholder">You</div>
                 <video id="backVideoElement" class="video-element" autoplay playsinline></video>
                 <img id="backCapturedPhoto" class="captured-photo" alt="Back camera photo">
+                <div class="selection-overlay" id="backSelectionOverlay" aria-hidden="true">
+                    <div class="selection-box" id="backSelectionBox" role="presentation" aria-hidden="true">
+                        <div class="corner-handle top-left" data-handle="top-left" aria-hidden="true"></div>
+                        <div class="corner-handle top-right" data-handle="top-right" aria-hidden="true"></div>
+                        <div class="corner-handle bottom-left" data-handle="bottom-left" aria-hidden="true"></div>
+                        <div class="corner-handle bottom-right" data-handle="bottom-right" aria-hidden="true"></div>
+                    </div>
+                </div>
             </div>
 
                 <div class="camera-half right" id="selfieCameraHalf">
                     <div class="placeholder-text" id="selfiePlaceholder">Me</div>
                 <video id="selfieVideoElement" class="video-element" autoplay playsinline></video>
                 <img id="selfieCapturedPhoto" class="captured-photo" alt="Selfie photo">
+                <div class="selection-overlay" id="selfieSelectionOverlay" aria-hidden="true">
+                    <div class="selection-box" id="selfieSelectionBox" role="presentation" aria-hidden="true">
+                        <div class="corner-handle top-left" data-handle="top-left" aria-hidden="true"></div>
+                        <div class="corner-handle top-right" data-handle="top-right" aria-hidden="true"></div>
+                        <div class="corner-handle bottom-left" data-handle="bottom-left" aria-hidden="true"></div>
+                        <div class="corner-handle bottom-right" data-handle="bottom-right" aria-hidden="true"></div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -363,6 +507,22 @@
         const selfieCapturedPhoto = document.getElementById('selfieCapturedPhoto');
         const selfieCameraHalf = document.getElementById('selfieCameraHalf');
         const selfiePlaceholder = document.getElementById('selfiePlaceholder');
+const backSelectionOverlay = document.getElementById('backSelectionOverlay');
+const backSelectionBox = document.getElementById('backSelectionBox');
+const selfieSelectionOverlay = document.getElementById('selfieSelectionOverlay');
+const selfieSelectionBox = document.getElementById('selfieSelectionBox');
+const backSelectionHandles = {
+    'top-left': backSelectionBox?.querySelector('.corner-handle.top-left') || null,
+    'top-right': backSelectionBox?.querySelector('.corner-handle.top-right') || null,
+    'bottom-left': backSelectionBox?.querySelector('.corner-handle.bottom-left') || null,
+    'bottom-right': backSelectionBox?.querySelector('.corner-handle.bottom-right') || null
+};
+const selfieSelectionHandles = {
+    'top-left': selfieSelectionBox?.querySelector('.corner-handle.top-left') || null,
+    'top-right': selfieSelectionBox?.querySelector('.corner-handle.top-right') || null,
+    'bottom-left': selfieSelectionBox?.querySelector('.corner-handle.bottom-left') || null,
+    'bottom-right': selfieSelectionBox?.querySelector('.corner-handle.bottom-right') || null
+};
         
 const DEFAULT_IMAGES = {
     back: 'youphoto.jpg',
@@ -485,6 +645,7 @@ function showDefaultPhoto(side) {
         if (placeholderEl) {
             placeholderEl.classList.add('hidden');
         }
+        resetSelectionRect(side, { notify: false });
         resetPhotoTransform(side);
         const state = interactionState[side];
         if (state) {
@@ -504,6 +665,7 @@ function showDefaultPhoto(side) {
     if (placeholderEl) {
         placeholderEl.classList.add('hidden');
     }
+    resetSelectionRect(side, { notify: false });
     resetPhotoTransform(side);
     const state = interactionState[side];
     if (state) {
@@ -564,13 +726,14 @@ function hideDefaultPhoto(side) {
       slot.imageEl.src = dataUrl;
       slot.imageEl.classList.add('active');
       delete slot.imageEl.dataset.defaultPhoto;
-    resetPhotoTransform(slotKey);
-    const state = interactionState[slotKey];
-    if (state) {
-        state.lastTap = null;
-        state.lastSubmittedSignature = null;
-        clearMovementDebounce(slotKey);
-    }
+        resetSelectionRect(slotKey, { notify: false });
+        resetPhotoTransform(slotKey);
+        const state = interactionState[slotKey];
+        if (state) {
+            state.lastTap = null;
+            state.lastSubmittedSignature = null;
+            clearMovementDebounce(slotKey);
+        }
 
       if (slot.placeholderEl) {
           slot.placeholderEl.classList.add('hidden');
@@ -616,11 +779,31 @@ function hideDefaultPhoto(side) {
         const APP_VERSION = 2;
         const DEFAULT_BACK_ASPECT = 16 / 9;
         const DEFAULT_SELFIE_ASPECT = 16 / 9;
+const MIN_SELECTION_EDGE_PX = 140;
+const DEFAULT_SELECTION_RECT = Object.freeze({
+    x: 0.18,
+    y: 0.18,
+    width: 0.64,
+    height: 0.64
+});
 
         const cameraLayoutState = {
             back: { element: backCameraHalf, aspectRatio: null },
             selfie: { element: selfieCameraHalf, aspectRatio: null }
         };
+
+const selectionElements = {
+    back: {
+        overlay: backSelectionOverlay,
+        box: backSelectionBox,
+        handles: backSelectionHandles
+    },
+    selfie: {
+        overlay: selfieSelectionOverlay,
+        box: selfieSelectionBox,
+        handles: selfieSelectionHandles
+    }
+};
 
 function createInteractionState() {
     return {
@@ -658,6 +841,373 @@ const interactionState = {
     back: createInteractionState(),
     selfie: createInteractionState()
 };
+
+function cloneSelectionRect(rect = DEFAULT_SELECTION_RECT) {
+    const source = rect || DEFAULT_SELECTION_RECT;
+    const safeValue = (value, fallback) =>
+        Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : fallback;
+    const widthFallback = DEFAULT_SELECTION_RECT.width;
+    const heightFallback = DEFAULT_SELECTION_RECT.height;
+    let width = safeValue(source.width, widthFallback);
+    let height = safeValue(source.height, heightFallback);
+    // Prevent degenerate sizes.
+    if (width < 0.05) width = widthFallback;
+    if (height < 0.05) height = heightFallback;
+    return {
+        x: safeValue(source.x, DEFAULT_SELECTION_RECT.x),
+        y: safeValue(source.y, DEFAULT_SELECTION_RECT.y),
+        width,
+        height
+    };
+}
+
+function createSelectionState() {
+    return {
+        rect: cloneSelectionRect(),
+        activePointerId: null,
+        mode: null,
+        startRect: null,
+        startPoint: null,
+        activeElement: null,
+        lastInteractionAt: 0
+    };
+}
+
+const selectionState = {
+    back: createSelectionState(),
+    selfie: createSelectionState()
+};
+
+function getSelectionElements(slotKey) {
+    return selectionElements[slotKey] || null;
+}
+
+function clamp(value, min, max) {
+    if (min > max) {
+        return min;
+    }
+    return Math.min(max, Math.max(min, value));
+}
+
+function getSelectionMinSize(containerRect) {
+    const minWidthRatio = MIN_SELECTION_EDGE_PX > 0 && containerRect?.width
+        ? clamp(MIN_SELECTION_EDGE_PX / containerRect.width, 0.12, 0.9)
+        : DEFAULT_SELECTION_RECT.width;
+    const minHeightRatio = MIN_SELECTION_EDGE_PX > 0 && containerRect?.height
+        ? clamp(MIN_SELECTION_EDGE_PX / containerRect.height, 0.12, 0.9)
+        : DEFAULT_SELECTION_RECT.height;
+    return {
+        width: minWidthRatio,
+        height: minHeightRatio
+    };
+}
+
+function clampRectToBounds(rect) {
+    if (!rect) {
+        return cloneSelectionRect();
+    }
+    let x = Number.isFinite(rect.x) ? rect.x : DEFAULT_SELECTION_RECT.x;
+    let y = Number.isFinite(rect.y) ? rect.y : DEFAULT_SELECTION_RECT.y;
+    let width = Number.isFinite(rect.width) ? rect.width : DEFAULT_SELECTION_RECT.width;
+    let height = Number.isFinite(rect.height) ? rect.height : DEFAULT_SELECTION_RECT.height;
+
+    x = clamp(x, 0, 1);
+    y = clamp(y, 0, 1);
+    width = clamp(width, 0.05, 1);
+    height = clamp(height, 0.05, 1);
+
+    if (x + width > 1) {
+        const overflowX = x + width - 1;
+        x = clamp(x - overflowX, 0, 1);
+        width = clamp(width - overflowX, 0.05, 1 - x);
+    }
+
+    if (y + height > 1) {
+        const overflowY = y + height - 1;
+        y = clamp(y - overflowY, 0, 1);
+        height = clamp(height - overflowY, 0.05, 1 - y);
+    }
+
+    return { x, y, width, height };
+}
+
+function updateSelectionStyles(slotKey) {
+    const state = selectionState[slotKey];
+    const elements = getSelectionElements(slotKey);
+    if (!state || !elements?.box) {
+        return;
+    }
+    const { x, y, width, height } = clampRectToBounds(state.rect);
+    const box = elements.box;
+    box.style.left = `${(x * 100).toFixed(3)}%`;
+    box.style.top = `${(y * 100).toFixed(3)}%`;
+    box.style.width = `${(width * 100).toFixed(3)}%`;
+    box.style.height = `${(height * 100).toFixed(3)}%`;
+}
+
+function syncSelectionInteractionClasses(slotKey) {
+    const state = selectionState[slotKey];
+    const elements = getSelectionElements(slotKey);
+    if (!state || !elements?.box) {
+        return;
+    }
+    const isMoving = state.mode === 'move' && state.activePointerId !== null;
+    const isResizing = state.activePointerId !== null && state.mode && state.mode !== 'move';
+    elements.box.classList.toggle('is-moving', isMoving);
+    elements.box.classList.toggle('is-resizing', isResizing);
+}
+
+function resetSelectionRect(slotKey, { notify = false } = {}) {
+    const state = selectionState[slotKey];
+    if (!state) {
+        return;
+    }
+    let rect = cloneSelectionRect();
+    const container = getCameraHalfElement(slotKey);
+    if (container) {
+        const bounds = container.getBoundingClientRect();
+        if (bounds && Number.isFinite(bounds.width) && Number.isFinite(bounds.height) && bounds.width > 0 && bounds.height > 0) {
+            const minSize = getSelectionMinSize(bounds);
+            const centerX = rect.x + rect.width / 2;
+            const centerY = rect.y + rect.height / 2;
+            rect.width = Math.max(rect.width, minSize.width);
+            rect.height = Math.max(rect.height, minSize.height);
+            rect.width = clamp(rect.width, 0.05, 0.96);
+            rect.height = clamp(rect.height, 0.05, 0.96);
+            rect.x = clamp(centerX - rect.width / 2, 0, 1 - rect.width);
+            rect.y = clamp(centerY - rect.height / 2, 0, 1 - rect.height);
+        }
+    }
+    state.rect = clampRectToBounds(rect);
+    updateSelectionStyles(slotKey);
+    if (notify) {
+        const interaction = interactionState[slotKey];
+        if (interaction) {
+            interaction.lastSubmittedSignature = null;
+            clearMovementDebounce(slotKey);
+        }
+        scheduleViewportDescription(slotKey, { reason: 'selection-reset', force: true });
+    }
+}
+
+function getSelectionPointerContext(slotKey, event) {
+    const container = getCameraHalfElement(slotKey);
+    if (!container) {
+        return null;
+    }
+    const rect = container.getBoundingClientRect();
+    if (!rect || !rect.width || !rect.height || !Number.isFinite(rect.width) || !Number.isFinite(rect.height)) {
+        return null;
+    }
+    const relativeX = clamp((event.clientX - rect.left) / rect.width, 0, 1);
+    const relativeY = clamp((event.clientY - rect.top) / rect.height, 0, 1);
+    return {
+        relativeX,
+        relativeY,
+        containerRect: rect
+    };
+}
+
+function computeResizedSelectionRect(handle, startRect, point, minSize) {
+    const startRight = startRect.x + startRect.width;
+    const startBottom = startRect.y + startRect.height;
+    let next = { ...startRect };
+
+    if (handle === 'top-left') {
+        const newX = clamp(point.x, 0, startRight - minSize.width);
+        const newY = clamp(point.y, 0, startBottom - minSize.height);
+        next.x = newX;
+        next.y = newY;
+        next.width = startRight - newX;
+        next.height = startBottom - newY;
+    } else if (handle === 'top-right') {
+        const newRight = clamp(point.x, startRect.x + minSize.width, 1);
+        const newTop = clamp(point.y, 0, startBottom - minSize.height);
+        next.y = newTop;
+        next.width = newRight - startRect.x;
+        next.height = startBottom - newTop;
+    } else if (handle === 'bottom-left') {
+        const newLeft = clamp(point.x, 0, startRight - minSize.width);
+        const newBottom = clamp(point.y, startRect.y + minSize.height, 1);
+        next.x = newLeft;
+        next.width = startRight - newLeft;
+        next.height = newBottom - startRect.y;
+    } else if (handle === 'bottom-right') {
+        const newRight = clamp(point.x, startRect.x + minSize.width, 1);
+        const newBottom = clamp(point.y, startRect.y + minSize.height, 1);
+        next.width = newRight - startRect.x;
+        next.height = newBottom - startRect.y;
+    }
+
+    return clampRectToBounds(next);
+}
+
+function selectionHasActivePhoto(slotKey) {
+    const slot = photoSlots[slotKey];
+    if (!slot?.imageEl) {
+        return false;
+    }
+    return slot.imageEl.classList.contains('active');
+}
+
+function startSelectionInteraction(slotKey, mode, event) {
+    if (event && typeof event.button === 'number' && event.button !== 0 && event.pointerType !== 'touch') {
+        return;
+    }
+    const state = selectionState[slotKey];
+    const elements = getSelectionElements(slotKey);
+    if (!state || !elements?.box) {
+        return;
+    }
+    if (state.activePointerId !== null && state.activePointerId !== event.pointerId) {
+        return;
+    }
+    const pointerContext = getSelectionPointerContext(slotKey, event);
+    if (!pointerContext) {
+        console.warn('Selection interaction skipped: container bounds unavailable.');
+        return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+
+    state.activePointerId = event.pointerId;
+    state.mode = mode;
+    state.startRect = { ...state.rect };
+    state.startPoint = { x: pointerContext.relativeX, y: pointerContext.relativeY };
+    state.lastInteractionAt = performance.now();
+    state.activeElement = event.currentTarget || null;
+
+    if (state.activeElement && typeof state.activeElement.setPointerCapture === 'function') {
+        try {
+            state.activeElement.setPointerCapture(event.pointerId);
+        } catch (captureError) {
+            console.warn('Unable to capture pointer for selection interaction:', captureError);
+        }
+    }
+
+    syncSelectionInteractionClasses(slotKey);
+}
+
+function continueSelectionInteraction(slotKey, event) {
+    const state = selectionState[slotKey];
+    if (!state || state.activePointerId !== event.pointerId || !state.mode || !state.startRect || !state.startPoint) {
+        return;
+    }
+
+    const pointerContext = getSelectionPointerContext(slotKey, event);
+    if (!pointerContext) {
+        return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const containerRect = pointerContext.containerRect;
+    const minSize = getSelectionMinSize(containerRect);
+    let nextRect;
+
+    if (state.mode === 'move') {
+        const deltaX = pointerContext.relativeX - state.startPoint.x;
+        const deltaY = pointerContext.relativeY - state.startPoint.y;
+        const maxX = 1 - state.startRect.width;
+        const maxY = 1 - state.startRect.height;
+        nextRect = {
+            x: clamp(state.startRect.x + deltaX, 0, maxX),
+            y: clamp(state.startRect.y + deltaY, 0, maxY),
+            width: state.startRect.width,
+            height: state.startRect.height
+        };
+    } else {
+        nextRect = computeResizedSelectionRect(
+            state.mode,
+            state.startRect,
+            { x: pointerContext.relativeX, y: pointerContext.relativeY },
+            minSize
+        );
+    }
+
+    nextRect = clampRectToBounds(nextRect);
+
+    if (
+        Math.abs(nextRect.x - state.rect.x) < 0.0001 &&
+        Math.abs(nextRect.y - state.rect.y) < 0.0001 &&
+        Math.abs(nextRect.width - state.rect.width) < 0.0001 &&
+        Math.abs(nextRect.height - state.rect.height) < 0.0001
+    ) {
+        return;
+    }
+
+    state.rect = nextRect;
+    state.lastInteractionAt = performance.now();
+    updateSelectionStyles(slotKey);
+
+    if (selectionHasActivePhoto(slotKey)) {
+        scheduleViewportDescription(slotKey, { reason: 'selection-change' });
+    }
+}
+
+function finishSelectionInteraction(slotKey, event) {
+    const state = selectionState[slotKey];
+    if (!state || state.activePointerId !== event.pointerId) {
+        return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (state.activeElement && typeof state.activeElement.releasePointerCapture === 'function') {
+        try {
+            state.activeElement.releasePointerCapture(event.pointerId);
+        } catch (releaseError) {
+            // Ignore release errors.
+        }
+    }
+
+    state.activePointerId = null;
+    state.mode = null;
+    state.startRect = null;
+    state.startPoint = null;
+    state.activeElement = null;
+
+    syncSelectionInteractionClasses(slotKey);
+
+    if (selectionHasActivePhoto(slotKey)) {
+        scheduleViewportDescription(slotKey, { reason: 'selection-release', immediate: true });
+    }
+}
+
+function setupSelectionInteractions(slotKey) {
+    const elements = getSelectionElements(slotKey);
+    if (!elements?.box) {
+        return;
+    }
+
+    const box = elements.box;
+
+    const handleBoxPointerDown = (event) => {
+        if (event.target !== box) {
+            return;
+        }
+        startSelectionInteraction(slotKey, 'move', event);
+    };
+
+    box.addEventListener('pointerdown', handleBoxPointerDown);
+    box.addEventListener('pointermove', (event) => continueSelectionInteraction(slotKey, event));
+    box.addEventListener('pointerup', (event) => finishSelectionInteraction(slotKey, event));
+    box.addEventListener('pointercancel', (event) => finishSelectionInteraction(slotKey, event));
+
+    Object.entries(elements.handles || {}).forEach(([handleKey, handleElement]) => {
+        if (!handleElement) {
+            return;
+        }
+        handleElement.addEventListener('pointerdown', (event) => {
+            startSelectionInteraction(slotKey, handleKey, event);
+        });
+        handleElement.addEventListener('pointermove', (event) => continueSelectionInteraction(slotKey, event));
+        handleElement.addEventListener('pointerup', (event) => finishSelectionInteraction(slotKey, event));
+        handleElement.addEventListener('pointercancel', (event) => finishSelectionInteraction(slotKey, event));
+    });
+}
 
 function isCameraActive(slotKey) {
     if (slotKey === 'back') {
@@ -719,6 +1269,9 @@ function snapshotViewportState(slotKey) {
     const transformScale = Number.isFinite(state.transform?.scale) ? state.transform.scale : 1;
     const transformTranslateX = Number.isFinite(state.transform?.translateX) ? state.transform.translateX : 0;
     const transformTranslateY = Number.isFinite(state.transform?.translateY) ? state.transform.translateY : 0;
+    const selectionRect = selectionState[slotKey]?.rect
+        ? clampRectToBounds(selectionState[slotKey].rect)
+        : null;
 
     return {
         containerWidth,
@@ -733,7 +1286,8 @@ function snapshotViewportState(slotKey) {
         },
         devicePixelRatio: window.devicePixelRatio && Number.isFinite(window.devicePixelRatio)
             ? Math.max(1, window.devicePixelRatio)
-            : 1
+            : 1,
+        selection: selectionRect ? { ...selectionRect } : null
     };
 }
 
@@ -812,7 +1366,7 @@ function buildViewportSignature(photoDataUrl, viewportSnapshot) {
     if (typeof photoDataUrl !== 'string' || !photoDataUrl.length || !viewportSnapshot) {
         return null;
     }
-    const { containerWidth, containerHeight, naturalWidth, naturalHeight, transform } = viewportSnapshot;
+    const { containerWidth, containerHeight, naturalWidth, naturalHeight, transform, selection } = viewportSnapshot;
     const parts = [
         containerWidth && Number.isFinite(containerWidth) ? containerWidth.toFixed(1) : 'cw',
         containerHeight && Number.isFinite(containerHeight) ? containerHeight.toFixed(1) : 'ch',
@@ -822,6 +1376,16 @@ function buildViewportSignature(photoDataUrl, viewportSnapshot) {
         transform && Number.isFinite(transform.translateX) ? transform.translateX.toFixed(1) : 'tx',
         transform && Number.isFinite(transform.translateY) ? transform.translateY.toFixed(1) : 'ty'
     ];
+    if (selection) {
+        parts.push(
+            Number.isFinite(selection.x) ? selection.x.toFixed(4) : 'sx',
+            Number.isFinite(selection.y) ? selection.y.toFixed(4) : 'sy',
+            Number.isFinite(selection.width) ? selection.width.toFixed(4) : 'sw',
+            Number.isFinite(selection.height) ? selection.height.toFixed(4) : 'sh'
+        );
+    } else {
+        parts.push('sx', 'sy', 'sw', 'sh');
+    }
     const prefix = photoDataUrl.length > 64 ? photoDataUrl.slice(0, 64) : photoDataUrl;
     return `${prefix}|${parts.join('|')}`;
 }
@@ -1503,93 +2067,112 @@ showDefaultPhoto('selfie');
                 });
             }
 
-            async function createViewportDataUrl(photoDataUrl, viewportSnapshot) {
-                if (typeof photoDataUrl !== 'string' || photoDataUrl.length === 0) {
-                    throw new Error('Photo data unavailable.');
-                }
+    async function createViewportDataUrl(photoDataUrl, viewportSnapshot) {
+        if (typeof photoDataUrl !== 'string' || photoDataUrl.length === 0) {
+            throw new Error('Photo data unavailable.');
+        }
 
-                const image = await loadImageElement(photoDataUrl);
-                const naturalWidth = image.naturalWidth || image.width;
-                const naturalHeight = image.naturalHeight || image.height;
+        const image = await loadImageElement(photoDataUrl);
+        const naturalWidth = image.naturalWidth || image.width;
+        const naturalHeight = image.naturalHeight || image.height;
 
-                if (!naturalWidth || !naturalHeight) {
-                    throw new Error('Photo dimensions unavailable.');
-                }
+        if (!naturalWidth || !naturalHeight) {
+            throw new Error('Photo dimensions unavailable.');
+        }
 
-                const viewportReady =
-                    viewportSnapshot &&
-                    Number.isFinite(viewportSnapshot.containerWidth) &&
-                    Number.isFinite(viewportSnapshot.containerHeight) &&
-                    viewportSnapshot.containerWidth > 0 &&
-                    viewportSnapshot.containerHeight > 0;
+        if (
+            !viewportSnapshot ||
+            !Number.isFinite(viewportSnapshot.containerWidth) ||
+            !Number.isFinite(viewportSnapshot.containerHeight) ||
+            viewportSnapshot.containerWidth <= 0 ||
+            viewportSnapshot.containerHeight <= 0
+        ) {
+            const error = new Error('Viewport geometry missing.');
+            error.name = 'ViewportNotReadyError';
+            throw error;
+        }
 
-                if (viewportReady) {
-                    const containerWidth = viewportSnapshot.containerWidth;
-                    const containerHeight = viewportSnapshot.containerHeight;
-                    const devicePixelRatio = Number.isFinite(viewportSnapshot.devicePixelRatio)
-                        ? Math.max(1, viewportSnapshot.devicePixelRatio)
-                        : 1;
-                    const objectFit = (viewportSnapshot.objectFit || 'cover').toLowerCase();
-                    const transform = viewportSnapshot.transform || {};
-                    const userScale = Number.isFinite(transform.scale) ? Math.max(0.01, transform.scale) : 1;
-                    const translateX = Number.isFinite(transform.translateX) ? transform.translateX : 0;
-                    const translateY = Number.isFinite(transform.translateY) ? transform.translateY : 0;
+        const containerWidth = viewportSnapshot.containerWidth;
+        const containerHeight = viewportSnapshot.containerHeight;
+        const selectionInput = viewportSnapshot.selection;
 
-                    let baseScale;
-                    if (objectFit === 'contain') {
-                        baseScale = Math.min(containerWidth / naturalWidth, containerHeight / naturalHeight);
-                    } else {
-                        baseScale = Math.max(containerWidth / naturalWidth, containerHeight / naturalHeight);
-                    }
+        if (
+            !selectionInput ||
+            !Number.isFinite(selectionInput.x) ||
+            !Number.isFinite(selectionInput.y) ||
+            !Number.isFinite(selectionInput.width) ||
+            !Number.isFinite(selectionInput.height) ||
+            selectionInput.width <= 0 ||
+            selectionInput.height <= 0
+        ) {
+            const error = new Error('Selection area missing or invalid.');
+            error.name = 'SelectionAreaError';
+            throw error;
+        }
 
-                    if (Number.isFinite(baseScale) && baseScale > 0) {
-                        const finalScale = baseScale * userScale;
-                        const canvas = document.createElement('canvas');
-                        canvas.width = Math.max(1, Math.round(containerWidth * devicePixelRatio));
-                        canvas.height = Math.max(1, Math.round(containerHeight * devicePixelRatio));
-                        const ctx = canvas.getContext('2d');
+        const selection = clampRectToBounds(selectionInput);
+        const selectionWidthPx = selection.width * containerWidth;
+        const selectionHeightPx = selection.height * containerHeight;
 
-                        if (!ctx) {
-                            throw new Error('Canvas context unavailable for rendering.');
-                        }
+        if (selectionWidthPx < 2 || selectionHeightPx < 2) {
+            const error = new Error('Selection area is too small to analyze.');
+            error.name = 'SelectionAreaError';
+            throw error;
+        }
 
-                        ctx.scale(devicePixelRatio, devicePixelRatio);
-                        ctx.fillStyle = '#05050c';
-                        ctx.fillRect(0, 0, containerWidth, containerHeight);
-                        ctx.imageSmoothingQuality = 'high';
+        const devicePixelRatio = Number.isFinite(viewportSnapshot.devicePixelRatio)
+            ? Math.max(1, viewportSnapshot.devicePixelRatio)
+            : 1;
+        const objectFit = (viewportSnapshot.objectFit || 'cover').toLowerCase();
+        const transform = viewportSnapshot.transform || {};
+        const userScale = Number.isFinite(transform.scale) ? Math.max(0.01, transform.scale) : 1;
+        const translateX = Number.isFinite(transform.translateX) ? transform.translateX : 0;
+        const translateY = Number.isFinite(transform.translateY) ? transform.translateY : 0;
 
-                        ctx.save();
-                        ctx.translate(containerWidth / 2, containerHeight / 2);
-                        ctx.translate(translateX, translateY);
-                        ctx.scale(finalScale, finalScale);
-                        ctx.drawImage(
-                            image,
-                            -naturalWidth / 2,
-                            -naturalHeight / 2,
-                            naturalWidth,
-                            naturalHeight
-                        );
-                        ctx.restore();
+        let baseScale;
+        if (objectFit === 'contain') {
+            baseScale = Math.min(containerWidth / naturalWidth, containerHeight / naturalHeight);
+        } else {
+            baseScale = Math.max(containerWidth / naturalWidth, containerHeight / naturalHeight);
+        }
 
-                        return canvas.toDataURL('image/png');
-                    }
-                }
+        if (!Number.isFinite(baseScale) || baseScale <= 0) {
+            const error = new Error('Viewport scale unavailable.');
+            error.name = 'ViewportScaleError';
+            throw error;
+        }
 
-                const canvas = document.createElement('canvas');
-                canvas.width = naturalWidth;
-                canvas.height = naturalHeight;
-                const fallbackCtx = canvas.getContext('2d');
+        const finalScale = baseScale * userScale;
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(selectionWidthPx * devicePixelRatio));
+        canvas.height = Math.max(1, Math.round(selectionHeightPx * devicePixelRatio));
+        const ctx = canvas.getContext('2d');
 
-                if (!fallbackCtx) {
-                    throw new Error('Canvas context unavailable for fallback rendering.');
-                }
+        if (!ctx) {
+            throw new Error('Canvas context unavailable for rendering.');
+        }
 
-                fallbackCtx.fillStyle = '#05050c';
-                fallbackCtx.fillRect(0, 0, naturalWidth, naturalHeight);
-                fallbackCtx.drawImage(image, 0, 0, naturalWidth, naturalHeight);
+        ctx.scale(devicePixelRatio, devicePixelRatio);
+        ctx.fillStyle = '#05050c';
+        ctx.fillRect(0, 0, selectionWidthPx, selectionHeightPx);
+        ctx.imageSmoothingQuality = 'high';
 
-                return canvas.toDataURL('image/png');
-            }
+        ctx.save();
+        ctx.translate(-selection.x * containerWidth, -selection.y * containerHeight);
+        ctx.translate(containerWidth / 2, containerHeight / 2);
+        ctx.translate(translateX, translateY);
+        ctx.scale(finalScale, finalScale);
+        ctx.drawImage(
+            image,
+            -naturalWidth / 2,
+            -naturalHeight / 2,
+            naturalWidth,
+            naturalHeight
+        );
+        ctx.restore();
+
+        return canvas.toDataURL('image/png');
+    }
 
             function enqueueDescription(side, photoDataUrl, viewportSnapshot = null, options = {}) {
               const slot = getPhotoSlotByDescriptionSide(side);
@@ -1636,18 +2219,27 @@ showDefaultPhoto('selfie');
 
                 setDescriptionState(side, 'loading', WAITING_FOR_DESCRIPTION_MESSAGE, WAITING_FOR_DESCRIPTION_MESSAGE);
 
-                let renderedViewportDataUrl;
+        let renderedViewportDataUrl;
 
-                try {
-                    renderedViewportDataUrl = await createViewportDataUrl(photoDataUrl, viewportSnapshot);
-                } catch (renderError) {
-                    const message = `${label} description failed: unable to render the framed view (${renderError?.message || 'unknown error.'})`;
-                    setDescriptionState(side, 'error', message);
-                    const error = new Error(renderError?.message || 'Viewport rendering failed.');
-                    error.name = 'ViewportRenderingError';
-                    error.cause = renderError;
-                    throw error;
-                }
+        try {
+            renderedViewportDataUrl = await createViewportDataUrl(photoDataUrl, viewportSnapshot);
+        } catch (renderError) {
+            let message;
+            if (renderError?.name === 'SelectionAreaError') {
+                message = `${label} description failed: adjust the white bounding box so it fully covers the subject, then try again.`;
+            } else if (renderError?.name === 'ViewportNotReadyError') {
+                message = `${label} description failed: viewing area is still loading. Hold steady and try again once the photo stabilizes.`;
+            } else if (renderError?.name === 'ViewportScaleError') {
+                message = `${label} description failed: unable to align the zoomed image. Re-center the photo and retry.`;
+            } else {
+                message = `${label} description failed: unable to render the framed view (${renderError?.message || 'unknown error.'})`;
+            }
+            setDescriptionState(side, 'error', message);
+            const error = new Error(renderError?.message || 'Viewport rendering failed.');
+            error.name = 'ViewportRenderingError';
+            error.cause = renderError;
+            throw error;
+        }
 
                 const controller = new AbortController();
                 const timeoutId = window.setTimeout(() => controller.abort(), DESCRIPTION_API_TIMEOUT_MS);
@@ -2435,6 +3027,10 @@ showDefaultPhoto('selfie');
           attachResubmitHandlers(meResubmitButton, 'me');
           attachUploadHandler(youUploadButton, youUploadInput, 'you');
         attachUploadHandler(meUploadButton, meUploadInput, 'me');
+        setupSelectionInteractions('back');
+        setupSelectionInteractions('selfie');
+        updateSelectionStyles('back');
+        updateSelectionStyles('selfie');
 
         function renderAppVersion() {
             if (!versionDisplay) {
