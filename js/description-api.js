@@ -166,7 +166,7 @@ export function handleResubmitDescription(side) {
 }
 
 /**
- * Create viewport data URL with crosshair overlay
+ * Create viewport data URL
  */
 async function createViewportDataUrl(photoDataUrl, viewportSnapshot) {
     if (typeof photoDataUrl !== 'string' || photoDataUrl.length === 0) {
@@ -271,24 +271,6 @@ async function createViewportDataUrl(photoDataUrl, viewportSnapshot) {
         naturalHeight
     );
     ctx.restore();
-
-    // Draw crosshair
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.lineWidth = 3;
-    ctx.lineCap = 'round';
-    const centerX = selectionWidthPx / 2;
-    const centerY = selectionHeightPx / 2;
-    const crosshairSize = Math.min(selectionWidthPx, selectionHeightPx) * 0.15;
-    
-    ctx.beginPath();
-    ctx.moveTo(centerX - crosshairSize, centerY);
-    ctx.lineTo(centerX + crosshairSize, centerY);
-    ctx.stroke();
-    
-    ctx.beginPath();
-    ctx.moveTo(centerX, centerY - crosshairSize);
-    ctx.lineTo(centerX, centerY + crosshairSize);
-    ctx.stroke();
 
     let outputCanvas = canvas;
     const maxSide = Math.max(canvas.width, canvas.height);

@@ -49,31 +49,6 @@ body {
     backdrop-filter: blur(4px);
 }
 
-.camera-half::before,
-.camera-half::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: rgba(255, 255, 255, 0.45);
-    pointer-events: none;
-    z-index: 600;
-    opacity: 0.75;
-}
-
-.camera-half::before {
-    width: 30%;
-    height: 2px;
-    border-radius: 1px;
-}
-
-.camera-half::after {
-    width: 2px;
-    height: 30%;
-    border-radius: 1px;
-}
-
 .camera-half.left {
     border-right-width: 1.5px;
 }
@@ -182,6 +157,60 @@ body {
 .description-upload-button.camera-active:hover {
     background: rgba(255, 77, 77, 0.35);
     border-color: rgba(255, 77, 77, 0.65);
+}
+
+.camera-controls {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+    z-index: 800;
+    pointer-events: none;
+}
+
+.camera-control-button {
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(0, 0, 0, 0.75);
+    border: 1.5px solid rgba(255, 255, 255, 0.35);
+    border-radius: 8px;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease, transform 0.1s ease;
+    pointer-events: auto;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.camera-control-button:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.5);
+    transform: translateY(-1px);
+}
+
+.camera-control-button:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.8);
+    outline-offset: 3px;
+}
+
+.camera-control-button:active {
+    background: rgba(255, 255, 255, 0.22);
+    transform: translateY(0px);
+}
+
+.camera-control-button.camera-active {
+    background: rgba(255, 77, 77, 0.35);
+    border-color: rgba(255, 77, 77, 0.6);
+    color: rgba(255, 255, 255, 0.95);
+}
+
+.camera-control-button.camera-active:hover {
+    background: rgba(255, 77, 77, 0.45);
+    border-color: rgba(255, 77, 77, 0.75);
 }
 
 .description-upload-input {

@@ -74,12 +74,12 @@ exports.handler = async (event, context) => {
     }
 
     const apiKey = process.env.OPENAI_API_KEY || process.env.OPENAIKEY;
-    const crosshairInstructionBase =
-      'Focus exclusively on the individual positioned beneath the white crosshair overlay that is already drawn onto the submitted image. The framing you see reflects the user’s chosen view. Do not rely on coordinates or alternate pointers—use only the visible overlay.';
+    const selectionInstructionBase =
+      'Focus exclusively on the individual within the selected area that has been extracted from the original image. The framing you see reflects the user's chosen view. Describe only the person visible in this extracted region.';
     const coordinateInstruction = normalizedSelection
-      ? ` The normalized crosshair center (relative to the image width and height) is approximately x=${normalizedSelection.x.toFixed(3)}, y=${normalizedSelection.y.toFixed(3)}; when multiple people are visible, confirm the person closest to that point aligns with the overlay.`
+      ? ` The normalized selection center (relative to the original image width and height) is approximately x=${normalizedSelection.x.toFixed(3)}, y=${normalizedSelection.y.toFixed(3)}.`
       : '';
-    const crosshairInstruction = `${crosshairInstructionBase}${coordinateInstruction}`;
+    const selectionInstruction = `${selectionInstructionBase}${coordinateInstruction}`;
 
     // Check if API key is configured
     if (!apiKey) {
@@ -103,8 +103,8 @@ exports.handler = async (event, context) => {
                 role: 'system',
                 content: [
                   'You provide richly detailed, respectful descriptions of people in images, focusing strictly on non-identifying physical and stylistic attributes.',
-                  'Always assess only the individual highlighted by the white crosshair overlay rendered on the submitted image. Treat the crosshair location as authoritative even if multiple subjects are visible.',
-                  'If the crosshair does not rest on a clearly discernible person—or the marked subject is distant, blurred, obstructed, poorly lit, or otherwise indiscernible—respond only with the JSON object {"status":"unclear","description":"Unclear photo"}.',
+                  'Always assess only the individual within the selected area that has been extracted and submitted to you. Focus on the person visible in this framed region.',
+                  'If the selected area does not show a clearly discernible person—or the subject is distant, blurred, obstructed, poorly lit, or otherwise indiscernible—respond only with the JSON object {"status":"unclear","description":"Unclear photo"}.',
                   'Otherwise respond with a single JSON object (no code block) shaped exactly as {"status":"ok","description":"Basics: ...\\nClothing & Style: ...\\nAdditional Notes: ..."} and nothing else.',
                     'Within Basics list, in order, apparent age range (or "not clearly visible"), apparent gender (or "not clearly visible"), build, height impression, posture, skin tone, and hairstyle or facial hair. Use concise witness-style phrases and write "not clearly visible" for any detail you cannot confirm.',
                   'Within Clothing & Style summarize visible layers from outermost to innermost, including colors, textures, fit, footwear, and accessories. Always mention dominant colors and say "not clearly visible" when coverage is missing.',
@@ -119,9 +119,9 @@ exports.handler = async (event, context) => {
                     type: 'text',
                     text: (
                         role === 'you'
-                          ? 'Describe only the person marked by the white crosshair overlay in this \"You\" photo so an artist could recreate them.'
-                          : 'Describe only the sender marked by the white crosshair overlay in this \"Me\" selfie.'
-                      ) + ' ' + crosshairInstruction + ' Confirm that the crosshair aligns with a clearly visible person; if the marked subject is too far, obstructed, or blurred to describe responsibly, reply with {\"status\":\"unclear\",\"description\":\"Unclear photo\"}. When the subject is clear, respond with {\"status\":\"ok\",\"description\":\"Basics: ...\nClothing & Style: ...\nAdditional Notes: ...\"} using that order and headings. In Basics, provide apparent age range, build, height impression, posture, skin tone, and hairstyle or facial hair; write \"not clearly visible\" for any detail you cannot confirm. In Clothing & Style, cover layers from outermost to innermost with colors, textures, fit, footwear, and accessories, noting \"not clearly visible\" when information is missing. In Additional Notes, give lighting, mood, or immediate context only if directly observed; otherwise write \"none noted\". Keep the description non-identifying and grounded in visible evidence.'
+                          ? 'Describe only the person visible in the selected area from this \"You\" photo so an artist could recreate them.'
+                          : 'Describe only the sender visible in the selected area from this \"Me\" selfie.'
+                      ) + ' ' + selectionInstruction + ' Confirm that the selected area shows a clearly visible person; if the subject is too far, obstructed, or blurred to describe responsibly, reply with {\"status\":\"unclear\",\"description\":\"Unclear photo\"}. When the subject is clear, respond with {\"status\":\"ok\",\"description\":\"Basics: ...\nClothing & Style: ...\nAdditional Notes: ...\"} using that order and headings. In Basics, provide apparent age range, build, height impression, posture, skin tone, and hairstyle or facial hair; write \"not clearly visible\" for any detail you cannot confirm. In Clothing & Style, cover layers from outermost to innermost with colors, textures, fit, footwear, and accessories, noting \"not clearly visible\" when information is missing. In Additional Notes, give lighting, mood, or immediate context only if directly observed; otherwise write \"none noted\". Keep the description non-identifying and grounded in visible evidence.'
                 },
               {
                 type: 'image_url',
