@@ -4,7 +4,8 @@ import { DEFAULT_SELECTION_RECT, MIN_SELECTION_EDGE_PX } from './config.js';
 import { photoSlots, selectionState, interactionState, selectionElements } from './state.js';
 import { clamp, cloneSelectionRect, getSelectionElements, getSelectionMinSize, clampRectToBounds } from './utils.js';
 import { getCameraHalfElement } from './camera.js';
-import { scheduleViewportDescription, clearMovementDebounce } from './description-api.js';
+import { scheduleViewportDescription } from './description-api.js';
+import { clearMovementDebounce } from './zoom.js';
 
 /**
  * Show/hide selection overlay
