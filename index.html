@@ -26,6 +26,7 @@
             flex-direction: column;
             width: 100vw;
             height: 100vh;
+            position: relative;
         }
 
         .camera-row,
@@ -302,6 +303,20 @@
             background: rgba(255, 165, 0, 0.85);
             color: rgba(0, 0, 0, 0.9);
         }
+
+        .git-time-display {
+            position: absolute;
+            bottom: 18px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #ff4d4d;
+            font-size: 26px;
+            font-family: 'IBM Plex Mono', 'Courier New', monospace;
+            letter-spacing: 0.08em;
+            text-shadow: 0 0 10px rgba(255, 77, 77, 0.6);
+            pointer-events: none;
+            z-index: 1500;
+        }
     </style>
 </head>
 <body>
@@ -343,6 +358,7 @@
                 </div>
             </div>
 
+        <div id="gitTimeDisplay" class="git-time-display" aria-live="polite"></div>
         <div id="errorMessage" class="error-message"></div>
     </div>
 
@@ -586,6 +602,7 @@ function hideDefaultPhoto(side) {
   }
         
         const errorMessage = document.getElementById('errorMessage');
+        const gitTimeDisplay = document.getElementById('gitTimeDisplay');
           const youDescriptionPanel = document.getElementById('youDescriptionPanel');
           const meDescriptionPanel = document.getElementById('meDescriptionPanel');
           const youDescriptionStatus = document.getElementById('youDescriptionStatus');
@@ -706,6 +723,39 @@ function snapshotViewportState(slotKey) {
     const transformTranslateX = Number.isFinite(state.transform?.translateX) ? state.transform.translateX : 0;
     const transformTranslateY = Number.isFinite(state.transform?.translateY) ? state.transform.translateY : 0;
 
+    let crosshairSnapshot = null;
+    const crosshairEl = slot.crosshairEl;
+    if (crosshairEl && typeof crosshairEl.getBoundingClientRect === 'function') {
+        const crosshairRect = crosshairEl.getBoundingClientRect();
+        if (crosshairRect.width && crosshairRect.height) {
+            const centerX = (crosshairRect.left + crosshairRect.width / 2) - rect.left;
+            const centerY = (crosshairRect.top + crosshairRect.height / 2) - rect.top;
+            const normalizedCenterX = centerX / containerWidth;
+            const normalizedCenterY = centerY / containerHeight;
+            let lineThickness = null;
+            try {
+                const beforeStyle = window.getComputedStyle(crosshairEl, '::before');
+                const afterStyle = window.getComputedStyle(crosshairEl, '::after');
+                const beforeWidth = parseFloat(beforeStyle?.width || '');
+                const afterHeight = parseFloat(afterStyle?.height || '');
+                if (Number.isFinite(beforeWidth) && beforeWidth > 0) {
+                    lineThickness = beforeWidth;
+                } else if (Number.isFinite(afterHeight) && afterHeight > 0) {
+                    lineThickness = afterHeight;
+                }
+            } catch (error) {
+                console.warn('Unable to snapshot crosshair style:', error);
+            }
+            crosshairSnapshot = {
+                pixelWidth: crosshairRect.width,
+                pixelHeight: crosshairRect.height,
+                normalizedCenterX: Math.min(1, Math.max(0, normalizedCenterX)),
+                normalizedCenterY: Math.min(1, Math.max(0, normalizedCenterY)),
+                lineThickness: lineThickness && Number.isFinite(lineThickness) ? lineThickness : null
+            };
+        }
+    }
+
     return {
         containerWidth,
         containerHeight,
@@ -719,7 +769,8 @@ function snapshotViewportState(slotKey) {
         },
         devicePixelRatio: window.devicePixelRatio && Number.isFinite(window.devicePixelRatio)
             ? Math.max(1, window.devicePixelRatio)
-            : 1
+            : 1,
+        crosshair: crosshairSnapshot
     };
 }
 
@@ -1542,47 +1593,55 @@ showDefaultPhoto('selfie');
                 });
             }
 
-            function drawCrosshairOverlay(ctx, width, height, targetX, targetY) {
-                const minDimension = Math.min(width, height);
-                const armLength = Math.max(minDimension * 0.12, 50);
-                const gapRadius = Math.max(minDimension * 0.015, 6);
-                const strokeWidth = Math.max(minDimension * 0.004, 4);
-                const outlineWidth = strokeWidth + Math.max(2, strokeWidth * 0.6);
+            function drawCrosshairOverlay(ctx, width, height, crosshairInfo, devicePixelRatio = 1) {
+                if (!ctx) {
+                    return;
+                }
 
-                const centerX = targetX * width;
-                const centerY = targetY * height;
+                const normalizedCenterX = crosshairInfo && Number.isFinite(crosshairInfo.normalizedCenterX)
+                    ? crosshairInfo.normalizedCenterX
+                    : 0.5;
+                const normalizedCenterY = crosshairInfo && Number.isFinite(crosshairInfo.normalizedCenterY)
+                    ? crosshairInfo.normalizedCenterY
+                    : 0.5;
 
-                const segments = [
-                    { moveX: centerX, moveY: centerY - gapRadius - armLength, lineX: centerX, lineY: centerY - gapRadius },
-                    { moveX: centerX, moveY: centerY + gapRadius + armLength, lineX: centerX, lineY: centerY + gapRadius },
-                    { moveX: centerX - gapRadius - armLength, moveY: centerY, lineX: centerX - gapRadius, lineY: centerY },
-                    { moveX: centerX + gapRadius + armLength, moveY: centerY, lineX: centerX + gapRadius, lineY: centerY }
-                ];
+                const centerX = normalizedCenterX * width;
+                const centerY = normalizedCenterY * height;
+
+                const targetPixelWidth = crosshairInfo?.pixelWidth && crosshairInfo.pixelWidth > 0
+                    ? crosshairInfo.pixelWidth
+                    : 80;
+                const targetPixelHeight = crosshairInfo?.pixelHeight && crosshairInfo.pixelHeight > 0
+                    ? crosshairInfo.pixelHeight
+                    : 80;
+
+                const crosshairWidth = Math.min(width, Math.max(20, targetPixelWidth));
+                const crosshairHeight = Math.min(height, Math.max(20, targetPixelHeight));
+
+                const baseLine = crosshairInfo?.lineThickness && crosshairInfo.lineThickness > 0
+                    ? crosshairInfo.lineThickness
+                    : 2;
+
+                const lineThickness = Math.max(1.5, baseLine);
+                const outlineThickness = Math.max(lineThickness + 1.5, lineThickness * 1.8);
 
                 ctx.save();
                 ctx.lineCap = 'round';
 
-                const drawPath = (lineWidth, strokeStyle, shadowBlur = 0) => {
+                const drawLine = (thickness, strokeStyle) => {
                     ctx.beginPath();
-                    ctx.lineWidth = lineWidth;
+                    ctx.lineWidth = thickness;
                     ctx.strokeStyle = strokeStyle;
-                    ctx.shadowBlur = shadowBlur;
-                    ctx.shadowColor = shadowBlur > 0 ? strokeStyle : 'transparent';
-                    segments.forEach(segment => {
-                        ctx.moveTo(segment.moveX, segment.moveY);
-                        ctx.lineTo(segment.lineX, segment.lineY);
-                    });
+                    ctx.moveTo(centerX, centerY - crosshairHeight / 2);
+                    ctx.lineTo(centerX, centerY + crosshairHeight / 2);
+                    ctx.moveTo(centerX - crosshairWidth / 2, centerY);
+                    ctx.lineTo(centerX + crosshairWidth / 2, centerY);
                     ctx.stroke();
                 };
 
-                drawPath(outlineWidth, 'rgba(0, 0, 0, 0.85)');
-                drawPath(strokeWidth, 'rgba(255, 255, 255, 0.92)');
-
-                ctx.beginPath();
-                ctx.lineWidth = strokeWidth;
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)';
-                ctx.arc(centerX, centerY, gapRadius * 0.6, 0, Math.PI * 2);
-                ctx.stroke();
+                ctx.shadowBlur = 0;
+                drawLine(outlineThickness, 'rgba(0, 0, 0, 0.82)');
+                drawLine(lineThickness, 'rgba(255, 255, 255, 0.94)');
 
                 ctx.restore();
             }
@@ -1601,23 +1660,22 @@ showDefaultPhoto('selfie');
                     throw new Error('Photo dimensions unavailable.');
                 }
 
-                const hasViewport =
+                const overlayCrosshair = {
+                    normalizedCenterX: viewportSnapshot?.crosshair?.normalizedCenterX ?? normalized.x,
+                    normalizedCenterY: viewportSnapshot?.crosshair?.normalizedCenterY ?? normalized.y,
+                    pixelWidth: viewportSnapshot?.crosshair?.pixelWidth ?? null,
+                    pixelHeight: viewportSnapshot?.crosshair?.pixelHeight ?? null,
+                    lineThickness: viewportSnapshot?.crosshair?.lineThickness ?? null
+                };
+
+                const viewportReady =
                     viewportSnapshot &&
                     Number.isFinite(viewportSnapshot.containerWidth) &&
                     Number.isFinite(viewportSnapshot.containerHeight) &&
                     viewportSnapshot.containerWidth > 0 &&
-                    viewportSnapshot.containerHeight > 0 &&
-                    Number.isFinite(viewportSnapshot.naturalWidth) &&
-                    Number.isFinite(viewportSnapshot.naturalHeight) &&
-                    viewportSnapshot.naturalWidth > 0 &&
-                    viewportSnapshot.naturalHeight > 0;
+                    viewportSnapshot.containerHeight > 0;
 
-                const shouldRespectViewport =
-                    hasViewport &&
-                    Math.abs(viewportSnapshot.naturalWidth - naturalWidth) <= 1 &&
-                    Math.abs(viewportSnapshot.naturalHeight - naturalHeight) <= 1;
-
-                if (shouldRespectViewport) {
+                if (viewportReady) {
                     const containerWidth = viewportSnapshot.containerWidth;
                     const containerHeight = viewportSnapshot.containerHeight;
                     const devicePixelRatio = Number.isFinite(viewportSnapshot.devicePixelRatio)
@@ -1665,7 +1723,7 @@ showDefaultPhoto('selfie');
                         );
                         ctx.restore();
 
-                        drawCrosshairOverlay(ctx, containerWidth, containerHeight, normalized.x, normalized.y);
+                        drawCrosshairOverlay(ctx, containerWidth, containerHeight, overlayCrosshair, devicePixelRatio);
 
                         return canvas.toDataURL('image/png');
                     }
@@ -1681,7 +1739,14 @@ showDefaultPhoto('selfie');
                 }
 
                 fallbackCtx.drawImage(image, 0, 0, naturalWidth, naturalHeight);
-                drawCrosshairOverlay(fallbackCtx, naturalWidth, naturalHeight, normalized.x, normalized.y);
+                const fallbackCrosshair = {
+                    normalizedCenterX: overlayCrosshair.normalizedCenterX,
+                    normalizedCenterY: overlayCrosshair.normalizedCenterY,
+                    pixelWidth: overlayCrosshair.pixelWidth ?? Math.min(naturalWidth, naturalHeight) * 0.2,
+                    pixelHeight: overlayCrosshair.pixelHeight ?? Math.min(naturalWidth, naturalHeight) * 0.2,
+                    lineThickness: overlayCrosshair.lineThickness ?? Math.max(2, Math.min(naturalWidth, naturalHeight) * 0.005)
+                };
+                drawCrosshairOverlay(fallbackCtx, naturalWidth, naturalHeight, fallbackCrosshair, 1);
 
                 return canvas.toDataURL('image/png');
             }
@@ -1732,7 +1797,7 @@ showDefaultPhoto('selfie');
                 setDescriptionState(side, 'loading', WAITING_FOR_DESCRIPTION_MESSAGE, WAITING_FOR_DESCRIPTION_MESSAGE);
 
                 const normalizedSelection = normalizeSelectionPoint(selection);
-                  let annotatedPhotoDataUrl;
+                let annotatedPhotoDataUrl;
 
                 try {
                       annotatedPhotoDataUrl = await createAnnotatedDataUrl(photoDataUrl, normalizedSelection, viewportSnapshot);
@@ -1756,11 +1821,7 @@ showDefaultPhoto('selfie');
                         },
                         body: JSON.stringify({
                             role: side,
-                            image: annotatedPhotoDataUrl,
-                            selection: {
-                                x: Number(normalizedSelection.x.toFixed(4)),
-                                y: Number(normalizedSelection.y.toFixed(4))
-                            }
+                            image: annotatedPhotoDataUrl
                         }),
                         signal: controller.signal
                     });
@@ -2533,7 +2594,36 @@ showDefaultPhoto('selfie');
           attachResubmitHandlers(youResubmitButton, 'you');
           attachResubmitHandlers(meResubmitButton, 'me');
           attachUploadHandler(youUploadButton, youUploadInput, 'you');
-          attachUploadHandler(meUploadButton, meUploadInput, 'me');
+        attachUploadHandler(meUploadButton, meUploadInput, 'me');
+
+        function formatGitUploadTime(date = new Date()) {
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+        }
+
+        function updateGitTimeDisplay() {
+            if (!gitTimeDisplay) {
+                return;
+            }
+            gitTimeDisplay.textContent = formatGitUploadTime();
+        }
+
+        function startGitTimeTicker() {
+            if (!gitTimeDisplay) {
+                return;
+            }
+            updateGitTimeDisplay();
+            const alignToMinute = () => {
+                const now = Date.now();
+                const msUntilNextMinute = 60000 - (now % 60000);
+                window.setTimeout(() => {
+                    updateGitTimeDisplay();
+                    alignToMinute();
+                }, msUntilNextMinute);
+            };
+            alignToMinute();
+        }
+
+        startGitTimeTicker();
 
             resetDescriptionState('you');
             resetDescriptionState('me');
