@@ -1464,6 +1464,103 @@ showDefaultPhoto('selfie');
               });
           }
 
+            function normalizeSelectionPoint(selection) {
+                const fallback = { x: 0.5, y: 0.5 };
+                if (
+                    !selection ||
+                    typeof selection.x !== 'number' ||
+                    typeof selection.y !== 'number' ||
+                    !Number.isFinite(selection.x) ||
+                    !Number.isFinite(selection.y)
+                ) {
+                    return fallback;
+                }
+                return {
+                    x: Math.min(1, Math.max(0, selection.x)),
+                    y: Math.min(1, Math.max(0, selection.y))
+                };
+            }
+
+            function loadImageForAnnotation(dataUrl) {
+                return new Promise((resolve, reject) => {
+                    const image = new Image();
+                    image.decoding = 'async';
+                    image.onload = () => resolve(image);
+                    image.onerror = () => reject(new Error('Failed to load photo for crosshair overlay.'));
+                    image.src = dataUrl;
+                });
+            }
+
+            function drawCrosshairOverlay(ctx, width, height, targetX, targetY) {
+                const minDimension = Math.min(width, height);
+                const armLength = Math.max(minDimension * 0.12, 50);
+                const gapRadius = Math.max(minDimension * 0.015, 6);
+                const strokeWidth = Math.max(minDimension * 0.004, 4);
+                const outlineWidth = strokeWidth + Math.max(2, strokeWidth * 0.6);
+
+                const centerX = targetX * width;
+                const centerY = targetY * height;
+
+                const segments = [
+                    { moveX: centerX, moveY: centerY - gapRadius - armLength, lineX: centerX, lineY: centerY - gapRadius },
+                    { moveX: centerX, moveY: centerY + gapRadius + armLength, lineX: centerX, lineY: centerY + gapRadius },
+                    { moveX: centerX - gapRadius - armLength, moveY: centerY, lineX: centerX - gapRadius, lineY: centerY },
+                    { moveX: centerX + gapRadius + armLength, moveY: centerY, lineX: centerX + gapRadius, lineY: centerY }
+                ];
+
+                ctx.save();
+                ctx.lineCap = 'round';
+
+                const drawPath = (lineWidth, strokeStyle, shadowBlur = 0) => {
+                    ctx.beginPath();
+                    ctx.lineWidth = lineWidth;
+                    ctx.strokeStyle = strokeStyle;
+                    ctx.shadowBlur = shadowBlur;
+                    ctx.shadowColor = shadowBlur > 0 ? strokeStyle : 'transparent';
+                    segments.forEach(segment => {
+                        ctx.moveTo(segment.moveX, segment.moveY);
+                        ctx.lineTo(segment.lineX, segment.lineY);
+                    });
+                    ctx.stroke();
+                };
+
+                drawPath(outlineWidth, 'rgba(0, 0, 0, 0.85)');
+                drawPath(strokeWidth, 'rgba(255, 255, 255, 0.92)');
+
+                ctx.beginPath();
+                ctx.lineWidth = strokeWidth;
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)';
+                ctx.arc(centerX, centerY, gapRadius * 0.6, 0, Math.PI * 2);
+                ctx.stroke();
+
+                ctx.restore();
+            }
+
+            async function createAnnotatedDataUrl(photoDataUrl, selection) {
+                if (typeof photoDataUrl !== 'string' || photoDataUrl.length === 0) {
+                    throw new Error('Photo data unavailable.');
+                }
+
+                const normalized = normalizeSelectionPoint(selection);
+                const image = await loadImageForAnnotation(photoDataUrl);
+                const width = image.naturalWidth || image.width;
+                const height = image.naturalHeight || image.height;
+
+                if (!width || !height) {
+                    throw new Error('Photo dimensions unavailable.');
+                }
+
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+
+                ctx.drawImage(image, 0, 0, width, height);
+                drawCrosshairOverlay(ctx, width, height, normalized.x, normalized.y);
+
+                return canvas.toDataURL('image/png');
+            }
+
           function enqueueDescription(side, photoDataUrl, selection = null) {
               const slot = getPhotoSlotByDescriptionSide(side);
               if (slot && typeof photoDataUrl === 'string' && photoDataUrl.length > 0) {
@@ -1494,81 +1591,97 @@ showDefaultPhoto('selfie');
                   });
           }
 
-            function requestDescription(side, photoDataUrl, selection) {
-              const state = descriptionState[side];
-              if (!state) {
-                  return Promise.resolve();
-              }
+            async function requestDescription(side, photoDataUrl, selection) {
+                const state = descriptionState[side];
+                if (!state) {
+                    return;
+                }
 
-              const label = side === 'you' ? 'You' : 'Me';
+                const label = side === 'you' ? 'You' : 'Me';
 
-              if (!window.DESCRIPTION_API_URL) {
-                  setDescriptionState(side, 'error', `${label} description API is not configured. Set window.DESCRIPTION_API_URL before capturing.`);
-                  return Promise.resolve();
-              }
+                if (!window.DESCRIPTION_API_URL) {
+                    setDescriptionState(side, 'error', `${label} description API is not configured. Set window.DESCRIPTION_API_URL before capturing.`);
+                    return;
+                }
 
                 setDescriptionState(side, 'loading', WAITING_FOR_DESCRIPTION_MESSAGE, WAITING_FOR_DESCRIPTION_MESSAGE);
 
-              const controller = new AbortController();
-              const timeoutId = window.setTimeout(() => controller.abort(), DESCRIPTION_API_TIMEOUT_MS);
+                const normalizedSelection = normalizeSelectionPoint(selection);
+                let annotatedPhotoDataUrl;
 
-              return fetch(window.DESCRIPTION_API_URL, {
-                  method: 'POST',
-                  headers: {
-                      'Content-Type': 'application/json'
-                  },
-                    body: JSON.stringify({
-                      role: side,
-                        image: photoDataUrl,
-                        selection: selection ? {
-                            x: Number(selection.x.toFixed(4)),
-                            y: Number(selection.y.toFixed(4))
-                        } : undefined
-                  }),
-                  signal: controller.signal
-              })
-                  .then(async response => {
-                      window.clearTimeout(timeoutId);
-                      if (!response.ok) {
-                          const errorText = await response.text().catch(() => '');
-                          throw new Error(errorText || `HTTP ${response.status}`);
-                      }
-                      return response.json();
-                  })
-                    .then(payload => {
-                        const statusFlag = typeof payload?.status === 'string'
-                            ? payload.status.trim().toLowerCase()
-                            : null;
-                        const descriptionText = typeof payload?.description === 'string'
-                            ? payload.description.trim()
-                            : '';
+                try {
+                    annotatedPhotoDataUrl = await createAnnotatedDataUrl(photoDataUrl, normalizedSelection);
+                } catch (annotationError) {
+                    const message = `${label} description failed: unable to render the crosshair overlay (${annotationError?.message || 'unknown error.'})`;
+                    setDescriptionState(side, 'error', message);
+                    const error = new Error(annotationError?.message || 'Crosshair overlay failed.');
+                    error.name = 'CrosshairOverlayError';
+                    error.cause = annotationError;
+                    throw error;
+                }
 
-                        if (statusFlag === 'ok' && descriptionText) {
-                            setDescriptionState(side, 'success', `${label} description ready.`, descriptionText);
-                            return;
-                        }
+                const controller = new AbortController();
+                const timeoutId = window.setTimeout(() => controller.abort(), DESCRIPTION_API_TIMEOUT_MS);
 
-                        if (statusFlag === 'unclear') {
-                            const unclearMessage = descriptionText || 'Unclear photo';
-                            setDescriptionState(
-                                side,
-                                'error',
-                                `${label} description unavailable: subject not clear. Retake a closer photo.`,
-                                unclearMessage
-                            );
-                            return;
-                        }
+                try {
+                    const response = await fetch(window.DESCRIPTION_API_URL, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            role: side,
+                            image: annotatedPhotoDataUrl,
+                            selection: {
+                                x: Number(normalizedSelection.x.toFixed(4)),
+                                y: Number(normalizedSelection.y.toFixed(4))
+                            }
+                        }),
+                        signal: controller.signal
+                    });
 
-                        throw new Error('API response did not include a usable description.');
-                    })
-                  .catch(error => {
-                      const message = error?.name === 'AbortError'
-                          ? `${label} description request timed out after ${Math.round(DESCRIPTION_API_TIMEOUT_MS / 1000)}s.`
-                          : `${label} description failed: ${error?.message || 'Unknown error.'}`;
-                      setDescriptionState(side, 'error', message);
-                      throw error;
-                  });
-          }
+                    if (!response.ok) {
+                        const errorText = await response.text().catch(() => '');
+                        throw new Error(errorText || `HTTP ${response.status}`);
+                    }
+
+                    const payload = await response.json();
+                    const statusFlag = typeof payload?.status === 'string'
+                        ? payload.status.trim().toLowerCase()
+                        : null;
+                    const descriptionText = typeof payload?.description === 'string'
+                        ? payload.description.trim()
+                        : '';
+
+                    if (statusFlag === 'ok' && descriptionText) {
+                        setDescriptionState(side, 'success', `${label} description ready.`, descriptionText);
+                        return;
+                    }
+
+                    if (statusFlag === 'unclear') {
+                        const unclearMessage = descriptionText || 'Unclear photo';
+                        setDescriptionState(
+                            side,
+                            'error',
+                            `${label} description unavailable: subject not clear. Retake a closer photo.`,
+                            unclearMessage
+                        );
+                        return;
+                    }
+
+                    throw new Error('API response did not include a usable description.');
+                } catch (error) {
+                    if (error?.name !== 'CrosshairOverlayError') {
+                        const message = error?.name === 'AbortError'
+                            ? `${label} description request timed out after ${Math.round(DESCRIPTION_API_TIMEOUT_MS / 1000)}s.`
+                            : `${label} description failed: ${error?.message || 'Unknown error.'}`;
+                        setDescriptionState(side, 'error', message);
+                    }
+                    throw error;
+                } finally {
+                    window.clearTimeout(timeoutId);
+                }
+            }
 
         let backStream = null;
         let isBackFrozen = false;
