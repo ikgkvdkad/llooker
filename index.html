@@ -545,7 +545,7 @@ function hideDefaultPhoto(side) {
       });
   }
 
-  function displayPhotoForSide(side, dataUrl) {
+    function displayPhotoForSide(side, dataUrl) {
       if (typeof dataUrl !== 'string' || dataUrl.length === 0) {
           throw new Error('Invalid photo data.');
       }
@@ -581,7 +581,7 @@ function hideDefaultPhoto(side) {
           isSelfieFrozen = true;
             setCrosshairVisibility(slotKey, true);
       }
-        promptForSelection(side);
+          tryAutoSubmitSelection(slotKey);
   }
         
         const errorMessage = document.getElementById('errorMessage');
@@ -794,6 +794,22 @@ function prepareSelection(slotKey, side, photoDataUrl) {
     setCrosshairVisibility(slotKey, true);
     state.lastTap = null;
 }
+
+  function tryAutoSubmitSelection(slotKey) {
+      const state = interactionState[slotKey];
+      if (!state?.pendingDescription) {
+          return;
+      }
+      const crosshair = state.crosshairPosition;
+      if (
+          !crosshair ||
+          typeof crosshair.x !== 'number' ||
+          typeof crosshair.y !== 'number'
+      ) {
+          state.crosshairPosition = { x: 0.5, y: 0.5 };
+      }
+      submitSelection(slotKey, state.crosshairPosition);
+  }
 
 function markSelectionComplete(slotKey) {
     const state = interactionState[slotKey];
@@ -1287,8 +1303,8 @@ showDefaultPhoto('selfie');
                   contentEl: meDescriptionContent
               }
           };
-          const WAITING_FOR_DESCRIPTION_MESSAGE = 'waiting for description...';
-          const WAITING_FOR_SELECTION_MESSAGE = 'Tap the photo to choose who to describe. Double-tap to retake.';
+            const WAITING_FOR_DESCRIPTION_MESSAGE = 'Analyzing the crosshair target... tap elsewhere to retarget or double-tap to retake.';
+            const WAITING_FOR_SELECTION_MESSAGE = 'Tap the photo to position the crosshair before describing. Double-tap to retake.';
           const TAP_MAX_MOVEMENT_PX = 12;
           const TAP_MAX_DURATION_MS = 350;
 
