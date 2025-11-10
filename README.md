@@ -1,34 +1,88 @@
 # Camera Photo Capture
 
-A simple web application that allows users to open their camera and capture photos directly in the browser.
+A web application that allows users to capture photos and get AI-powered descriptions using OpenAI's GPT-4o-mini vision model.
 
 ## Features
 
-- Open the camera with one click
-- Capture photos from the live video stream
-- Download captured stills
+- Dual camera interface (back and front camera)
+- Photo capture from live video stream
+- Image upload support
+- AI-powered person descriptions (non-identifying)
+- Selection box for targeting specific subjects
+- Pan, zoom, and pinch-to-zoom controls
 - Modern, responsive UI
-- Clear error messages for troubleshooting
+
+## Project Structure
+
+The project has been refactored into a modular architecture:
+
+```
+llooker/
+├── index.html              # Main HTML (clean, ~70 lines)
+├── css/
+│   └── styles.css          # All application styles
+├── js/
+│   ├── config.js           # Configuration constants
+│   ├── dom.js              # DOM element references
+│   ├── state.js            # Application state management
+│   ├── utils.js            # Utility functions
+│   ├── photo.js            # Photo capture & display
+│   ├── selection.js        # Selection box interactions
+│   ├── camera.js           # Camera lifecycle (⚠️ incomplete)
+│   ├── zoom.js             # Zoom & transform (⚠️ incomplete)
+│   ├── interactions.js     # Touch/pointer handlers (⚠️ incomplete)
+│   ├── description-api.js  # AI API communication (⚠️ incomplete)
+│   ├── upload.js           # File upload handling
+│   ├── ui.js               # UI helpers
+│   └── main.js             # Application initialization
+├── netlify/
+│   └── functions/
+│       └── describe.js     # Serverless AI description function
+├── netlify.toml
+├── vercel.json
+├── mephoto.jpg             # Sample image
+├── youphoto.jpg            # Sample image
+└── index.html.backup       # Original monolithic file (backup)
+```
+
+## ⚠️ Current Status: Refactoring In Progress
+
+**The application is currently non-functional** as several modules are incomplete:
+
+- `js/camera.js` - Needs camera initialization logic (~600 lines)
+- `js/zoom.js` - Needs zoom/transform implementation (~300 lines)
+- `js/interactions.js` - Needs pointer event handlers (~450 lines)
+- `js/description-api.js` - Needs AI API logic (~435 lines)
+- `js/upload.js` - Needs resubmit handler function
+
+The original working code is preserved in `index.html.backup`. To extract the remaining functionality, refer to the line numbers documented in each module's TODO comments.
 
 ## Serverless Vision Description
 
-The Netlify function at `netlify/functions/describe.js` sends captured images to OpenAI's `gpt-4o-mini` vision model and returns a “wine label” style description. The prompt focuses on observable details—body build, clothing, colors, facial hair, lighting—and explicitly avoids any attempt to identify a person.
+The Netlify function at `netlify/functions/describe.js` sends captured images to OpenAI's `gpt-4o-mini` vision model and returns detailed, non-identifying descriptions focusing on:
+
+- Basic physical attributes (age range, build, posture, skin tone, hairstyle)
+- Clothing & style details (layers, colors, textures, accessories)
+- Additional context (lighting, mood, distinctive features)
 
 ### Environment Variables
 
-- `OPENAI_API_KEY`: OpenAI API key with access to `gpt-4o-mini`. Set this in your Netlify site (Site settings → Environment variables) or as part of your local testing environment.
+- `OPENAI_API_KEY`: OpenAI API key with access to `gpt-4o-mini`
+  - Set in Netlify: Site settings → Environment variables
+  - Or in your local testing environment
 
-If the key is missing, the function returns a 500 error that reminds you to configure the variable before deploying.
+If the key is missing, the function returns a 500 error.
 
 ## Deployment
 
-This is a static HTML file backed by a single Netlify function, so you can deploy to any static hosting service. Because the camera API requires it, make sure the site is served over HTTPS (most hosts do this automatically).
+This is a static HTML application backed by a Netlify function.
 
 ### Quick Deploy Options
 
 #### 1. Netlify (Recommended)
-- Drag and drop the `index.html` file to [Netlify Drop](https://app.netlify.com/drop)
-- Or connect the repository to Netlify for automated builds
+- Connect the repository to Netlify for automated builds
+- Set the `OPENAI_API_KEY` environment variable
+- Deploy
 
 #### 2. Vercel
 ```bash
@@ -44,13 +98,12 @@ vercel
 2. Go to Settings → Pages
 3. Select the branch and deploy
 
-#### 4. Cloudflare Pages
-- Connect your Git repository or upload files directly
-- Free HTTPS and CDN included
+**Note:** GitHub Pages won't support the serverless function. You'll need to deploy the function separately.
 
-#### 5. Any Static Host
-- Upload `index.html` to any web server
+#### 4. Any Static Host
+- Upload all files to any web server
 - Ensure HTTPS is enabled (required for camera access)
+- The serverless function will need separate hosting
 
 ## Local Testing
 
@@ -69,6 +122,16 @@ php -S localhost:8000
 
 Then open `http://localhost:8000` in your browser. Camera access works on `localhost` even without HTTPS.
 
+**Note:** The AI description feature requires the Netlify function to be running. For local testing of that feature, use:
+
+```bash
+# Install Netlify CLI
+npm install -g netlify-cli
+
+# Run local dev server
+netlify dev
+```
+
 ## Browser Compatibility
 
 - Chrome / Edge (recommended)
@@ -83,3 +146,14 @@ Any modern browser with MediaDevices API support will work.
 - HTTPS connection (required for camera access, except localhost)
 - User must grant camera permissions
 - A working camera device
+- OpenAI API key (for description feature)
+
+## Development
+
+This project uses ES6 modules with no build step required. Modern browsers natively support ES module imports.
+
+To complete the refactoring, extract the remaining functionality from `index.html.backup` into the placeholder modules. Each incomplete module has TODO comments with specific line number references.
+
+## License
+
+See the original repository for license information.

@@ -1,0 +1,409 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    touch-action: none;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background: #000;
+    width: 100vw;
+    height: 100vh;
+}
+
+.camera-container {
+    display: flex;
+    flex-direction: column;
+    width: 100vw;
+    height: 100vh;
+    position: relative;
+}
+
+.camera-row,
+.description-row {
+    display: flex;
+    width: 100%;
+    background: #000;
+    align-items: stretch;
+    flex: 0 0 50vh;
+    height: 50vh;
+}
+
+.description-row {
+    border-top: 1.5px solid rgba(255, 255, 255, 0.3);
+}
+
+.camera-half {
+    position: relative;
+    width: 50%;
+    height: 100%;
+    overflow: hidden;
+    background: radial-gradient(circle at center, rgba(36, 38, 62, 0.65), rgba(5, 5, 12, 0.95));
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+}
+
+.camera-half::before,
+.camera-half::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(255, 255, 255, 0.45);
+    pointer-events: none;
+    z-index: 600;
+    opacity: 0.75;
+}
+
+.camera-half::before {
+    width: 30%;
+    height: 2px;
+    border-radius: 1px;
+}
+
+.camera-half::after {
+    width: 2px;
+    height: 30%;
+    border-radius: 1px;
+}
+
+.camera-half.left {
+    border-right-width: 1.5px;
+}
+
+.camera-half.right {
+    border-left-width: 1.5px;
+}
+
+.camera-filler {
+    flex: 1;
+    background: #444;
+}
+
+.description-half {
+    position: relative;
+    width: 50%;
+    height: 100%;
+    padding: 20px 18px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 12px;
+    background: rgba(0, 0, 0, 0.85);
+    color: rgba(255, 255, 255, 0.9);
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-top-width: 1.5px;
+    overflow: hidden;
+}
+
+.description-half.left {
+    border-right-width: 1.5px;
+}
+
+.description-half.right {
+    border-left-width: 1.5px;
+}
+
+.description-title-button {
+    font-size: 18px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: inherit;
+    background: none;
+    border: none;
+    padding: 0;
+    align-self: flex-start;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 6px;
+}
+
+.description-title-button:hover {
+    text-decoration: underline;
+}
+
+.description-title-button:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.7);
+    outline-offset: 3px;
+    text-decoration: none;
+}
+
+.description-title-button:active {
+    text-decoration: none;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.description-title-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.description-upload-button {
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    color: rgba(255, 255, 255, 0.85);
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 6px;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.description-upload-button:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.35);
+}
+
+.description-upload-button:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.7);
+    outline-offset: 3px;
+}
+
+.description-upload-button:active {
+    background: rgba(255, 255, 255, 0.28);
+}
+
+.description-upload-input {
+    display: none;
+}
+
+.description-status {
+    font-size: 13px;
+    line-height: 1.35;
+    color: rgba(255, 255, 255, 0.65);
+}
+
+.description-content {
+    font-size: 15px;
+    line-height: 1.45;
+    white-space: pre-line;
+    overflow-y: auto;
+    flex: 1 1 auto;
+    padding-right: 6px;
+    min-height: 0;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
+}
+
+.description-half.loading .description-status::before {
+    content: 'Loading… ';
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.75);
+}
+
+.description-half.error .description-status {
+    color: rgba(255, 99, 99, 0.95);
+}
+
+.description-half.success .description-status {
+    color: rgba(112, 255, 166, 0.9);
+}
+
+.placeholder-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 72px;
+    font-weight: 300;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    z-index: 5;
+    pointer-events: none;
+}
+
+.placeholder-text.hidden {
+    display: none;
+}
+
+.video-element {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: none;
+    transform-origin: center center;
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+.video-element.active {
+    display: block;
+}
+
+.camera-half.initializing .video-element.active {
+    visibility: hidden;
+}
+.captured-photo {
+    display: none;
+    position: absolute;
+    transform-origin: center center;
+    object-fit: contain;
+    object-position: center;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    will-change: transform;
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+    transition: transform 0.08s ease-out;
+}
+
+.captured-photo.active {
+    display: block;
+}
+
+.selection-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 750;
+    display: none;
+}
+
+.selection-overlay.is-visible {
+    display: block;
+}
+
+.selection-box {
+    position: absolute;
+    border-radius: 24px;
+    box-shadow: 0 0 0 9999px rgba(5, 5, 12, 0.55);
+    background: rgba(255, 255, 255, 0.12);
+    pointer-events: auto;
+    touch-action: none;
+    cursor: grab;
+    transition: background 0.18s ease, box-shadow 0.18s ease;
+    user-select: none;
+}
+
+.selection-box.is-moving {
+    cursor: grabbing;
+    background: rgba(255, 255, 255, 0.16);
+    box-shadow: 0 0 0 9999px rgba(5, 5, 12, 0.5);
+}
+
+.selection-box.is-resizing {
+    background: rgba(255, 255, 255, 0.18);
+    box-shadow: 0 0 0 9999px rgba(5, 5, 12, 0.46);
+}
+
+.corner-handle {
+    position: absolute;
+    width: 64px;
+    height: 64px;
+    pointer-events: auto;
+    touch-action: none;
+    user-select: none;
+}
+
+.corner-handle::before {
+    content: '';
+    position: absolute;
+    inset: 4px;
+    border: 3px solid rgba(255, 255, 255, 0.88);
+    border-radius: 999px;
+    box-sizing: border-box;
+    opacity: 0.85;
+    transition: opacity 0.18s ease, border-color 0.18s ease;
+}
+
+.selection-box.is-moving .corner-handle::before,
+.selection-box.is-resizing .corner-handle::before {
+    opacity: 1;
+    border-color: rgba(255, 255, 255, 0.96);
+}
+
+.corner-handle.top-left {
+    top: -12px;
+    left: -12px;
+    cursor: nwse-resize;
+}
+
+.corner-handle.top-left::before {
+    -webkit-clip-path: inset(0 50% 50% 0);
+    clip-path: inset(0 50% 50% 0);
+}
+
+.corner-handle.top-right {
+    top: -12px;
+    right: -12px;
+    cursor: nesw-resize;
+}
+
+.corner-handle.top-right::before {
+    -webkit-clip-path: inset(0 0 50% 50%);
+    clip-path: inset(0 0 50% 50%);
+}
+
+.corner-handle.bottom-left {
+    bottom: -12px;
+    left: -12px;
+    cursor: nesw-resize;
+}
+
+.corner-handle.bottom-left::before {
+    -webkit-clip-path: inset(50% 50% 0 0);
+    clip-path: inset(50% 50% 0 0);
+}
+
+.corner-handle.bottom-right {
+    bottom: -12px;
+    right: -12px;
+    cursor: nwse-resize;
+}
+
+.corner-handle.bottom-right::before {
+    -webkit-clip-path: inset(50% 0 0 50%);
+    clip-path: inset(50% 0 0 50%);
+}
+
+.error-message {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(255, 0, 0, 0.8);
+    color: white;
+    padding: 20px;
+    border-radius: 10px;
+    text-align: center;
+    display: none;
+    z-index: 100;
+    max-width: 80%;
+}
+
+.error-message.active {
+    display: block;
+}
+
+.error-message.warning {
+    background: rgba(255, 165, 0, 0.85);
+    color: rgba(0, 0, 0, 0.9);
+}
+
+.version-badge {
+    position: absolute;
+    top: calc(50vh + 16px);
+    right: 24px;
+    color: #ff4d4d;
+    font-size: 14px;
+    font-family: 'IBM Plex Mono', 'Courier New', monospace;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    text-shadow: 0 0 6px rgba(255, 77, 77, 0.45);
+    pointer-events: none;
+    opacity: 0.85;
+    z-index: 1500;
+}
+
