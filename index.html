@@ -432,7 +432,8 @@ function requestDefaultDescription(side) {
             .then((dataUrl) => {
                 slot.lastPhotoDataUrl = dataUrl;
                 const role = side === 'back' ? 'you' : 'me';
-                  enqueueDescription(role, dataUrl, { x: 0.5, y: 0.5 });
+                    const viewport = snapshotViewportState(side);
+                    enqueueDescription(role, dataUrl, { x: 0.5, y: 0.5 }, viewport);
             })
             .catch(error => {
                 console.error(`Failed to describe default ${side} image:`, error);
@@ -674,6 +675,54 @@ function getCameraHalfElement(slotKey) {
     return null;
 }
 
+function snapshotViewportState(slotKey) {
+    const slot = photoSlots[slotKey];
+    const state = interactionState[slotKey];
+    const container = getCameraHalfElement(slotKey);
+    if (!slot || !state || !slot?.imageEl || !container) {
+        return null;
+    }
+
+    const rect = container.getBoundingClientRect();
+    const containerWidth = rect?.width;
+    const containerHeight = rect?.height;
+    const naturalWidth = slot.imageEl.naturalWidth || slot.imageEl.videoWidth || slot.imageEl.width;
+    const naturalHeight = slot.imageEl.naturalHeight || slot.imageEl.videoHeight || slot.imageEl.height;
+
+    if (
+        !containerWidth ||
+        !containerHeight ||
+        !naturalWidth ||
+        !naturalHeight ||
+        !Number.isFinite(containerWidth) ||
+        !Number.isFinite(containerHeight)
+    ) {
+        return null;
+    }
+
+    const computedStyle = window.getComputedStyle(slot.imageEl);
+    const objectFit = computedStyle?.objectFit || 'cover';
+    const transformScale = Number.isFinite(state.transform?.scale) ? state.transform.scale : 1;
+    const transformTranslateX = Number.isFinite(state.transform?.translateX) ? state.transform.translateX : 0;
+    const transformTranslateY = Number.isFinite(state.transform?.translateY) ? state.transform.translateY : 0;
+
+    return {
+        containerWidth,
+        containerHeight,
+        naturalWidth,
+        naturalHeight,
+        objectFit,
+        transform: {
+            scale: Math.max(0.01, transformScale),
+            translateX: transformTranslateX,
+            translateY: transformTranslateY
+        },
+        devicePixelRatio: window.devicePixelRatio && Number.isFinite(window.devicePixelRatio)
+            ? Math.max(1, window.devicePixelRatio)
+            : 1
+    };
+}
+
 function setCrosshairVisibility(slotKey, isVisible) {
     const slot = photoSlots[slotKey];
     if (!slot?.crosshairEl) {
@@ -865,8 +914,9 @@ function submitSelection(slotKey, normalizedPoint) {
         return;
     }
 
+    const viewport = snapshotViewportState(slotKey);
     setDescriptionState(derivedSide, 'loading', WAITING_FOR_DESCRIPTION_MESSAGE, WAITING_FOR_DESCRIPTION_MESSAGE);
-    enqueueDescription(derivedSide, photoDataUrl, normalizedPoint);
+    enqueueDescription(derivedSide, photoDataUrl, normalizedPoint, viewport);
 }
 
 function calculateDistance(pointerA, pointerB) {
@@ -1373,7 +1423,8 @@ showDefaultPhoto('selfie');
               }
 
                 setDescriptionState(side, 'loading', WAITING_FOR_DESCRIPTION_MESSAGE, WAITING_FOR_DESCRIPTION_MESSAGE);
-            enqueueDescription(side, photoDataUrl, interaction.selectionPoint);
+      const viewport = snapshotViewportState(slotKey);
+      enqueueDescription(side, photoDataUrl, interaction.selectionPoint, viewport);
             }
 
             function attachResubmitHandlers(button, side) {
@@ -1536,37 +1587,111 @@ showDefaultPhoto('selfie');
                 ctx.restore();
             }
 
-            async function createAnnotatedDataUrl(photoDataUrl, selection) {
+            async function createAnnotatedDataUrl(photoDataUrl, selection, viewportSnapshot) {
                 if (typeof photoDataUrl !== 'string' || photoDataUrl.length === 0) {
                     throw new Error('Photo data unavailable.');
                 }
 
                 const normalized = normalizeSelectionPoint(selection);
                 const image = await loadImageForAnnotation(photoDataUrl);
-                const width = image.naturalWidth || image.width;
-                const height = image.naturalHeight || image.height;
+                const naturalWidth = image.naturalWidth || image.width;
+                const naturalHeight = image.naturalHeight || image.height;
 
-                if (!width || !height) {
+                if (!naturalWidth || !naturalHeight) {
                     throw new Error('Photo dimensions unavailable.');
                 }
 
-                const canvas = document.createElement('canvas');
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
+                const hasViewport =
+                    viewportSnapshot &&
+                    Number.isFinite(viewportSnapshot.containerWidth) &&
+                    Number.isFinite(viewportSnapshot.containerHeight) &&
+                    viewportSnapshot.containerWidth > 0 &&
+                    viewportSnapshot.containerHeight > 0 &&
+                    Number.isFinite(viewportSnapshot.naturalWidth) &&
+                    Number.isFinite(viewportSnapshot.naturalHeight) &&
+                    viewportSnapshot.naturalWidth > 0 &&
+                    viewportSnapshot.naturalHeight > 0;
 
-                ctx.drawImage(image, 0, 0, width, height);
-                drawCrosshairOverlay(ctx, width, height, normalized.x, normalized.y);
+                const shouldRespectViewport =
+                    hasViewport &&
+                    Math.abs(viewportSnapshot.naturalWidth - naturalWidth) <= 1 &&
+                    Math.abs(viewportSnapshot.naturalHeight - naturalHeight) <= 1;
+
+                if (shouldRespectViewport) {
+                    const containerWidth = viewportSnapshot.containerWidth;
+                    const containerHeight = viewportSnapshot.containerHeight;
+                    const devicePixelRatio = Number.isFinite(viewportSnapshot.devicePixelRatio)
+                        ? Math.max(1, viewportSnapshot.devicePixelRatio)
+                        : 1;
+                    const objectFit = (viewportSnapshot.objectFit || 'cover').toLowerCase();
+                    const transform = viewportSnapshot.transform || {};
+                    const userScale = Number.isFinite(transform.scale) ? Math.max(0.01, transform.scale) : 1;
+                    const translateX = Number.isFinite(transform.translateX) ? transform.translateX : 0;
+                    const translateY = Number.isFinite(transform.translateY) ? transform.translateY : 0;
+
+                    let baseScale;
+                    if (objectFit === 'contain') {
+                        baseScale = Math.min(containerWidth / naturalWidth, containerHeight / naturalHeight);
+                    } else {
+                        baseScale = Math.max(containerWidth / naturalWidth, containerHeight / naturalHeight);
+                    }
+
+                    if (Number.isFinite(baseScale) && baseScale > 0) {
+                        const finalScale = baseScale * userScale;
+                        const canvas = document.createElement('canvas');
+                        canvas.width = Math.max(1, Math.round(containerWidth * devicePixelRatio));
+                        canvas.height = Math.max(1, Math.round(containerHeight * devicePixelRatio));
+                        const ctx = canvas.getContext('2d');
+
+                        if (!ctx) {
+                            throw new Error('Canvas context unavailable for annotation.');
+                        }
+
+                        ctx.scale(devicePixelRatio, devicePixelRatio);
+                        ctx.fillStyle = '#000';
+                        ctx.fillRect(0, 0, containerWidth, containerHeight);
+                        ctx.imageSmoothingQuality = 'high';
+
+                        ctx.save();
+                        ctx.translate(containerWidth / 2, containerHeight / 2);
+                        ctx.translate(translateX, translateY);
+                        ctx.scale(finalScale, finalScale);
+                        ctx.drawImage(
+                            image,
+                            -naturalWidth / 2,
+                            -naturalHeight / 2,
+                            naturalWidth,
+                            naturalHeight
+                        );
+                        ctx.restore();
+
+                        drawCrosshairOverlay(ctx, containerWidth, containerHeight, normalized.x, normalized.y);
+
+                        return canvas.toDataURL('image/png');
+                    }
+                }
+
+                const canvas = document.createElement('canvas');
+                canvas.width = naturalWidth;
+                canvas.height = naturalHeight;
+                const fallbackCtx = canvas.getContext('2d');
+
+                if (!fallbackCtx) {
+                    throw new Error('Canvas context unavailable for fallback annotation.');
+                }
+
+                fallbackCtx.drawImage(image, 0, 0, naturalWidth, naturalHeight);
+                drawCrosshairOverlay(fallbackCtx, naturalWidth, naturalHeight, normalized.x, normalized.y);
 
                 return canvas.toDataURL('image/png');
             }
 
-          function enqueueDescription(side, photoDataUrl, selection = null) {
+            function enqueueDescription(side, photoDataUrl, selection = null, viewportSnapshot = null) {
               const slot = getPhotoSlotByDescriptionSide(side);
               if (slot && typeof photoDataUrl === 'string' && photoDataUrl.length > 0) {
                   slot.lastPhotoDataUrl = photoDataUrl;
               }
-              descriptionQueue.push({ side, photoDataUrl, selection });
+                descriptionQueue.push({ side, photoDataUrl, selection, viewport: viewportSnapshot });
               processDescriptionQueue();
           }
 
@@ -1581,7 +1706,7 @@ showDefaultPhoto('selfie');
                 }
   
                 isDescriptionInFlight = true;
-                requestDescription(next.side, next.photoDataUrl, next.selection)
+                requestDescription(next.side, next.photoDataUrl, next.selection, next.viewport)
                   .catch(error => {
                       console.error('Description request failed:', error);
                   })
@@ -1591,7 +1716,7 @@ showDefaultPhoto('selfie');
                   });
           }
 
-            async function requestDescription(side, photoDataUrl, selection) {
+            async function requestDescription(side, photoDataUrl, selection, viewportSnapshot) {
                 const state = descriptionState[side];
                 if (!state) {
                     return;
@@ -1607,10 +1732,10 @@ showDefaultPhoto('selfie');
                 setDescriptionState(side, 'loading', WAITING_FOR_DESCRIPTION_MESSAGE, WAITING_FOR_DESCRIPTION_MESSAGE);
 
                 const normalizedSelection = normalizeSelectionPoint(selection);
-                let annotatedPhotoDataUrl;
+                  let annotatedPhotoDataUrl;
 
                 try {
-                    annotatedPhotoDataUrl = await createAnnotatedDataUrl(photoDataUrl, normalizedSelection);
+                      annotatedPhotoDataUrl = await createAnnotatedDataUrl(photoDataUrl, normalizedSelection, viewportSnapshot);
                 } catch (annotationError) {
                     const message = `${label} description failed: unable to render the crosshair overlay (${annotationError?.message || 'unknown error.'})`;
                     setDescriptionState(side, 'error', message);
