@@ -824,6 +824,16 @@ export function handleCameraButtonClick(side) {
     const isActive = isCameraActive(slotKey);
     const isFrozen = isCameraFrozen(slotKey);
 
+    // Check if we're viewing history - if so, exit history mode first
+    // We need to import this dynamically to avoid circular dependency
+    import('./history.js').then(history => {
+        if (history.isViewingHistory(side)) {
+            history.exitHistoryMode(side);
+        }
+    }).catch(() => {
+        // History module not available, continue normally
+    });
+
     if (isActive) {
         // Camera is active, capture photo
         if (side === 'you') {
@@ -842,9 +852,12 @@ export function handleCameraButtonClick(side) {
         }
     } else {
         // Nothing active, open camera
+        // Make sure to clear any history photo first
         if (side === 'you') {
+            resetBackCamera();
             openBackCamera().catch(error => console.error('Failed to open back camera:', error));
         } else {
+            resetSelfieCamera();
             openSelfieCamera().catch(error => console.error('Failed to open selfie camera:', error));
         }
     }

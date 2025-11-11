@@ -190,7 +190,8 @@ function displayHistoryItem(side) {
     const slotKey = side === 'you' ? 'back' : 'selfie';
     const slot = photoSlots[slotKey];
     
-    // Display the photo
+    // Display the photo - this is the cropped viewport that was analyzed
+    // NOTE: imageDataUrl is the CROPPED selection area, not the original full photo
     if (item.imageDataUrl && slot.imageEl) {
         slot.imageEl.src = item.imageDataUrl;
         slot.imageEl.classList.add('active');
@@ -202,7 +203,17 @@ function displayHistoryItem(side) {
         }
     }
     
-    // Reset transform/zoom
+    // HIDE the selection overlay - we're showing the already-cropped image
+    // The displayed image IS the selection area, so showing a selection box would be redundant
+    const selectionOverlay = slotKey === 'back' 
+        ? dom.backSelectionOverlay 
+        : dom.selfieSelectionOverlay;
+    
+    if (selectionOverlay) {
+        selectionOverlay.style.display = 'none';
+    }
+    
+    // Reset transform/zoom to show full image
     const interaction = interactionState[slotKey];
     if (interaction) {
         interaction.transform.scale = 1;
@@ -210,7 +221,8 @@ function displayHistoryItem(side) {
         interaction.transform.translateY = 0;
         
         if (slot.imageEl) {
-            slot.imageEl.style.transform = 'translate(-50%, -50%) scale(1)';
+            // Don't apply any transform - let CSS handle centering with object-fit: contain
+            slot.imageEl.style.transform = 'translate(0px, 0px) scale(1)';
         }
     }
     
@@ -244,6 +256,9 @@ function returnToLiveView(side) {
     const slotKey = side === 'you' ? 'back' : 'selfie';
     const slot = photoSlots[slotKey];
     
+    // Don't clear the photo - just reset to current state
+    // The user will need to capture a new photo or open camera
+    
     // Reset description to waiting state
     const label = side === 'you' ? 'You' : 'Me';
     setDescriptionState(
@@ -251,6 +266,25 @@ function returnToLiveView(side) {
         null,
         `Waiting for a ${label} capture. Capture or upload a photo, then pan and zoom to center the subject.`
     );
+}
+
+/**
+ * Check if currently viewing history
+ */
+export function isViewingHistory(side) {
+    const state = historyState[side];
+    return state.currentIndex > -1;
+}
+
+/**
+ * Exit history mode and reset to live view
+ */
+export function exitHistoryMode(side) {
+    const state = historyState[side];
+    if (state.currentIndex === -1) return; // Already in live view
+    
+    returnToLiveView(side);
+    updateNavigationButtons(side);
 }
 
 /**
