@@ -264,10 +264,10 @@ function updateNavigationButtons(side) {
     if (!prevButton || !nextButton) return;
     
     // Previous button (go to older)
-    const canGoPrev = state.hasLoaded && (
-        state.currentIndex === -1 && state.descriptions.length > 0 ||
-        state.currentIndex < state.descriptions.length - 1
-    );
+    // Enable if: not loaded yet (allows triggering fetch), OR currently at live view with history, OR viewing history with more items
+    const canGoPrev = !state.hasLoaded || 
+                      (state.currentIndex === -1 && state.descriptions.length > 0) ||
+                      (state.currentIndex >= 0 && state.currentIndex < state.descriptions.length - 1);
     prevButton.disabled = !canGoPrev;
     
     // Next button (go to newer)
