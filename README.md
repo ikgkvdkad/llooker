@@ -74,21 +74,14 @@ The Netlify function at `netlify/functions/describe.js` sends captured images to
 
 If the key is missing, the function returns a 500 error.
 
-### Firestore Configuration
+### Database Configuration
 
-The `describe` Netlify function persists successful descriptions to Firestore. Provide credentials in **one** of the following ways:
+The `describe` Netlify function now stores successful descriptions in a Postgres database (Netlify Database backed by Neon). Configure it with:
 
-1. **Environment variables** (preferred for production)
-   - `FIREBASE_PROJECT_ID`
-   - `FIREBASE_CLIENT_EMAIL`
-   - `FIREBASE_PRIVATE_KEY` (use literal `\n` sequences; they are normalized by the function)
-2. **Service account file** (convenient for local development)
-   - Create `netlify/firebase-service-account.json` containing the standard Firebase Admin SDK key.
-   - The repository includes a placeholder file for this controlled exercise. Replace it with your own credentials and **never commit real secrets**.
+- `DATABASE_URL`: Postgres connection string provided by Netlify (automatically set in deploy contexts). For local `netlify dev` runs, copy the value from your Netlify dashboard into a `.env` file.
+- `DESCRIPTIONS_TABLE` *(optional)*: Override the default table name `portrait_descriptions`.
 
-Set `FIREBASE_DESCRIPTIONS_COLLECTION` to override the storage collection; the default is `portraitDescriptions`.
-
-If neither the environment variables nor the JSON file is present, the function logs a clear error and returns a 500 response.
+The function will create the table on first write with columns for status, description, metadata, and request diagnostics. If `DATABASE_URL` is missing, the function returns a 500 error with guidance instead of attempting a fallback.
 
 ## Deployment
 
