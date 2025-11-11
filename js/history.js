@@ -124,6 +124,21 @@ export async function fetchDescriptions(side, options = {}) {
 export async function navigatePrevious(side) {
     const state = historyState[side];
     
+    // Stop camera if active and update button state
+    const slotKey = side === 'you' ? 'back' : 'selfie';
+    import('./camera.js').then(camera => {
+        if (camera.isCameraActive(slotKey)) {
+            camera.stopCamera(slotKey);
+        }
+        // Update camera button appearance
+        const button = side === 'you' ? dom.youCameraButton : dom.meCameraButton;
+        if (button) {
+            camera.updateCameraButtonState(side, button);
+        }
+    }).catch(() => {
+        // Camera module not available
+    });
+    
     // Load history if not loaded yet
     if (!state.hasLoaded) {
         try {
@@ -163,6 +178,21 @@ export function navigateNext(side) {
         // Already at live view
         return;
     }
+    
+    // Stop camera if active and update button state
+    const slotKey = side === 'you' ? 'back' : 'selfie';
+    import('./camera.js').then(camera => {
+        if (camera.isCameraActive(slotKey)) {
+            camera.stopCamera(slotKey);
+        }
+        // Update camera button appearance
+        const button = side === 'you' ? dom.youCameraButton : dom.meCameraButton;
+        if (button) {
+            camera.updateCameraButtonState(side, button);
+        }
+    }).catch(() => {
+        // Camera module not available
+    });
     
     state.currentIndex--;
     

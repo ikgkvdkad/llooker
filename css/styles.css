@@ -79,8 +79,8 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 12px;
-    padding: 0 20px;
+    gap: 4px;
+    padding: 0 8px;
     border: 3px solid rgba(255, 255, 255, 0.3);
     border-top: none;
     border-bottom: none;
@@ -237,38 +237,35 @@ body {
     align-items: center;
     justify-content: center;
     position: relative;
-    font-size: 20px;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.85);
-    background: rgba(255, 255, 255, 0.08);
-    border: 1.5px solid rgba(255, 255, 255, 0.3);
-    border-radius: 6px;
-    padding: 8px;
-    width: 40px;
-    height: 40px;
+    font-size: 28px;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.9);
+    background: transparent;
+    border: none;
+    padding: 8px 4px;
+    min-width: 32px;
+    height: 50px;
     cursor: pointer;
-    transition: background 0.2s ease, border-color 0.2s ease, transform 0.1s ease;
+    transition: color 0.2s ease, transform 0.1s ease;
     touch-action: manipulation;
 }
 
 .history-nav-button:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.15);
-    border-color: rgba(255, 255, 255, 0.45);
-    color: rgba(255, 255, 255, 0.95);
+    color: rgba(255, 255, 255, 1);
+    transform: scale(1.1);
 }
 
 .history-nav-button:active:not(:disabled) {
-    background: rgba(255, 255, 255, 0.22);
-    transform: scale(0.96);
+    transform: scale(0.95);
 }
 
 .history-nav-button:disabled {
-    opacity: 0.3;
+    opacity: 0.25;
     cursor: not-allowed;
 }
 
 .history-nav-button:focus-visible {
-    outline: 2px solid rgba(255, 255, 255, 0.7);
+    outline: 2px solid rgba(255, 255, 255, 0.5);
     outline-offset: 2px;
 }
 
