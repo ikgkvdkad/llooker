@@ -3,6 +3,7 @@
 import { DESCRIPTION_API_URL } from './config.js';
 import { historyState, photoSlots, interactionState } from './state.js';
 import { setDescriptionState } from './description-api.js';
+import { hideSelectionOverlay } from './selection.js';
 import * as dom from './dom.js';
 
 const HISTORY_API_URL = DESCRIPTION_API_URL?.replace('/describe', '/get-descriptions') || '/.netlify/functions/get-descriptions';
@@ -205,13 +206,7 @@ function displayHistoryItem(side) {
     
     // HIDE the selection overlay - we're showing the already-cropped image
     // The displayed image IS the selection area, so showing a selection box would be redundant
-    const selectionOverlay = slotKey === 'back' 
-        ? dom.backSelectionOverlay 
-        : dom.selfieSelectionOverlay;
-    
-    if (selectionOverlay) {
-        selectionOverlay.style.display = 'none';
-    }
+    hideSelectionOverlay(slotKey);
     
     // Reset transform/zoom to show full image
     const interaction = interactionState[slotKey];
