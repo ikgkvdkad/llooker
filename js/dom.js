@@ -33,7 +33,7 @@ export const selfieSelectionHandles = {
 };
 
 // UI elements
-export const errorMessage = document.getElementById('errorMessage');
+export const toastStack = document.getElementById('toastStack');
 export const versionDisplay = document.getElementById('versionDisplay');
 
 // Description panels
