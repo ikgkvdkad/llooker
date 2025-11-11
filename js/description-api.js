@@ -5,6 +5,7 @@ import { photoSlots, interactionState, descriptionState, descriptionQueue, setDe
 import { getPhotoSlotByDescriptionSide, clampRectToBounds, loadImageElement } from './utils.js';
 import { snapshotViewportState, clearMovementDebounce } from './zoom.js';
 import { requestCurrentLocation } from './geo.js';
+import { showWarning } from './ui.js';
 
 /**
  * Reset description state for a side
@@ -394,12 +395,13 @@ async function requestDescription(side, photoDataUrl, viewportSnapshot, options 
                     coords: null
                 };
                 const statusMessage = locationResult.error || `Geolocation status: ${locationResult.status}`;
-                console.warn(`${label} location unavailable: ${statusMessage}`);
+                showWarning(`${label} location unavailable: ${statusMessage}`);
             }
         }
     } catch (locationError) {
         const message = locationError?.message || 'Unexpected geolocation failure.';
         console.error(`${label} location retrieval failed:`, locationError);
+        showWarning(`${label} location error: ${message}`);
         locationPayload = {
             status: 'error',
             timestamp: Date.now(),
