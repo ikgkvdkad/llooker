@@ -1,8 +1,14 @@
+const fs = require('fs');
+const path = require('path');
 const admin = require('firebase-admin');
 
 let firestoreInstance = null;
 
-const DEFAULT_COLLECTION = process.env.FIREBASE_DESCRIPTIONS_COLLECTION || 'photoDescriptions';
+const DEFAULT_COLLECTION =
+  process.env.FIREBASE_DESCRIPTIONS_COLLECTION || 'portraitDescriptions';
+
+const SERVICE_ACCOUNT_FILENAME = 'firebase-service-account.json';
+const SERVICE_ACCOUNT_PATH = path.join(__dirname, '..', SERVICE_ACCOUNT_FILENAME);
 
 function estimateImageBytesFromDataUrl(dataUrl) {
   if (typeof dataUrl !== 'string') {
@@ -26,32 +32,84 @@ function normalizePrivateKey(rawKey) {
   return rawKey.replace(/\\n/g, '\n');
 }
 
-function getFirestore() {
-  if (firestoreInstance) {
-    return firestoreInstance;
-  }
+function loadCredentialsFromFile() {
+  try {
+    if (!fs.existsSync(SERVICE_ACCOUNT_PATH)) {
+      console.error('Expected Firestore service account file missing.', {
+        path: SERVICE_ACCOUNT_PATH
+      });
+      return null;
+    }
 
+    const fileContents = fs.readFileSync(SERVICE_ACCOUNT_PATH, 'utf8');
+    const parsed = JSON.parse(fileContents);
+
+    const projectId = parsed?.project_id;
+    const clientEmail = parsed?.client_email;
+    const privateKey = normalizePrivateKey(parsed?.private_key);
+
+    if (!projectId || !clientEmail || !privateKey) {
+      console.error('Firestore service account file incomplete.', {
+        path: SERVICE_ACCOUNT_PATH,
+        hasProjectId: Boolean(projectId),
+        hasClientEmail: Boolean(clientEmail),
+        hasPrivateKey: Boolean(parsed?.private_key)
+      });
+      return null;
+    }
+
+    console.info('Loaded Firestore credentials from service account file.', {
+      path: SERVICE_ACCOUNT_PATH
+    });
+
+    return { projectId, clientEmail, privateKey };
+  } catch (fileError) {
+    console.error('Failed to read Firestore service account file.', {
+      message: fileError?.message,
+      path: SERVICE_ACCOUNT_PATH
+    });
+    return null;
+  }
+}
+
+function resolveFirestoreCredentials() {
   const projectId = process.env.FIREBASE_PROJECT_ID;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
   const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
   const privateKey = normalizePrivateKey(privateKeyRaw);
 
-  if (!projectId || !clientEmail || !privateKey) {
-    console.error('Firestore credentials missing.', {
-      hasProjectId: Boolean(projectId),
-      hasClientEmail: Boolean(clientEmail),
-      hasPrivateKey: Boolean(privateKeyRaw)
-    });
+  if (projectId && clientEmail && privateKey) {
+    return { projectId, clientEmail, privateKey };
+  }
+
+  const fallbackCredentials = loadCredentialsFromFile();
+  if (fallbackCredentials) {
+    return fallbackCredentials;
+  }
+
+  console.error('Firestore credentials missing.', {
+    hasProjectId: Boolean(projectId),
+    hasClientEmail: Boolean(clientEmail),
+    hasPrivateKey: Boolean(privateKeyRaw),
+    expectedFilePath: SERVICE_ACCOUNT_PATH
+  });
+
+  return null;
+}
+
+function getFirestore() {
+  if (firestoreInstance) {
+    return firestoreInstance;
+  }
+
+  const credentials = resolveFirestoreCredentials();
+  if (!credentials) {
     return null;
   }
 
   if (!admin.apps.length) {
     admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId,
-        clientEmail,
-        privateKey
-      })
+      credential: admin.credential.cert(credentials)
     });
   }
 

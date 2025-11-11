@@ -74,6 +74,22 @@ The Netlify function at `netlify/functions/describe.js` sends captured images to
 
 If the key is missing, the function returns a 500 error.
 
+### Firestore Configuration
+
+The `describe` Netlify function persists successful descriptions to Firestore. Provide credentials in **one** of the following ways:
+
+1. **Environment variables** (preferred for production)
+   - `FIREBASE_PROJECT_ID`
+   - `FIREBASE_CLIENT_EMAIL`
+   - `FIREBASE_PRIVATE_KEY` (use literal `\n` sequences; they are normalized by the function)
+2. **Service account file** (convenient for local development)
+   - Create `netlify/firebase-service-account.json` containing the standard Firebase Admin SDK key.
+   - The repository includes a placeholder file for this controlled exercise. Replace it with your own credentials and **never commit real secrets**.
+
+Set `FIREBASE_DESCRIPTIONS_COLLECTION` to override the storage collection; the default is `portraitDescriptions`.
+
+If neither the environment variables nor the JSON file is present, the function logs a clear error and returns a 500 response.
+
 ## Deployment
 
 This is a static HTML application backed by a Netlify function.
