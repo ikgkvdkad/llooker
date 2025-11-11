@@ -4,6 +4,7 @@ import { WAITING_FOR_DESCRIPTION_MESSAGE, DESCRIPTION_API_TIMEOUT_MS, DESCRIPTIO
 import { photoSlots, interactionState, descriptionState, descriptionQueue, setDescriptionInFlight, getDescriptionInFlight } from './state.js';
 import { getPhotoSlotByDescriptionSide, clampRectToBounds, loadImageElement } from './utils.js';
 import { snapshotViewportState, clearMovementDebounce } from './zoom.js';
+import { requestCurrentLocation } from './geo.js';
 
 /**
  * Reset description state for a side
@@ -98,7 +99,12 @@ export function submitViewportDescription(slotKey, { force = false, reason = 'in
     state.lastSubmittedSignature = signature;
     const label = side === 'you' ? 'You' : 'Me';
     setDescriptionState(side, 'loading', WAITING_FOR_DESCRIPTION_MESSAGE, WAITING_FOR_DESCRIPTION_MESSAGE);
-    enqueueDescription(side, photoDataUrl, viewport, { reason, signature });
+    enqueueDescription(side, photoDataUrl, viewport, {
+        reason,
+        signature,
+        capturedAt: new Date().toISOString(),
+        tone: 'neutral'
+    });
 }
 
 /**
@@ -355,6 +361,53 @@ async function requestDescription(side, photoDataUrl, viewportSnapshot, options 
 
     setDescriptionState(side, 'loading', WAITING_FOR_DESCRIPTION_MESSAGE, WAITING_FOR_DESCRIPTION_MESSAGE);
 
+    const capturedAt = typeof options.capturedAt === 'string' && options.capturedAt.length
+        ? options.capturedAt
+        : new Date().toISOString();
+    const tone = typeof options.tone === 'string' && options.tone.length
+        ? options.tone
+        : 'neutral';
+
+    let locationPayload = null;
+    try {
+        const locationResult = await requestCurrentLocation();
+        if (locationResult) {
+            if (locationResult.status === 'ok' && locationResult.coords) {
+                locationPayload = {
+                    status: 'ok',
+                    timestamp: locationResult.timestamp,
+                    coords: {
+                        latitude: locationResult.coords.latitude,
+                        longitude: locationResult.coords.longitude,
+                        accuracy: locationResult.coords.accuracy,
+                        altitude: locationResult.coords.altitude,
+                        altitudeAccuracy: locationResult.coords.altitudeAccuracy,
+                        heading: locationResult.coords.heading,
+                        speed: locationResult.coords.speed
+                    }
+                };
+            } else {
+                locationPayload = {
+                    status: locationResult.status || 'unknown',
+                    timestamp: locationResult.timestamp || Date.now(),
+                    error: locationResult.error || 'Location unavailable.',
+                    coords: null
+                };
+                const statusMessage = locationResult.error || `Geolocation status: ${locationResult.status}`;
+                console.warn(`${label} location unavailable: ${statusMessage}`);
+            }
+        }
+    } catch (locationError) {
+        const message = locationError?.message || 'Unexpected geolocation failure.';
+        console.error(`${label} location retrieval failed:`, locationError);
+        locationPayload = {
+            status: 'error',
+            timestamp: Date.now(),
+            error: message,
+            coords: null
+        };
+    }
+
     let renderedViewportDataUrl;
 
     try {
@@ -391,7 +444,10 @@ async function requestDescription(side, photoDataUrl, viewportSnapshot, options 
                 image: renderedViewportDataUrl,
                 viewport: viewportSnapshot,
                 reason: options.reason || 'interaction',
-                signature: options.signature || null
+                signature: options.signature || null,
+                capturedAt,
+                tone,
+                location: locationPayload
             }),
             signal: controller.signal
         });
