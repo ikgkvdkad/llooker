@@ -33,68 +33,69 @@ function normalizePrivateKey(rawKey) {
 }
 
 function loadCredentialsFromFile() {
-  try {
-    if (!fs.existsSync(SERVICE_ACCOUNT_PATH)) {
-      console.error('Expected Firestore service account file missing.', {
-        path: SERVICE_ACCOUNT_PATH
-      });
-      return null;
-    }
-
-    const fileContents = fs.readFileSync(SERVICE_ACCOUNT_PATH, 'utf8');
-    const parsed = JSON.parse(fileContents);
-
-    const projectId = parsed?.project_id;
-    const clientEmail = parsed?.client_email;
-    const privateKey = normalizePrivateKey(parsed?.private_key);
-
-    if (!projectId || !clientEmail || !privateKey) {
-      console.error('Firestore service account file incomplete.', {
-        path: SERVICE_ACCOUNT_PATH,
-        hasProjectId: Boolean(projectId),
-        hasClientEmail: Boolean(clientEmail),
-        hasPrivateKey: Boolean(parsed?.private_key)
-      });
-      return null;
-    }
-
-    console.info('Loaded Firestore credentials from service account file.', {
-      path: SERVICE_ACCOUNT_PATH
-    });
-
-    return { projectId, clientEmail, privateKey };
-  } catch (fileError) {
-    console.error('Failed to read Firestore service account file.', {
-      message: fileError?.message,
-      path: SERVICE_ACCOUNT_PATH
-    });
-    return null;
+  if (!fs.existsSync(SERVICE_ACCOUNT_PATH)) {
+    throw new Error(
+      `Firestore service account file not found at ${SERVICE_ACCOUNT_PATH}.`
+    );
   }
+
+  const fileContents = fs.readFileSync(SERVICE_ACCOUNT_PATH, 'utf8');
+
+  let parsed;
+  try {
+    parsed = JSON.parse(fileContents);
+  } catch (parseError) {
+    throw new Error(
+      `Firestore service account file at ${SERVICE_ACCOUNT_PATH} is not valid JSON.`
+    );
+  }
+
+  const projectId = parsed?.project_id;
+  const clientEmail = parsed?.client_email;
+  const privateKey = normalizePrivateKey(parsed?.private_key);
+
+  const missingFields = [];
+  if (!projectId) missingFields.push('project_id');
+  if (!clientEmail) missingFields.push('client_email');
+  if (!privateKey) missingFields.push('private_key');
+
+  if (missingFields.length) {
+    throw new Error(
+      `Firestore service account file at ${SERVICE_ACCOUNT_PATH} is missing required field(s): ${missingFields.join(', ')}.`
+    );
+  }
+
+  console.info('Loaded Firestore credentials from service account file.', {
+    path: SERVICE_ACCOUNT_PATH
+  });
+
+  return { projectId, clientEmail, privateKey };
 }
 
 function resolveFirestoreCredentials() {
   const projectId = process.env.FIREBASE_PROJECT_ID;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
   const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
-  const privateKey = normalizePrivateKey(privateKeyRaw);
 
-  if (projectId && clientEmail && privateKey) {
-    return { projectId, clientEmail, privateKey };
+  const providedEnvValues = [projectId, clientEmail, privateKeyRaw].filter(
+    (value) => typeof value === 'string' && value.trim().length > 0
+  );
+
+  if (providedEnvValues.length > 0 && providedEnvValues.length < 3) {
+    throw new Error(
+      'Firestore environment variables incomplete. Provide all of FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY.'
+    );
   }
 
-  const fallbackCredentials = loadCredentialsFromFile();
-  if (fallbackCredentials) {
-    return fallbackCredentials;
+  if (projectId && clientEmail && privateKeyRaw) {
+    return {
+      projectId,
+      clientEmail,
+      privateKey: normalizePrivateKey(privateKeyRaw)
+    };
   }
 
-  console.error('Firestore credentials missing.', {
-    hasProjectId: Boolean(projectId),
-    hasClientEmail: Boolean(clientEmail),
-    hasPrivateKey: Boolean(privateKeyRaw),
-    expectedFilePath: SERVICE_ACCOUNT_PATH
-  });
-
-  return null;
+  return loadCredentialsFromFile();
 }
 
 function getFirestore() {
@@ -102,8 +103,14 @@ function getFirestore() {
     return firestoreInstance;
   }
 
-  const credentials = resolveFirestoreCredentials();
-  if (!credentials) {
+  let credentials;
+  try {
+    credentials = resolveFirestoreCredentials();
+  } catch (credentialError) {
+    console.error('Firestore credential resolution failed.', {
+      message: credentialError?.message,
+      expectedFilePath: SERVICE_ACCOUNT_PATH
+    });
     return null;
   }
 
