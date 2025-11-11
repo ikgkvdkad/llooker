@@ -1,0 +1,13 @@
+{
+  "name": "photo-describer",
+  "version": "1.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "scripts": {
+    "build": "echo \"No build step\"",
+    "lint": "echo \"No lint step\""
+  },
+  "dependencies": {
+    "firebase-admin": "^12.6.0"
+  }
+}
