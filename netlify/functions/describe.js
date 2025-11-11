@@ -126,10 +126,10 @@ function getDatabasePool() {
     return poolInstance;
   }
 
-  const rawConnectionString = process.env.DATABASE_URL?.trim();
+  const rawConnectionString = (process.env.DATABASE_URL || process.env.NETLIFY_DATABASE_URL)?.trim();
 
   if (!rawConnectionString) {
-    console.error('DATABASE_URL environment variable is not set.');
+    console.error('DATABASE_URL or NETLIFY_DATABASE_URL environment variable is not set.');
     return null;
   }
 
@@ -193,7 +193,7 @@ async function ensureTableExists(pool) {
 async function persistDescriptionRecord(recordInput, requestMeta) {
   const pool = getDatabasePool();
   if (!pool) {
-    throw new Error('Database is not configured. Set DATABASE_URL.');
+    throw new Error('Database is not configured. Set DATABASE_URL or NETLIFY_DATABASE_URL.');
   }
 
   try {
@@ -336,7 +336,7 @@ exports.handler = async (event, context) => {
       return {
         statusCode: 500,
         body: JSON.stringify({
-          error: 'Database not configured. Set DATABASE_URL.'
+          error: 'Database not configured. Set DATABASE_URL or NETLIFY_DATABASE_URL.'
         })
       };
     }

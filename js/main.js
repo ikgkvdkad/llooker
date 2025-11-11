@@ -9,6 +9,7 @@ import { renderAppVersion } from './ui.js';
 import { resetDescriptionState } from './description-api.js';
 import { attachUploadHandler, attachResubmitHandlers } from './upload.js';
 import { handlePointerDownOnHalf, handlePointerMoveOnHalf, handlePointerUpOnHalf, handlePointerCancelOnHalf } from './interactions.js';
+import { initHistoryNavigation } from './history.js';
 
 /**
  * Initialize the application
@@ -75,6 +76,9 @@ function init() {
     // Reset description states
     resetDescriptionState('you');
     resetDescriptionState('me');
+    
+    // Initialize history navigation
+    initHistoryNavigation();
 }
 
 // Initialize when DOM is ready

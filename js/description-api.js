@@ -6,6 +6,7 @@ import { getPhotoSlotByDescriptionSide, clampRectToBounds, loadImageElement } fr
 import { snapshotViewportState, clearMovementDebounce } from './zoom.js';
 import { requestCurrentLocation } from './geo.js';
 import { showWarning } from './ui.js';
+import { addToHistory } from './history.js';
 
 /**
  * Reset description state for a side
@@ -469,6 +470,20 @@ async function requestDescription(side, photoDataUrl, viewportSnapshot, options 
 
         if (statusFlag === 'ok' && descriptionText) {
             setDescriptionState(side, 'success', `${label} description ready.`, descriptionText);
+            
+            // Add to history
+            addToHistory(side, {
+                id: Date.now(), // Temporary ID until we get real DB ID
+                description: descriptionText,
+                status: statusFlag,
+                role: side,
+                capturedAt: capturedAt,
+                createdAt: new Date().toISOString(),
+                imageDataUrl: renderedViewportDataUrl,
+                location: locationPayload,
+                tone: tone
+            });
+            
             return;
         }
 

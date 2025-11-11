@@ -55,3 +55,9 @@ export const meUploadButton = document.getElementById('meUploadButton');
 export const youUploadInput = document.getElementById('youUploadInput');
 export const meUploadInput = document.getElementById('meUploadInput');
 
+// History navigation buttons
+export const youPrevButton = document.getElementById('youPrevButton');
+export const youNextButton = document.getElementById('youNextButton');
+export const mePrevButton = document.getElementById('mePrevButton');
+export const meNextButton = document.getElementById('meNextButton');
+

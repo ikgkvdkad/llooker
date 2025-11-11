@@ -129,6 +129,24 @@ export function getDescriptionInFlight() {
     return isDescriptionInFlight;
 }
 
+// History state
+export const historyState = {
+    you: {
+        descriptions: [],
+        currentIndex: -1, // -1 means showing live/latest
+        isLoading: false,
+        hasLoaded: false,
+        total: 0
+    },
+    me: {
+        descriptions: [],
+        currentIndex: -1,
+        isLoading: false,
+        hasLoaded: false,
+        total: 0
+    }
+};
+
 // Camera state
 export let backStream = null;
 export let isBackFrozen = false;

@@ -232,6 +232,46 @@ body {
     transform: scale(0.98);
 }
 
+.history-nav-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    font-size: 20px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.85);
+    background: rgba(255, 255, 255, 0.08);
+    border: 1.5px solid rgba(255, 255, 255, 0.3);
+    border-radius: 6px;
+    padding: 8px;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease, transform 0.1s ease;
+    touch-action: manipulation;
+}
+
+.history-nav-button:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.45);
+    color: rgba(255, 255, 255, 0.95);
+}
+
+.history-nav-button:active:not(:disabled) {
+    background: rgba(255, 255, 255, 0.22);
+    transform: scale(0.96);
+}
+
+.history-nav-button:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.history-nav-button:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.7);
+    outline-offset: 2px;
+}
+
 .camera-control-button.camera-active {
     background: rgba(255, 77, 77, 0.25);
     border-color: rgba(255, 77, 77, 0.6);
