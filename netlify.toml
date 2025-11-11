@@ -3,9 +3,6 @@
   command = "echo 'No build needed'"
   functions = "netlify/functions"
 
-[functions]
-  included_files = ["netlify/firebase-service-account.json"]
-
 [[redirects]]
   from = "/*"
   to = "/index.html"
