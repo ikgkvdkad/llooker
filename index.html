@@ -10,7 +10,10 @@
     <div class="camera-container">
         <div class="camera-row">
             <div class="camera-half left" id="backCameraHalf">
-                <div class="placeholder-text" id="backPlaceholder">You</div>
+                <div class="placeholder-text" id="backPlaceholder">
+                    <img src="img/full-body-silhouette.svg" alt="" class="placeholder-icon" aria-hidden="true">
+                    <span class="placeholder-label">You</span>
+                </div>
                 <video id="backVideoElement" class="video-element" autoplay playsinline></video>
                 <img id="backCapturedPhoto" class="captured-photo" alt="Back camera photo">
                 <div class="selection-overlay" id="backSelectionOverlay" aria-hidden="true">
@@ -24,7 +27,10 @@
             </div>
 
             <div class="camera-half right" id="selfieCameraHalf">
-                <div class="placeholder-text" id="selfiePlaceholder">Me</div>
+                <div class="placeholder-text" id="selfiePlaceholder">
+                    <img src="img/full-body-silhouette.svg" alt="" class="placeholder-icon" aria-hidden="true">
+                    <span class="placeholder-label">Me</span>
+                </div>
                 <video id="selfieVideoElement" class="video-element" autoplay playsinline></video>
                 <img id="selfieCapturedPhoto" class="captured-photo" alt="Selfie photo">
                 <div class="selection-overlay" id="selfieSelectionOverlay" aria-hidden="true">
