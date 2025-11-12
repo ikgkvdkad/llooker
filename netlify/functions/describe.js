@@ -521,14 +521,16 @@ exports.handler = async (event, context) => {
           {
             role: 'system',
             content: [
-              'You provide richly detailed, respectful descriptions of people in images, focusing strictly on non-identifying physical and stylistic attributes.',
-              'Always assess only the individual within the selected area that has been extracted and submitted to you. Focus on the person visible in this framed region.',
+              'You provide concise, descriptive observations of people in images using only concrete characteristics, without category labels or field names.',
+              'Always assess only the individual within the selected area that has been extracted and submitted to you.',
               'If the selected area does not show a clearly discernible person—or the subject is distant, blurred, obstructed, poorly lit, or otherwise indiscernible—respond only with the JSON object {"status":"unclear","description":"Unclear photo"}.',
-              'Otherwise respond with a single JSON object (no code block) shaped exactly as {"status":"ok","description":"Basics: ...\\nClothing & Style: ...\\nAdditional Notes: ..."} and nothing else.',
-              'Within Basics list, in order, apparent age range (or "not clearly visible"), apparent gender (or "not clearly visible"), build, height impression, posture, skin tone, and hairstyle or facial hair. Use concise witness-style phrases and write "not clearly visible" for any detail you cannot confirm.',
-              'Within Clothing & Style summarize visible layers from outermost to innermost, including colors, textures, fit, footwear, and accessories. Always mention dominant colors and say "not clearly visible" when coverage is missing.',
-              'Within Additional Notes add lighting, mood, notable props, or immediate context only when directly observed, and always note distinctive traits that help recognize the same person again (e.g., eye color, facial structure cues, scars, tattoos, piercings) when visible; write "not clearly visible" for any expected detail you cannot confirm, and use "none noted" only when no such observations apply.',
-              'Never guess identities, names, or personal data. Keep clothing colors, textures, posture, lighting, and mood details accurate to what you can see, and always supply all three sections even when details are limited.'
+              'Otherwise respond with a single JSON object (no code block) shaped exactly as {"status":"ok","description":"[your description]"}.',
+              'Your description must be 2-4 simple sentences listing only observable characteristics in this order: age range, gender, build, skin tone, hair details, clothing items with colors, footwear, notable accessories or features.',
+              'Use plain language without labels, categories, or field names. Write as natural descriptive sentences.',
+              'Example format: "25-30 years old, male, average build, light skin tone, short brown hair. Wearing blue jeans, white t-shirt, black leather jacket. Black sneakers, silver watch on left wrist. Casual appearance."',
+              'Never use category labels like "Basics:", "Clothing:", "age:", "height:", "outermost layer:", etc. Only list the actual observations.',
+              'Write "not visible" for specific details you cannot confirm, but do not use structural labels.',
+              'Never guess identities, names, or personal data. Keep all details grounded in what is actually visible.'
             ].join(' ')
           },
           {
@@ -538,9 +540,9 @@ exports.handler = async (event, context) => {
                 type: 'text',
                 text: (
                   role === 'you'
-                    ? 'Describe only the person visible in the selected area from this "You" photo so an artist could recreate them.'
-                    : 'Describe only the sender visible in the selected area from this "Me" selfie.'
-                ) + ' ' + selectionInstruction + ' Confirm that the selected area shows a clearly visible person; if the subject is too far, obstructed, or blurred to describe responsibly, reply with {"status":"unclear","description":"Unclear photo"}. When the subject is clear, respond with {"status":"ok","description":"Basics: ...\nClothing & Style: ...\nAdditional Notes: ..."} using that order and headings. In Basics, provide apparent age range, build, height impression, posture, skin tone, and hairstyle or facial hair; write "not clearly visible" for any detail you cannot confirm. In Clothing & Style, cover layers from outermost to innermost with colors, textures, fit, footwear, and accessories, noting "not clearly visible" when information is missing. In Additional Notes, give lighting, mood, or immediate context only if directly observed; otherwise write "none noted". Keep the description non-identifying and grounded in visible evidence.'
+                    ? 'Describe the person visible in the selected area from this "You" photo.'
+                    : 'Describe the person visible in the selected area from this "Me" selfie.'
+                ) + ' ' + selectionInstruction + ' If the subject is too far, obstructed, or blurred, reply with {"status":"unclear","description":"Unclear photo"}. Otherwise respond with {"status":"ok","description":"[2-4 sentences with age, gender, build, skin tone, hair, clothing colors and items, shoes, accessories]"}. Use only plain descriptive sentences without any category labels or field names. List only the actual observable characteristics.'
               },
               {
                 type: 'image_url',
