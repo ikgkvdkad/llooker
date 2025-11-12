@@ -416,8 +416,31 @@ async function persistDescriptionRecord(recordInput, requestMeta) {
           recordInput.metadata.hairColor || ''
         ].filter(Boolean).join(' ');
         
-        // Discriminative repeated 3x for outfit emphasis
-        embeddingText = `${categorical} ${recordInput.discriminative} ${recordInput.discriminative} ${recordInput.discriminative}`;
+        // Extract OUTER/FIRST items from each category to repeat 3x
+        const discriminativeParts = recordInput.discriminative.split(' ');
+        const distinctiveParts = [];
+        const baseParts = [];
+        
+        for (const part of discriminativeParts) {
+          if (part.includes(':')) {
+            const [key, value] = part.split(':');
+            if (value && value !== 'none') {
+              const items = value.split('+');
+              if (items.length > 0) {
+                distinctiveParts.push(`${key}:${items[0]}`);
+                if (items.length > 1) {
+                  baseParts.push(`${key}-base:${items.slice(1).join('+')}`);
+                }
+              }
+            } else {
+              distinctiveParts.push(part);
+            }
+          }
+        }
+        
+        const distinctive = distinctiveParts.join(' ');
+        const base = baseParts.join(' ');
+        embeddingText = `${categorical} ${distinctive} ${distinctive} ${distinctive} ${base}`;
       }
       
       storeVectorEmbedding(insertedId, embeddingText, {
@@ -800,7 +823,7 @@ exports.handler = async (event, context) => {
     }
 
     // Generate weighted embedding for similarity comparison
-    // Discriminative details repeated 3x to emphasize outfit matching
+    // Only repeat OUTER/DISTINCTIVE layers to avoid shared base layer contamination
     let embedding = null;
     let embeddingText = description; // Fallback to full description
     
@@ -814,14 +837,41 @@ exports.handler = async (event, context) => {
         metadata.hairColor || ''
       ].filter(Boolean).join(' ');
       
-      // Build weighted embedding text: categorical 1x, discriminative 3x
-      embeddingText = `${categorical} ${discriminative} ${discriminative} ${discriminative}`;
+      // Extract OUTER/FIRST items from each category to repeat 3x
+      // This prevents shared base layers (like "black-turtleneck") from dominating
+      const discriminativeParts = discriminative.split(' ');
+      const distinctiveParts = [];
+      const baseParts = [];
+      
+      for (const part of discriminativeParts) {
+        if (part.includes(':')) {
+          const [key, value] = part.split(':');
+          if (value && value !== 'none') {
+            // Extract first item (outer layer) from multi-layered values
+            const items = value.split('+');
+            if (items.length > 0) {
+              distinctiveParts.push(`${key}:${items[0]}`); // Outer layer only
+              if (items.length > 1) {
+                // Keep base layers separate (only once)
+                baseParts.push(`${key}-base:${items.slice(1).join('+')}`);
+              }
+            }
+          } else {
+            distinctiveParts.push(part); // Keep "none" or empty
+          }
+        }
+      }
+      
+      // Build weighted embedding: categorical 1x, distinctive 3x, base 1x
+      const distinctive = distinctiveParts.join(' ');
+      const base = baseParts.join(' ');
+      embeddingText = `${categorical} ${distinctive} ${distinctive} ${distinctive} ${base}`;
       
       // DEBUG: Log what will be embedded
       console.log('Embedding Input:', {
         categorical,
-        discriminativeLength: discriminative.length,
-        discriminativePreview: discriminative.substring(0, 100),
+        distinctive,
+        base,
         totalEmbeddingLength: embeddingText.length,
         embeddingPreview: embeddingText.substring(0, 200)
       });
