@@ -32,6 +32,24 @@ function cosineSimilarity(vecA, vecB) {
 }
 
 /**
+ * Apply non-linear transformation to spread out similarity scores
+ * This makes differences more apparent, especially at lower similarities
+ */
+function transformSimilarity(rawSimilarity) {
+    // Cosine similarity is typically 0.5-1.0 for text embeddings
+    // We want to spread this range out more dramatically
+    
+    // Normalize to 0-1 range (assuming min similarity of 0.4)
+    const normalized = Math.max(0, (rawSimilarity - 0.4) / 0.6);
+    
+    // Apply power function to exaggerate differences
+    // Power of 1.8 makes small differences more visible
+    const transformed = Math.pow(normalized, 1.8);
+    
+    return transformed;
+}
+
+/**
  * Update similarity bar based on current embeddings
  */
 export function updateSimilarityBar() {
@@ -49,17 +67,17 @@ export function updateSimilarityBar() {
         return;
     }
 
-    // Calculate similarity
-    const similarity = cosineSimilarity(youEmbedding, meEmbedding);
+    // Calculate raw cosine similarity
+    const rawSimilarity = cosineSimilarity(youEmbedding, meEmbedding);
 
-    if (similarity === null) {
+    if (rawSimilarity === null) {
         console.warn('Failed to calculate similarity');
         return;
     }
 
-    // Convert to percentage (cosine similarity is between -1 and 1, but embeddings are usually 0-1)
-    // For portrait descriptions, we expect mostly positive similarities
-    const percentage = Math.max(0, Math.min(100, similarity * 100));
+    // Apply transformation to spread out the range
+    const transformedSimilarity = transformSimilarity(rawSimilarity);
+    const percentage = Math.max(0, Math.min(100, transformedSimilarity * 100));
 
     // Update bar height
     if (dom.similarityBarFill) {
@@ -71,7 +89,7 @@ export function updateSimilarityBar() {
         dom.similarityPercentage.textContent = `${Math.round(percentage)}%`;
     }
 
-    console.log(`Similarity updated: ${percentage.toFixed(1)}%`);
+    console.log(`Similarity: raw=${(rawSimilarity * 100).toFixed(1)}%, adjusted=${percentage.toFixed(1)}%`);
 }
 
 /**

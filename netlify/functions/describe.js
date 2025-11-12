@@ -521,16 +521,17 @@ exports.handler = async (event, context) => {
           {
             role: 'system',
             content: [
-              'You provide concise, descriptive observations of people in images using only concrete characteristics, without category labels or field names.',
-              'Always assess only the individual within the selected area that has been extracted and submitted to you.',
-              'If the selected area does not show a clearly discernible person—or the subject is distant, blurred, obstructed, poorly lit, or otherwise indiscernible—respond only with the JSON object {"status":"unclear","description":"Unclear photo"}.',
-              'Otherwise respond with a single JSON object (no code block) shaped exactly as {"status":"ok","description":"[your description]"}.',
-              'Your description must be 2-4 simple sentences listing only observable characteristics in this order: age range, gender, build, skin tone, hair details, clothing items with colors, footwear, notable accessories or features.',
-              'Use plain language without labels, categories, or field names. Write as natural descriptive sentences.',
-              'Example format: "25-30 years old, male, average build, light skin tone, short brown hair. Wearing blue jeans, white t-shirt, black leather jacket. Black sneakers, silver watch on left wrist. Casual appearance."',
-              'Never use category labels like "Basics:", "Clothing:", "age:", "height:", "outermost layer:", etc. Only list the actual observations.',
-              'Write "not visible" for specific details you cannot confirm, but do not use structural labels.',
-              'Never guess identities, names, or personal data. Keep all details grounded in what is actually visible.'
+              'You provide ultra-concise descriptions of people using only directly visible characteristics.',
+              'Always assess only the individual within the selected area.',
+              'If the person is not clearly visible, respond with {"status":"unclear","description":"Unclear photo"}.',
+              'Otherwise respond with {"status":"ok","description":"[description]"}.',
+              'Description format: Single sentence with comma-separated traits. List ONLY what you can clearly see.',
+              'Mandatory order: age-range, gender, build, skin-tone, hair-color-and-style, visible-clothing-with-colors, visible-accessories.',
+              'Example: "25-30, male, slim, light-skin, short-black-hair, blue-jeans white-tshirt black-jacket, silver-watch"',
+              'Use hyphens to connect related words. No articles (a, the), no verbs (wearing, appears), no qualifiers (approximately, seems).',
+              'NEVER mention things not visible. Skip items entirely if not clearly visible.',
+              'NEVER use filler phrases: "not visible", "appears to be", "approximately", "seems", "looks like".',
+              'Be extremely specific with colors and items. Focus on distinctive features that differentiate this person from others.'
             ].join(' ')
           },
           {
@@ -540,9 +541,9 @@ exports.handler = async (event, context) => {
                 type: 'text',
                 text: (
                   role === 'you'
-                    ? 'Describe the person visible in the selected area from this "You" photo.'
-                    : 'Describe the person visible in the selected area from this "Me" selfie.'
-                ) + ' ' + selectionInstruction + ' If the subject is too far, obstructed, or blurred, reply with {"status":"unclear","description":"Unclear photo"}. Otherwise respond with {"status":"ok","description":"[2-4 sentences with age, gender, build, skin tone, hair, clothing colors and items, shoes, accessories]"}. Use only plain descriptive sentences without any category labels or field names. List only the actual observable characteristics.'
+                    ? 'Describe the person in this "You" photo.'
+                    : 'Describe the person in this "Me" selfie.'
+                ) + ' ' + selectionInstruction + ' If unclear, return {"status":"unclear","description":"Unclear photo"}. Otherwise return {"status":"ok","description":"[single sentence, comma-separated traits with hyphens]"}. Format: age-range, gender, build, skin-tone, hair, clothing-with-colors, accessories. Example: "20-25, female, slim, tan-skin, long-blonde-hair, red-dress white-heels, gold-necklace". Only list clearly visible traits. No filler words.'
               },
               {
                 type: 'image_url',
