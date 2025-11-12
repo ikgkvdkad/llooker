@@ -649,6 +649,25 @@ body {
     word-break: break-word;
 }
 
+/* Mobile adjustments */
+@media (max-width: 768px) {
+    .description-half {
+        padding: 12px 10px;
+        gap: 8px;
+    }
+    
+    .similarity-bar-container {
+        width: 32px;
+        min-width: 32px;
+        max-width: 32px;
+        padding: 12px 0;
+    }
+    
+    .similarity-percentage {
+        font-size: 12px;
+    }
+}
+
 .toast-close {
     appearance: none;
     border: none;
