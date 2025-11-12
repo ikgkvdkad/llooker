@@ -711,21 +711,7 @@ exports.handler = async (event, context) => {
     const status = typeof parsed?.status === 'string' ? parsed.status.trim().toLowerCase() : null;
     const description = typeof parsed?.description === 'string' ? parsed.description.trim() : '';
     const metadata = parsed?.metadata && typeof parsed.metadata === 'object' ? parsed.metadata : null;
-    const discriminativeObj = parsed?.discriminative && typeof parsed.discriminative === 'object' ? parsed.discriminative : null;
-    
-    // Convert discriminative object to key:value string for embedding
-    let discriminativeText = '';
-    if (discriminativeObj) {
-      const parts = [];
-      const keys = ['hair_style', 'facial_hair', 'top', 'bottom', 'shoes', 'accessories', 'carried'];
-      for (const key of keys) {
-        const value = discriminativeObj[key];
-        if (value && typeof value === 'string' && value.trim()) {
-          parts.push(`${key}:${value.trim()}`);
-        }
-      }
-      discriminativeText = parts.join(' ');
-    }
+    const discriminative = typeof parsed?.discriminative === 'string' ? parsed.discriminative.trim() : '';
 
     if (status !== 'ok' && status !== 'unclear') {
       return {
@@ -742,11 +728,10 @@ exports.handler = async (event, context) => {
     }
 
     // For 'ok' status, we expect structured data
-    if (status === 'ok' && (!metadata || !discriminativeText)) {
+    if (status === 'ok' && (!metadata || !discriminative)) {
       console.warn('AI response missing metadata or discriminative fields, using fallback', {
         hasMetadata: !!metadata,
-        hasDiscriminative: !!discriminativeText,
-        discriminativeObj: discriminativeObj,
+        hasDiscriminative: !!discriminative,
         requestMeta
       });
     }
