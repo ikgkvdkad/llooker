@@ -572,11 +572,13 @@ exports.handler = async (event, context) => {
               '- hairColor: base color only, e.g. "black", "brown", "blonde", "red", "gray", "white", "bald"',
               '',
               'DISCRIMINATIVE field (structured key:value format - THE MOST CRITICAL):',
-              'This field is for outfit matching - it distinguishes different people at different times.',
-              'Format: "key:value key:value key:value" - each category separated by space',
-              'Required keys: hair, face, top, bottom, shoes, accessories, carried',
+              '!!!CRITICAL FORMAT REQUIREMENT!!!',
+              'You MUST return EXACTLY this format: "key:value key:value key:value"',
+              'DO NOT use commas. DO NOT use sentences. ONLY key:value pairs separated by spaces.',
+              'Required keys IN ORDER: hair face top bottom shoes accessories carried',
+              'Example: "hair:shoulder-red face:none top:gray-coat+black-turtleneck bottom:black-pants shoes:black-boots accessories:sunglasses carried:coffee-cup"',
               '',
-              'VALUE FORMAT - Use ONLY hyphens, be maximally specific, NO FILLER WORDS:',
+              'VALUE FORMAT - Use ONLY hyphens and + symbols, be maximally specific, NO FILLER WORDS:',
               '- hair: texture-length-color-style (shoulder-wavy-brown, short-buzzcut-black, long-straight-blonde-ponytail)',
               '- face: full-beard, goatee, mustache, stubble, clean-shaven, none',
               '- top: list ALL layers outer-to-inner separated by + (denim-jacket-blue+black-turtleneck, white-Nike-shirt-red-swoosh, gray-coat-oversized+black-turtleneck)',
@@ -616,7 +618,7 @@ exports.handler = async (event, context) => {
                   role === 'you'
                     ? 'Describe the person in this "You" photo with MAXIMUM detail.'
                     : 'Describe the person in this "Me" selfie with MAXIMUM detail.'
-                ) + ' ' + selectionInstruction + ' This is for temporal matching - same person at same time will have same outfit. Photos may be taken 10 minutes apart, so exclude transient details (gestures, poses, expressions). If unclear, return {"status":"unclear","description":"Unclear photo"}. Otherwise return structured JSON with metadata (object) and discriminative (STRING in key:value format). CRITICAL: discriminative must be "key:value key:value" format with ZERO filler words. NO "wearing", "with", "and", "paired", "over", "the", "a". Use + to separate multiple items, hyphens to connect words. Include ALL patterns, logos, brands. Example: "hair:shoulder-wavy-brown face:none top:denim-jacket-blue+black-turtleneck bottom:gray-maxi-skirt shoes:black-flats accessories:brown-leather-tote carried:none". For layered clothing, list outer+inner (coat+shirt). Be maximally specific with colors/patterns/brands.'
+                ) + ' ' + selectionInstruction + ' This is for temporal matching - same person at same time will have same outfit. Photos may be taken 10 minutes apart, so exclude transient details (gestures, poses, expressions). If unclear, return {"status":"unclear","description":"Unclear photo"}. Otherwise return structured JSON with metadata (object) and discriminative (STRING - MUST be key:value format). CRITICAL FORMAT: discriminative MUST be "key:value key:value" with spaces between pairs, NO COMMAS, NO SENTENCES. Example CORRECT: "hair:shoulder-red face:none top:gray-coat+black-turtleneck bottom:black-pants shoes:black-boots accessories:sunglasses carried:coffee-cup". Example WRONG: "Gray coat, black turtleneck, black pants". Use + for multiple items (coat+shirt), hyphens to connect words (ankle-boots). Include ALL patterns, logos, brands. Required keys: hair face top bottom shoes accessories carried.'
               },
               {
                 type: 'image_url',
@@ -711,7 +713,28 @@ exports.handler = async (event, context) => {
     const status = typeof parsed?.status === 'string' ? parsed.status.trim().toLowerCase() : null;
     const description = typeof parsed?.description === 'string' ? parsed.description.trim() : '';
     const metadata = parsed?.metadata && typeof parsed.metadata === 'object' ? parsed.metadata : null;
-    const discriminative = typeof parsed?.discriminative === 'string' ? parsed.discriminative.trim() : '';
+    let discriminative = typeof parsed?.discriminative === 'string' ? parsed.discriminative.trim() : '';
+
+    // Validate discriminative format (must be key:value pairs)
+    if (discriminative && status === 'ok') {
+      const hasKeyValueFormat = discriminative.includes('hair:') && 
+                                 discriminative.includes('top:') && 
+                                 discriminative.includes('bottom:');
+      
+      if (!hasKeyValueFormat) {
+        console.error('AI returned invalid discriminative format (not key:value):', {
+          discriminative: discriminative.substring(0, 200),
+          requestMeta
+        });
+        return {
+          statusCode: 500,
+          body: JSON.stringify({ 
+            error: 'AI returned invalid format - discriminative field must use key:value structure',
+            details: 'Expected format: "hair:X face:Y top:Z bottom:W shoes:Q accessories:A carried:C"'
+          })
+        };
+      }
+    }
 
     if (status !== 'ok' && status !== 'unclear') {
       return {
