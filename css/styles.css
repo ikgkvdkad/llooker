@@ -103,6 +103,8 @@ body {
 .description-half {
     position: relative;
     width: calc(50% - 20px);
+    flex: 1 1 calc(50% - 20px);
+    min-width: 0;
     height: 100%;
     padding: 20px 18px;
     display: flex;
@@ -118,6 +120,9 @@ body {
 
 .similarity-bar-container {
     width: 40px;
+    min-width: 40px;
+    max-width: 40px;
+    flex-shrink: 0;
     position: relative;
     display: flex;
     flex-direction: column;
