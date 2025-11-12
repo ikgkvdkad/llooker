@@ -50,7 +50,7 @@ function checkMetadataCompatibility(metadata1, metadata2) {
         }
     }
 
-    // Calculate age overlap
+    // Calculate age compatibility (lenient - AI estimates can be off by one range)
     let ageScore = 1.0;
     if (metadata1.ageRange && metadata2.ageRange) {
         const parseAgeRange = (range) => {
@@ -61,22 +61,27 @@ function checkMetadataCompatibility(metadata1, metadata2) {
         const age1 = parseAgeRange(metadata1.ageRange);
         const age2 = parseAgeRange(metadata2.ageRange);
 
-        // Calculate overlap
-        const overlapMin = Math.max(age1.min, age2.min);
-        const overlapMax = Math.min(age1.max, age2.max);
-        const overlap = Math.max(0, overlapMax - overlapMin);
+        // Calculate midpoints for distance-based scoring
+        const mid1 = (age1.min + age1.max) / 2;
+        const mid2 = (age2.min + age2.max) / 2;
+        const distance = Math.abs(mid1 - mid2);
 
-        const range1 = age1.max - age1.min;
-        const range2 = age2.max - age2.min;
-        const avgRange = (range1 + range2) / 2;
-
-        ageScore = avgRange > 0 ? Math.min(1.0, overlap / avgRange) : 1.0;
-
-        // FATAL: No age overlap at all
-        if (overlap <= 0) {
-            console.log('Metadata filter: No age overlap - returning 0%');
-            return 0.0;
+        // Lenient scoring: 
+        // 0-5 years apart = 100%
+        // 5-15 years apart = 80-100% (gradual decline)
+        // 15-30 years apart = 30-80% (steeper decline)
+        // 30+ years apart = 0-30% (very low but not fatal)
+        if (distance <= 5) {
+            ageScore = 1.0;
+        } else if (distance <= 15) {
+            ageScore = 1.0 - ((distance - 5) / 10) * 0.2; // 100% -> 80%
+        } else if (distance <= 30) {
+            ageScore = 0.8 - ((distance - 15) / 15) * 0.5; // 80% -> 30%
+        } else {
+            ageScore = Math.max(0.1, 0.3 - ((distance - 30) / 30) * 0.2); // 30% -> 10%
         }
+
+        console.log(`Age compatibility: ${metadata1.ageRange} vs ${metadata2.ageRange}, distance=${distance.toFixed(1)}y, score=${(ageScore*100).toFixed(0)}%`);
     }
 
     // Other categorical compatibility (softer)

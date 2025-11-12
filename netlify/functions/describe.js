@@ -579,6 +579,12 @@ exports.handler = async (event, context) => {
               '- Clothing: EVERY piece with patterns/logos/brands/colors/textures (white-Nike-shirt-red-swoosh, navy-blue-tie-white-polka-dots, black-leather-jacket)',
               '- Accessories: ALL visible items with details (gold-wedding-band-left-hand, silver-watch-black-band, black-framed-glasses, brown-leather-belt)',
               '- Objects carried: backpack, purse, phone, etc.',
+              'CRITICAL EXCLUSIONS - DO NOT include these transient details (photos may be taken minutes apart):',
+              '- NO gestures (thumbs-up, peace-sign, waving, pointing)',
+              '- NO hand positions or arm positions',
+              '- NO facial expressions (smiling, frowning, looking-away)',
+              '- NO body poses (standing, sitting, leaning)',
+              '- ONLY include appearance details that persist across a session',
               'Format: comma-separated list of hyphenated traits.',
               'Example: "short-wavy-brown-hair clean-shaven, white-Adidas-shirt-three-stripes navy-blue-tie-white-polka-dots black-suit-jacket, gold-wedding-band-left-hand silver-digital-watch"',
               '',
@@ -599,7 +605,7 @@ exports.handler = async (event, context) => {
                   role === 'you'
                     ? 'Describe the person in this "You" photo with MAXIMUM detail.'
                     : 'Describe the person in this "Me" selfie with MAXIMUM detail.'
-                ) + ' ' + selectionInstruction + ' This is for temporal matching - same person at same time will have same outfit. If unclear, return {"status":"unclear","description":"Unclear photo"}. Otherwise return structured JSON with metadata (categorical traits) and discriminative (outfit details). Focus especially on OUTFIT - include patterns, logos, brands, specific colors, textures. The discriminative field is THE KEY for matching - be maximally specific.'
+                ) + ' ' + selectionInstruction + ' This is for temporal matching - same person at same time will have same outfit. Photos may be taken 10 minutes apart, so exclude transient details (gestures, hand positions, facial expressions, poses). If unclear, return {"status":"unclear","description":"Unclear photo"}. Otherwise return structured JSON with metadata (categorical traits) and discriminative (persistent outfit/hairstyle details ONLY). Focus especially on OUTFIT - include patterns, logos, brands, specific colors, textures. The discriminative field is THE KEY for matching - be maximally specific about clothing/accessories/hairstyle, ignore gestures/poses.'
               },
               {
                 type: 'image_url',
