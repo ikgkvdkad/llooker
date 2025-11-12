@@ -428,29 +428,24 @@ async function activateBackStream(stream) {
  * Activate selfie camera stream
  */
 async function activateSelfieStream(stream) {
-    setSelfieStream(stream);
-    dom.selfieVideoElement.srcObject = stream;
-    const selfieTrack = stream?.getVideoTracks()[0];
-
     const zoomResult = await applyZoomSetting(stream, SELFIE_ZOOM_MODE);
     if (!zoomResult.success) {
         stopStream(stream);
-        setSelfieStream(null);
-        dom.selfieVideoElement.srcObject = null;
-        showError('Selfie camera: ' + zoomResult.reason);
+        showError('Me camera (requires 2x zoom): ' + zoomResult.reason);
         return false;
     }
+
+    const selfieTrack = stream?.getVideoTracks()[0];
     initializeZoomStateFromTrack('selfie', selfieTrack);
 
-    let zoomWarningMessage = zoomResult.warning
-        ? 'Selfie camera: ' + zoomResult.warning + ' Displaying the default field of view.'
-        : null;
+    setSelfieStream(stream);
+    dom.selfieVideoElement.srcObject = stream;
 
     try {
         const shouldVerifyZoom = typeof zoomResult.appliedZoom === 'number';
         const expectedZoom = shouldVerifyZoom
             ? zoomResult.appliedZoom
-            : undefined;
+            : SELFIE_ZOOM_MODE;
 
         const zoomVerificationPromise = shouldVerifyZoom
             ? waitForZoomToSettle(selfieTrack, expectedZoom)
@@ -462,36 +457,55 @@ async function activateSelfieStream(stream) {
         ]);
 
         if (shouldVerifyZoom && !zoomSettled.success) {
-            const warning = 'Selfie camera: ' + zoomSettled.reason + ' Displaying the default field of view.';
-            console.warn('Selfie camera zoom verification failed:', zoomSettled.reason);
-            zoomWarningMessage = warning;
+            stopStream(stream);
+            setSelfieStream(null);
+            dom.selfieVideoElement.srcObject = null;
+            showError('Me camera (requires 2x zoom): ' + zoomSettled.reason);
+            return false;
+        }
+
+        if (shouldVerifyZoom) {
+            const verifiedZoom = typeof zoomSettled.appliedZoom === 'number'
+                ? zoomSettled.appliedZoom
+                : (typeof selfieTrack?.getSettings === 'function' ? selfieTrack.getSettings().zoom : undefined);
+
+            if (typeof verifiedZoom === 'number' && Math.abs(verifiedZoom - expectedZoom) > 0.05) {
+                stopStream(stream);
+                setSelfieStream(null);
+                dom.selfieVideoElement.srcObject = null;
+                showError('Me camera (requires 2x zoom): Device reported ' + verifiedZoom.toFixed(2) + 'x zoom.');
+                return false;
+            }
+
+            const selfieState = interactionState.selfie;
+            if (selfieState) {
+                selfieState.streamZoom.current = typeof verifiedZoom === 'number' ? verifiedZoom : expectedZoom;
+            }
+        } else if (typeof zoomResult.appliedZoom === 'number') {
+            const selfieState = interactionState.selfie;
+            if (selfieState) {
+                selfieState.streamZoom.current = zoomResult.appliedZoom;
+            }
+        }
+
+        const videoWidth = dom.selfieVideoElement.videoWidth;
+        const videoHeight = dom.selfieVideoElement.videoHeight;
+        if (videoWidth && videoHeight) {
+            updateCameraHalfAspect('selfie', videoWidth / videoHeight);
+        } else {
+            console.warn('Me camera metadata unavailable after initialization.');
         }
     } catch (error) {
-        console.error('Selfie camera stream failed to become ready:', error);
+        console.error('Me camera stream failed to become ready:', error);
         stopStream(stream);
         setSelfieStream(null);
         dom.selfieVideoElement.srcObject = null;
-        showError('Selfie camera: Unable to load camera stream.');
+        showError('Me camera (requires 2x zoom): Unable to load camera stream.');
         return false;
     }
 
-    const videoWidth = dom.selfieVideoElement.videoWidth;
-    const videoHeight = dom.selfieVideoElement.videoHeight;
-    if (videoWidth && videoHeight) {
-        updateCameraHalfAspect('selfie', videoWidth / videoHeight);
-    } else {
-        console.warn('Selfie camera metadata unavailable after initialization.');
-    }
-
-    if (typeof zoomResult.appliedZoom === 'number') {
-        const selfieState = interactionState.selfie;
-        if (selfieState) {
-            selfieState.streamZoom.current = zoomResult.appliedZoom;
-        }
-    }
-
-    if (zoomWarningMessage) {
-        showWarning(zoomWarningMessage);
+    if (zoomResult.warning) {
+        showWarning('Me camera: ' + zoomResult.warning + ' Displaying the default field of view.');
     } else {
         hideError();
     }
@@ -605,88 +619,44 @@ export async function openSelfieCamera() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: {
-                    facingMode: 'user',
+                    facingMode: 'environment',
                     width: { ideal: 1920 },
-                    height: { ideal: 1080 }
+                    height: { ideal: 1080 },
+                    advanced: [{ zoom: BACK_TARGET_ZOOM }]
                 }
             });
             const activated = await activateSelfieStream(stream);
             if (!activated) {
                 return;
             }
-            
         } catch (error) {
-            console.error('Error accessing selfie camera:', error);
+            console.error('Error accessing me camera:', error);
 
-            const errorMessageText = error?.message || '';
-            const shouldRetryAfterRelease = error?.name === 'NotReadableError'
-                || /could not start video source/i.test(errorMessageText);
-
-            if (shouldRetryAfterRelease) {
-                await stopAllCamerasAndWait();
-                await new Promise(resolve => setTimeout(resolve, 150));
-
+            if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+                showError('Me camera access was denied.');
+            } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+                showError('No back camera found for the Me view.');
+            } else {
                 try {
-                    const retryStream = await navigator.mediaDevices.getUserMedia({
-                        video: {
-                            facingMode: 'user',
-                            width: { ideal: 1920 },
-                            height: { ideal: 1080 }
-                        }
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: 'environment' }
                     });
-                    const activated = await activateSelfieStream(retryStream);
-                    if (activated) {
-                        return;
-                    }
-                } catch (retryError) {
-                    console.error('Selfie camera retry after release failed:', retryError);
-                }
-            }
-            
-            try {
-                const devices = await navigator.mediaDevices.enumerateDevices();
-                const videoDevices = devices.filter(device => device.kind === 'videoinput');
-                
-                if (videoDevices.length > 1) {
-                    const backStream = getBackStream();
-                    const backTrack = backStream?.getVideoTracks()[0];
-                    const backDeviceId = backTrack?.getSettings().deviceId;
-                    
-                    const frontDevice = videoDevices.find(device => 
-                        device.deviceId && device.deviceId !== backDeviceId
-                    );
-                    
-                    if (frontDevice && frontDevice.deviceId) {
-                        const stream = await navigator.mediaDevices.getUserMedia({
-                            video: { deviceId: { exact: frontDevice.deviceId } }
-                        });
-                        const activated = await activateSelfieStream(stream);
-                        if (!activated) {
-                            return;
-                        }
-                        return;
-                    }
-                }
-                
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: 'user' } 
-                });
-                const activated = await activateSelfieStream(stream);
-                if (!activated) {
-                    return;
-                }
-                
-            } catch (retryError) {
-                console.error('Retry failed:', retryError);
-                try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
                     const activated = await activateSelfieStream(stream);
                     if (!activated) {
                         return;
                     }
-                } catch (finalError) {
-                    console.error('Final attempt failed:', finalError);
-                    showError('Selfie camera: ' + (finalError.message || 'Unable to access front camera.'));
+                } catch (retryError) {
+                    console.warn('Me camera fallback without zoom constraint failed, retrying with generic video request.', retryError);
+                    try {
+                        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                        const activated = await activateSelfieStream(stream);
+                        if (!activated) {
+                            return;
+                        }
+                    } catch (finalRetryError) {
+                        console.error('Final attempt to access me camera failed:', finalRetryError);
+                        showError('Failed to access me camera.');
+                    }
                 }
             }
         }

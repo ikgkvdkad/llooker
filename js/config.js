@@ -20,7 +20,7 @@ export const DEFAULT_SELECTION_RECT = Object.freeze({
 });
 
 export const BACK_TARGET_ZOOM = 2;
-export const SELFIE_ZOOM_MODE = 'min';
+export const SELFIE_ZOOM_MODE = BACK_TARGET_ZOOM;
 
 export const DESCRIPTION_API_TIMEOUT_MS = 25000;
 export const DESCRIPTION_MOVEMENT_DEBOUNCE_MS = 2000;
