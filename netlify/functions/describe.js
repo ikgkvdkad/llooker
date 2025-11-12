@@ -521,17 +521,19 @@ exports.handler = async (event, context) => {
           {
             role: 'system',
             content: [
-              'You provide ultra-concise descriptions of people using only directly visible characteristics.',
+              'You provide maximally detailed descriptions for life-or-death person identification. Every visible detail matters.',
               'Always assess only the individual within the selected area.',
               'If the person is not clearly visible, respond with {"status":"unclear","description":"Unclear photo"}.',
               'Otherwise respond with {"status":"ok","description":"[description]"}.',
-              'Description format: Single sentence with comma-separated traits. List ONLY what you can clearly see.',
-              'Mandatory order: age-range, gender, build, skin-tone, hair-color-and-style, visible-clothing-with-colors, visible-accessories.',
-              'Example: "25-30, male, slim, light-skin, short-black-hair, blue-jeans white-tshirt black-jacket, silver-watch"',
-              'Use hyphens to connect related words. No articles (a, the), no verbs (wearing, appears), no qualifiers (approximately, seems).',
-              'NEVER mention things not visible. Skip items entirely if not clearly visible.',
-              'NEVER use filler phrases: "not visible", "appears to be", "approximately", "seems", "looks like".',
-              'Be extremely specific with colors and items. Focus on distinctive features that differentiate this person from others.'
+              'Description format: Single sentence with comma-separated traits. List EVERY detail you can see.',
+              'Mandatory order: age-range, gender, build, skin-tone, hair-color-texture-and-style, clothing-with-ALL-details, accessories-with-details.',
+              'For CLOTHING: Include patterns (polka-dots, stripes, plaid, checkered), logos/brands (Nike, Adidas, visible text), textures (leather, denim, cotton), specific colors (navy-blue not blue, burgundy-red not red), details (buttons, collar-style, pockets, zippers).',
+              'For HAIR: Include texture (wavy, straight, curly, kinky), style (ponytail, bun, braided, dreadlocks, buzzcut), facial-hair (stubble, full-beard, goatee, mustache).',
+              'For ACCESSORIES: Include specific details (gold-wedding-band, silver-chain-cross-pendant, black-framed-glasses, leather-brown-belt).',
+              'Example: "25-30, male, athletic-build, light-skin, short-wavy-brown-hair, white-Adidas-shirt-three-stripes navy-blue-tie-white-polka-dots black-suit-jacket, gold-wedding-band-left-hand"',
+              'Use hyphens to connect all related words. No articles, no verbs, no qualifiers.',
+              'CRITICAL: Patterns, logos, and distinctive features are ESSENTIAL for identification. Never generalize - be maximally specific.',
+              'NEVER skip visible details no matter how small. A pattern or logo could be the key identifier.'
             ].join(' ')
           },
           {
@@ -541,9 +543,9 @@ exports.handler = async (event, context) => {
                 type: 'text',
                 text: (
                   role === 'you'
-                    ? 'Describe the person in this "You" photo.'
-                    : 'Describe the person in this "Me" selfie.'
-                ) + ' ' + selectionInstruction + ' If unclear, return {"status":"unclear","description":"Unclear photo"}. Otherwise return {"status":"ok","description":"[single sentence, comma-separated traits with hyphens]"}. Format: age-range, gender, build, skin-tone, hair, clothing-with-colors, accessories. Example: "20-25, female, slim, tan-skin, long-blonde-hair, red-dress white-heels, gold-necklace". Only list clearly visible traits. No filler words.'
+                    ? 'Describe the person in this "You" photo with MAXIMUM detail.'
+                    : 'Describe the person in this "Me" selfie with MAXIMUM detail.'
+                ) + ' ' + selectionInstruction + ' This is for critical identification - every detail matters. If unclear, return {"status":"unclear","description":"Unclear photo"}. Otherwise return {"status":"ok","description":"[single sentence with ALL visible details]"}. Include: age-range, gender, build, skin-tone, hair-texture-and-style, clothing-WITH-PATTERNS-LOGOS-BRANDS-TEXTURES-COLORS, accessories-with-specifics. Example: "30-35, male, average-build, medium-skin, short-curly-black-hair-full-beard, white-Nike-shirt-swoosh-logo navy-striped-tie gray-suit-jacket, silver-watch-left-wrist black-framed-glasses". Include patterns (dots, stripes), logos (Nike, Adidas), brands, textures. Be maximally specific.'
               },
               {
                 type: 'image_url',
@@ -555,7 +557,7 @@ exports.handler = async (event, context) => {
             ]
           }
         ],
-        max_tokens: 300
+        max_tokens: 400
       })
     });
 
