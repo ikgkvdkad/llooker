@@ -7,7 +7,7 @@ import { snapshotViewportState, clearMovementDebounce } from './zoom.js';
 import { requestCurrentLocation } from './geo.js';
 import { showWarning } from './ui.js';
 import { addToHistory } from './history.js';
-import { storeEmbedding } from './similarity.js';
+import { storePhotoData } from './similarity.js';
 
 /**
  * Reset description state for a side
@@ -476,12 +476,9 @@ async function requestDescription(side, photoDataUrl, viewportSnapshot, options 
             console.log(`=== ${label.toUpperCase()} API RESPONSE ===`);
             console.log('Discriminative:', payload.discriminative || 'MISSING');
             console.log('Metadata:', payload.metadata || 'MISSING');
-            console.log('Embedding dimensions:', payload.embedding?.length || 'MISSING');
             
-            // Store embedding and metadata for similarity comparison
-            if (payload.embedding && Array.isArray(payload.embedding)) {
-                storeEmbedding(side, payload.embedding, payload.metadata || null);
-            }
+            // Store photo data for AI vision-based similarity comparison
+            storePhotoData(side, renderedViewportDataUrl, payload.metadata || null, capturedAt);
             
             // Add to history
             addToHistory(side, {

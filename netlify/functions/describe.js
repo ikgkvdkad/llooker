@@ -1,8 +1,6 @@
 const { Pool } = require('pg');
-const { Pinecone } = require('@pinecone-database/pinecone');
 
 const DEFAULT_TABLE_NAME = 'portrait_descriptions';
-const PINECONE_INDEX_NAME = 'llooker2';
 
 function resolveTableName() {
   const configured = process.env.DESCRIPTIONS_TABLE;
@@ -25,7 +23,6 @@ function resolveTableName() {
 const TABLE_NAME = resolveTableName();
 let poolInstance = null;
 let ensureTablePromise = null;
-let pineconeClient = null;
 
 function estimateImageBytesFromDataUrl(dataUrl) {
   if (typeof dataUrl !== 'string') {
@@ -155,148 +152,7 @@ function getDatabasePool() {
   return poolInstance;
 }
 
-function getPineconeClient() {
-  if (pineconeClient) {
-    return pineconeClient;
-  }
-
-  const apiKey = process.env.PINECONEKEY || process.env.PINECONE_API_KEY;
-  
-  if (!apiKey) {
-    console.warn('Pinecone API key not configured. Vector embeddings will not be stored.');
-    return null;
-  }
-
-  try {
-    pineconeClient = new Pinecone({
-      apiKey: apiKey
-    });
-    return pineconeClient;
-  } catch (error) {
-    console.error('Failed to initialize Pinecone client:', error);
-    return null;
-  }
-}
-
-async function generateEmbedding(text, apiKey) {
-  if (!text || typeof text !== 'string') {
-    throw new Error('Invalid text for embedding generation');
-  }
-
-  const response = await fetch('https://api.openai.com/v1/embeddings', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model: 'text-embedding-3-small',
-      input: text,
-      encoding_format: 'float'
-    })
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => '');
-    throw new Error(`OpenAI Embedding API error: ${response.status} ${errorText}`);
-  }
-
-  const data = await response.json();
-  return data.data[0].embedding;
-}
-
-async function storeVectorEmbedding(recordId, embeddingText, metadata) {
-  const pc = getPineconeClient();
-  
-  if (!pc) {
-    console.warn('Pinecone not configured. Skipping vector storage.');
-    return null;
-  }
-
-  const apiKey = process.env.OPENAI_API_KEY || process.env.OPENAIKEY;
-  
-  if (!apiKey) {
-    console.warn('OpenAI API key not configured. Cannot generate embeddings.');
-    return null;
-  }
-
-  try {
-    // Generate embedding from weighted text
-    const embedding = await generateEmbedding(embeddingText, apiKey);
-
-    if (!embedding || !Array.isArray(embedding) || embedding.length !== 1536) {
-      throw new Error(`Invalid embedding dimensions: ${embedding?.length}`);
-    }
-
-    // Get index
-    const index = pc.index(PINECONE_INDEX_NAME);
-
-    // Prepare structured metadata for Pinecone
-    const pineconeMetadata = {
-      dbId: recordId.toString(),
-      role: metadata.role || 'unknown',
-      status: metadata.status || 'ok',
-      capturedAt: metadata.capturedAt || new Date().toISOString(),
-      createdAt: metadata.createdAt || new Date().toISOString()
-    };
-
-    // Add categorical metadata (for filtering)
-    if (metadata.personMetadata) {
-      pineconeMetadata.gender = metadata.personMetadata.gender || 'unknown';
-      pineconeMetadata.ageRange = metadata.personMetadata.ageRange || 'unknown';
-      pineconeMetadata.build = metadata.personMetadata.build || 'unknown';
-      pineconeMetadata.skinTone = metadata.personMetadata.skinTone || 'unknown';
-      pineconeMetadata.hairColor = metadata.personMetadata.hairColor || 'unknown';
-    }
-
-    // Add discriminative text (for reference, truncated)
-    if (metadata.discriminative) {
-      pineconeMetadata.discriminative = metadata.discriminative.substring(0, 500);
-    }
-
-    // Add description (for reference, truncated)
-    if (metadata.description) {
-      pineconeMetadata.description = metadata.description.substring(0, 500);
-    }
-
-    // Add location if available
-    if (metadata.location) {
-      const loc = typeof metadata.location === 'string' 
-        ? JSON.parse(metadata.location) 
-        : metadata.location;
-      
-      if (loc.status === 'ok' && loc.coordinates) {
-        pineconeMetadata.latitude = loc.coordinates.latitude;
-        pineconeMetadata.longitude = loc.coordinates.longitude;
-        pineconeMetadata.accuracy = loc.accuracy || null;
-        pineconeMetadata.hasLocation = true;
-      } else {
-        pineconeMetadata.hasLocation = false;
-      }
-    } else {
-      pineconeMetadata.hasLocation = false;
-    }
-
-    // Upsert to Pinecone
-    await index.upsert([{
-      id: `desc_${recordId}`,
-      values: embedding,
-      metadata: pineconeMetadata
-    }]);
-
-    console.log(`Successfully stored embedding for record ${recordId} in Pinecone`);
-    return `desc_${recordId}`;
-
-  } catch (error) {
-    console.error('Failed to store vector embedding:', {
-      message: error?.message,
-      stack: error?.stack,
-      recordId
-    });
-    // Don't fail the whole request if vector storage fails
-    return null;
-  }
-}
+// Pinecone and embedding functions removed - using AI vision-based matching instead
 
 async function ensureTableExists(pool) {
   if (!pool) {
@@ -402,64 +258,7 @@ async function persistDescriptionRecord(recordInput, requestMeta) {
     const result = await pool.query(insertQuery);
     const insertedId = result.rows?.[0]?.id ?? null;
     
-    // Store vector embedding asynchronously (don't wait for it)
-    if (insertedId && recordInput.status === 'ok') {
-      // Build weighted embedding text if metadata available
-      let embeddingText = recordInput.description;
-      
-      if (recordInput.metadata && recordInput.discriminative) {
-        const categorical = [
-          recordInput.metadata.ageRange || '',
-          recordInput.metadata.gender || '',
-          recordInput.metadata.build || '',
-          recordInput.metadata.skinTone || '',
-          recordInput.metadata.hairColor || ''
-        ].filter(Boolean).join(' ');
-        
-        // Extract OUTER/FIRST items from each category to repeat 3x
-        const discriminativeParts = recordInput.discriminative.split(' ');
-        const distinctiveParts = [];
-        const baseParts = [];
-        
-        for (const part of discriminativeParts) {
-          if (part.includes(':')) {
-            const [key, value] = part.split(':');
-            if (value && value !== 'none') {
-              const items = value.split('+');
-              if (items.length > 0) {
-                distinctiveParts.push(`${key}:${items[0]}`);
-                if (items.length > 1) {
-                  baseParts.push(`${key}-base:${items.slice(1).join('+')}`);
-                }
-              }
-            } else {
-              distinctiveParts.push(part);
-            }
-          }
-        }
-        
-        const distinctive = distinctiveParts.join(' ');
-        const base = baseParts.join(' ');
-        embeddingText = `${categorical} ${distinctive} ${distinctive} ${distinctive} ${base}`;
-        
-        console.log('=== PINECONE EMBEDDING ===');
-        console.log('Distinctive (outer):', distinctive);
-        console.log('Base (inner):', base);
-      }
-      
-      storeVectorEmbedding(insertedId, embeddingText, {
-        role: recordInput.role,
-        status: recordInput.status,
-        personMetadata: recordInput.metadata,
-        discriminative: recordInput.discriminative,
-        description: recordInput.description,
-        capturedAt: capturedAtDate?.toISOString() || new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-        location: locationDoc
-      }).catch(err => {
-        console.error('Vector embedding storage failed (non-blocking):', err);
-      });
-    }
+    // Vector embedding removed - using AI vision-based matching instead
     
     return insertedId;
   } catch (databaseError) {
@@ -826,69 +625,7 @@ exports.handler = async (event, context) => {
       };
     }
 
-    // Generate weighted embedding for similarity comparison
-    // Only repeat OUTER/DISTINCTIVE layers to avoid shared base layer contamination
-    let embedding = null;
-    let embeddingText = description; // Fallback to full description
-    
-    if (status === 'ok' && metadata && discriminative) {
-      // Build categorical part (1x)
-      const categorical = [
-        metadata.ageRange || '',
-        metadata.gender || '',
-        metadata.build || '',
-        metadata.skinTone || '',
-        metadata.hairColor || ''
-      ].filter(Boolean).join(' ');
-      
-      // Extract OUTER/FIRST items from each category to repeat 3x
-      // This prevents shared base layers (like "black-turtleneck") from dominating
-      const discriminativeParts = discriminative.split(' ');
-      const distinctiveParts = [];
-      const baseParts = [];
-      
-      for (const part of discriminativeParts) {
-        if (part.includes(':')) {
-          const [key, value] = part.split(':');
-          if (value && value !== 'none') {
-            // Extract first item (outer layer) from multi-layered values
-            const items = value.split('+');
-            if (items.length > 0) {
-              distinctiveParts.push(`${key}:${items[0]}`); // Outer layer only
-              if (items.length > 1) {
-                // Keep base layers separate (only once)
-                baseParts.push(`${key}-base:${items.slice(1).join('+')}`);
-              }
-            }
-          } else {
-            distinctiveParts.push(part); // Keep "none" or empty
-          }
-        }
-      }
-      
-      // Build weighted embedding: categorical 1x, distinctive 3x, base 1x
-      const distinctive = distinctiveParts.join(' ');
-      const base = baseParts.join(' ');
-      embeddingText = `${categorical} ${distinctive} ${distinctive} ${distinctive} ${base}`;
-      
-      // DEBUG: Log what will be embedded with full details
-      console.log('=== EMBEDDING CONSTRUCTION ===');
-      console.log('Original discriminative:', discriminative);
-      console.log('Extracted distinctive (outer layers):', distinctive);
-      console.log('Extracted base (inner layers):', base);
-      console.log('Final embedding text:', embeddingText.substring(0, 300));
-      console.log('Distinctive repeat count: 3x, Base repeat count: 1x');
-    }
-    
-    try {
-      const openaiKey = process.env.OPENAI_API_KEY || process.env.OPENAIKEY;
-      if (openaiKey) {
-        embedding = await generateEmbedding(embeddingText, openaiKey);
-      }
-    } catch (embeddingError) {
-      console.warn('Failed to generate embedding for response:', embeddingError);
-      // Don't fail the request if embedding generation fails
-    }
+    // Embedding generation removed - using AI vision-based matching instead
 
     return {
       statusCode: 200,
@@ -900,7 +637,6 @@ exports.handler = async (event, context) => {
         description,
         metadata: metadata || {},
         discriminative: discriminative || '',
-        embedding: embedding,
         recordId: recordId
       })
     };

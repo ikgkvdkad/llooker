@@ -9,6 +9,6 @@
   },
   "dependencies": {
     "pg": "^8.12.0",
-    "@pinecone-database/pinecone": "^3.0.0"
+    "openai": "^4.67.3"
   }
 }

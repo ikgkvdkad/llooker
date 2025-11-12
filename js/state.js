@@ -109,16 +109,20 @@ export const descriptionState = {
         panel: dom.youDescriptionPanel,
         statusEl: dom.youDescriptionStatus,
         contentEl: dom.youDescriptionContent,
-        embedding: null,
-        metadata: null
+        imageDataUrl: null,
+        metadata: null,
+        capturedAt: null
     },
     me: {
         panel: dom.meDescriptionPanel,
         statusEl: dom.meDescriptionStatus,
         contentEl: dom.meDescriptionContent,
-        embedding: null,
-        metadata: null
-    }
+        imageDataUrl: null,
+        metadata: null,
+        capturedAt: null
+    },
+    lastSimilarityResult: null,
+    lastSimilarityError: null
 };
 
 // Description queue
