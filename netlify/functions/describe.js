@@ -716,6 +716,15 @@ exports.handler = async (event, context) => {
     const metadata = parsed?.metadata && typeof parsed.metadata === 'object' ? parsed.metadata : null;
     let discriminative = typeof parsed?.discriminative === 'string' ? parsed.discriminative.trim() : '';
 
+    // DEBUG: Log what AI actually returned
+    console.log('AI Response Parsed:', {
+      status,
+      descriptionLength: description.length,
+      discriminativeLength: discriminative.length,
+      discriminativePreview: discriminative.substring(0, 150),
+      metadata: metadata
+    });
+
     // Validate discriminative format (must be key:value pairs)
     if (discriminative && status === 'ok') {
       // Check for required keys
@@ -835,6 +844,15 @@ exports.handler = async (event, context) => {
       
       // Build weighted embedding text: categorical 1x, discriminative 3x
       embeddingText = `${categorical} ${discriminative} ${discriminative} ${discriminative}`;
+      
+      // DEBUG: Log what will be embedded
+      console.log('Embedding Input:', {
+        categorical,
+        discriminativeLength: discriminative.length,
+        discriminativePreview: discriminative.substring(0, 100),
+        totalEmbeddingLength: embeddingText.length,
+        embeddingPreview: embeddingText.substring(0, 200)
+      });
     }
     
     try {
