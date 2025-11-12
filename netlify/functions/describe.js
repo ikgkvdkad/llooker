@@ -571,29 +571,40 @@ exports.handler = async (event, context) => {
               '- skinTone: "very-light", "light", "medium", "tan", "brown", "dark"',
               '- hairColor: base color only, e.g. "black", "brown", "blonde", "red", "gray", "white", "bald"',
               '',
-              'DISCRIMINATIVE field (session-specific appearance - THE MOST CRITICAL):',
+              'DISCRIMINATIVE field (structured key:value format - THE MOST CRITICAL):',
               'This field is for outfit matching - it distinguishes different people at different times.',
-              'Use hyphens to connect related words. Include MAXIMUM detail:',
-              '- Hair STYLE: texture-and-style (wavy-shoulder-length, short-buzzcut, long-straight-ponytail, curly-afro, braided-cornrows)',
-              '- Facial hair: full-beard, goatee, mustache, stubble, clean-shaven',
-              '- Clothing: EVERY piece with patterns/logos/brands/colors/textures (white-Nike-shirt-red-swoosh, navy-blue-tie-white-polka-dots, black-leather-jacket)',
-              '- Accessories: ALL visible items with details (gold-wedding-band-left-hand, silver-watch-black-band, black-framed-glasses, brown-leather-belt)',
-              '- Objects carried: backpack, purse, phone, etc.',
-              'CRITICAL EXCLUSIONS - DO NOT include these transient details (photos may be taken minutes apart):',
-              '- NO gestures (thumbs-up, peace-sign, waving, pointing)',
-              '- NO hand positions or arm positions',
-              '- NO facial expressions (smiling, frowning, looking-away)',
-              '- NO body poses (standing, sitting, leaning)',
-              '- ONLY include appearance details that persist across a session',
-              'Format: comma-separated list of hyphenated traits.',
-              'Example: "short-wavy-brown-hair clean-shaven, white-Adidas-shirt-three-stripes navy-blue-tie-white-polka-dots black-suit-jacket, gold-wedding-band-left-hand silver-digital-watch"',
+              'Format: "key:value key:value key:value" - each category separated by space',
+              'Required keys: hair, face, top, bottom, shoes, accessories, carried',
+              '',
+              'VALUE FORMAT - Use ONLY hyphens, be maximally specific, NO FILLER WORDS:',
+              '- hair: texture-length-color-style (shoulder-wavy-brown, short-buzzcut-black, long-straight-blonde-ponytail)',
+              '- face: full-beard, goatee, mustache, stubble, clean-shaven, none',
+              '- top: list ALL layers outer-to-inner separated by + (denim-jacket-blue+black-turtleneck, white-Nike-shirt-red-swoosh, gray-coat-oversized+black-turtleneck)',
+              '- bottom: pants/skirt/dress with details (blue-distressed-jeans-ripped-knees, gray-maxi-skirt, black-pants-long, black-suit-pants)',
+              '- shoes: type-color-brand (black-Nike-sneakers-white-swoosh, brown-leather-boots, black-flats, black-ankle-boots)',
+              '- accessories: ALL items separated by + (gold-wedding-band+silver-watch+black-glasses, brown-leather-belt+sunglasses, none)',
+              '- carried: objects held/carried (brown-leather-tote, black-backpack, coffee-cup, none)',
+              '',
+              'CRITICAL RULES:',
+              '- ZERO filler words: NO "wearing", "with", "and", "paired", "over", "completes", "the", "a", "an"',
+              '- NO verbs, NO adjectives, ONLY pure nouns + descriptors',
+              '- Use + to separate items within same category',
+              '- Use hyphens to connect related words',
+              '- Write "none" if category not visible',
+              '- Patterns/logos/brands are MANDATORY (Nike-swoosh, Adidas-stripes, polka-dots, checkered)',
+              '',
+              'EXCLUSIONS (photos taken minutes apart):',
+              '- NO gestures, hand positions, facial expressions, body poses',
+              '',
+              'Example:',
+              '"hair:short-wavy-brown face:clean-shaven top:white-Adidas-shirt-three-stripes+navy-blue-tie-white-polka-dots+black-suit-jacket bottom:charcoal-gray-dress-pants shoes:black-leather-oxfords accessories:gold-wedding-band+silver-digital-watch carried:none"',
               '',
               'DESCRIPTION field (for display):',
               'Human-readable summary combining both metadata and discriminative details.',
               '',
               'CRITICAL: The discriminative field is PRIMARY for matching. Two people with same metadata but different outfits MUST have very different discriminative fields.',
-              'Example response:',
-              '{"status":"ok","metadata":{"gender":"male","ageRange":"25-30","build":"slim","skinTone":"light","hairColor":"brown"},"discriminative":"short-wavy-brown-hair clean-shaven, white-Nike-shirt-red-swoosh blue-distressed-jeans-ripped-knees, brown-leather-belt-silver-buckle white-sneakers, silver-watch-left-wrist","description":"25-30, male, slim build, light skin, brown hair - short wavy style, clean shaven. White Nike shirt with red swoosh, blue distressed jeans with ripped knees, brown leather belt with silver buckle, white sneakers. Silver watch on left wrist."}'
+              'Example full response:',
+              '{"status":"ok","metadata":{"gender":"male","ageRange":"25-30","build":"slim","skinTone":"light","hairColor":"brown"},"discriminative":"hair:short-wavy-brown face:clean-shaven top:white-Nike-shirt-red-swoosh bottom:blue-distressed-jeans-ripped-knees shoes:white-Nike-sneakers accessories:brown-leather-belt+silver-watch+black-framed-glasses carried:none","description":"25-30, male, slim build, light skin, brown hair. Short wavy brown hair, clean shaven. White Nike shirt with red swoosh, blue distressed jeans with ripped knees. White Nike sneakers. Brown leather belt, silver watch, black framed glasses."}'
             ].join(' ')
           },
           {
@@ -605,7 +616,7 @@ exports.handler = async (event, context) => {
                   role === 'you'
                     ? 'Describe the person in this "You" photo with MAXIMUM detail.'
                     : 'Describe the person in this "Me" selfie with MAXIMUM detail.'
-                ) + ' ' + selectionInstruction + ' This is for temporal matching - same person at same time will have same outfit. Photos may be taken 10 minutes apart, so exclude transient details (gestures, hand positions, facial expressions, poses). If unclear, return {"status":"unclear","description":"Unclear photo"}. Otherwise return structured JSON with metadata (categorical traits) and discriminative (persistent outfit/hairstyle details ONLY). Focus especially on OUTFIT - include patterns, logos, brands, specific colors, textures. The discriminative field is THE KEY for matching - be maximally specific about clothing/accessories/hairstyle, ignore gestures/poses.'
+                ) + ' ' + selectionInstruction + ' This is for temporal matching - same person at same time will have same outfit. Photos may be taken 10 minutes apart, so exclude transient details (gestures, poses, expressions). If unclear, return {"status":"unclear","description":"Unclear photo"}. Otherwise return structured JSON with metadata (object) and discriminative (STRING in key:value format). CRITICAL: discriminative must be "key:value key:value" format with ZERO filler words. NO "wearing", "with", "and", "paired", "over", "the", "a". Use + to separate multiple items, hyphens to connect words. Include ALL patterns, logos, brands. Example: "hair:shoulder-wavy-brown face:none top:denim-jacket-blue+black-turtleneck bottom:gray-maxi-skirt shoes:black-flats accessories:brown-leather-tote carried:none". For layered clothing, list outer+inner (coat+shirt). Be maximally specific with colors/patterns/brands.'
               },
               {
                 type: 'image_url',
@@ -700,7 +711,21 @@ exports.handler = async (event, context) => {
     const status = typeof parsed?.status === 'string' ? parsed.status.trim().toLowerCase() : null;
     const description = typeof parsed?.description === 'string' ? parsed.description.trim() : '';
     const metadata = parsed?.metadata && typeof parsed.metadata === 'object' ? parsed.metadata : null;
-    const discriminative = typeof parsed?.discriminative === 'string' ? parsed.discriminative.trim() : '';
+    const discriminativeObj = parsed?.discriminative && typeof parsed.discriminative === 'object' ? parsed.discriminative : null;
+    
+    // Convert discriminative object to key:value string for embedding
+    let discriminativeText = '';
+    if (discriminativeObj) {
+      const parts = [];
+      const keys = ['hair_style', 'facial_hair', 'top', 'bottom', 'shoes', 'accessories', 'carried'];
+      for (const key of keys) {
+        const value = discriminativeObj[key];
+        if (value && typeof value === 'string' && value.trim()) {
+          parts.push(`${key}:${value.trim()}`);
+        }
+      }
+      discriminativeText = parts.join(' ');
+    }
 
     if (status !== 'ok' && status !== 'unclear') {
       return {
@@ -717,10 +742,11 @@ exports.handler = async (event, context) => {
     }
 
     // For 'ok' status, we expect structured data
-    if (status === 'ok' && (!metadata || !discriminative)) {
+    if (status === 'ok' && (!metadata || !discriminativeText)) {
       console.warn('AI response missing metadata or discriminative fields, using fallback', {
         hasMetadata: !!metadata,
-        hasDiscriminative: !!discriminative,
+        hasDiscriminative: !!discriminativeText,
+        discriminativeObj: discriminativeObj,
         requestMeta
       });
     }
