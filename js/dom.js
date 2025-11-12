@@ -61,3 +61,8 @@ export const youNextButton = document.getElementById('youNextButton');
 export const mePrevButton = document.getElementById('mePrevButton');
 export const meNextButton = document.getElementById('meNextButton');
 
+// Similarity bar elements
+export const similarityBarContainer = document.getElementById('similarityBarContainer');
+export const similarityBarFill = document.getElementById('similarityBarFill');
+export const similarityPercentage = document.getElementById('similarityPercentage');
+

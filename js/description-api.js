@@ -7,6 +7,7 @@ import { snapshotViewportState, clearMovementDebounce } from './zoom.js';
 import { requestCurrentLocation } from './geo.js';
 import { showWarning } from './ui.js';
 import { addToHistory } from './history.js';
+import { storeEmbedding } from './similarity.js';
 
 /**
  * Reset description state for a side
@@ -471,9 +472,14 @@ async function requestDescription(side, photoDataUrl, viewportSnapshot, options 
         if (statusFlag === 'ok' && descriptionText) {
             setDescriptionState(side, 'success', `${label} description ready.`, descriptionText);
             
+            // Store embedding for similarity comparison
+            if (payload.embedding && Array.isArray(payload.embedding)) {
+                storeEmbedding(side, payload.embedding);
+            }
+            
             // Add to history
             addToHistory(side, {
-                id: Date.now(), // Temporary ID until we get real DB ID
+                id: payload.recordId || Date.now(), // Use DB ID if available
                 description: descriptionText,
                 status: statusFlag,
                 role: side,

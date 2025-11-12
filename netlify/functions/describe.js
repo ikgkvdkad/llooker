@@ -665,8 +665,9 @@ exports.handler = async (event, context) => {
       model: 'gpt-4o-mini'
     };
 
+    let recordId = null;
     try {
-      await persistDescriptionRecord(recordPayload, requestMeta);
+      recordId = await persistDescriptionRecord(recordPayload, requestMeta);
     } catch (storageError) {
       return {
         statusCode: 500,
@@ -680,6 +681,18 @@ exports.handler = async (event, context) => {
       };
     }
 
+    // Generate embedding for similarity comparison (don't wait for Pinecone storage)
+    let embedding = null;
+    try {
+      const openaiKey = process.env.OPENAI_API_KEY || process.env.OPENAIKEY;
+      if (openaiKey) {
+        embedding = await generateEmbedding(description, openaiKey);
+      }
+    } catch (embeddingError) {
+      console.warn('Failed to generate embedding for response:', embeddingError);
+      // Don't fail the request if embedding generation fails
+    }
+
     return {
       statusCode: 200,
       headers: {
@@ -687,7 +700,9 @@ exports.handler = async (event, context) => {
       },
       body: JSON.stringify({
         status,
-        description
+        description,
+        embedding: embedding,
+        recordId: recordId
       })
     };
   } catch (error) {
