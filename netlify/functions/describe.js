@@ -554,82 +554,40 @@ exports.handler = async (event, context) => {
       },
       body: JSON.stringify({
         model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: [
-              'You provide structured person descriptions for temporal matching and identification.',
-              'Always assess only the individual within the selected area.',
-              'If the person is not clearly visible, respond with {"status":"unclear","description":"Unclear photo"}.',
-              'Otherwise respond with structured JSON:',
-              '{"status":"ok","metadata":{"gender":"...","ageRange":"...","build":"...","skinTone":"...","hairColor":"..."},"discriminative":"...","description":"..."}',
-              '',
-              'METADATA fields (slow-changing categorical traits):',
-              '- gender: "male", "female", "non-binary", or "unknown"',
-              '- ageRange: e.g. "20-25", "30-35", "45-50"',
-              '- build: "slim", "athletic", "average", "stocky", "heavy"',
-              '- skinTone: "very-light", "light", "medium", "tan", "brown", "dark"',
-              '- hairColor: base color only, e.g. "black", "brown", "blonde", "red", "gray", "white", "bald"',
-              '',
-              'DISCRIMINATIVE field (structured key:value format - THE MOST CRITICAL):',
-              '!!!CRITICAL FORMAT REQUIREMENT!!!',
-              'You MUST return EXACTLY this format: "key:value key:value key:value"',
-              'DO NOT use commas. DO NOT use sentences. ONLY key:value pairs separated by spaces.',
-              'Required keys IN ORDER: hair face top bottom shoes accessories carried',
-              'Example: "hair:shoulder-red face:none top:gray-coat+black-turtleneck bottom:black-pants shoes:black-boots accessories:sunglasses carried:coffee-cup"',
-              '',
-              'VALUE FORMAT - Use ONLY hyphens and + symbols, be maximally specific, NO FILLER WORDS:',
-              '- hair: texture-length-color-style (shoulder-wavy-brown, short-buzzcut-black, long-straight-blonde-ponytail)',
-              '- face: full-beard, goatee, mustache, stubble, clean-shaven, none',
-              '- top: list ALL layers outer-to-inner separated by + (denim-jacket-blue+black-turtleneck, white-Nike-shirt-red-swoosh, gray-coat-oversized+black-turtleneck)',
-              '- bottom: pants/skirt/dress with details (blue-distressed-jeans-ripped-knees, gray-maxi-skirt, black-pants-long, black-suit-pants)',
-              '- shoes: type-color-brand (black-Nike-sneakers-white-swoosh, brown-leather-boots, black-flats, black-ankle-boots)',
-              '- accessories: ALL items separated by + (gold-wedding-band+silver-watch+black-glasses, brown-leather-belt+sunglasses, none)',
-              '- carried: objects held/carried (brown-leather-tote, black-backpack, coffee-cup, none)',
-              '',
-              'CRITICAL RULES:',
-              '- ZERO filler words: NO "wearing", "with", "and", "paired", "over", "completes", "the", "a", "an"',
-              '- NO verbs, NO adjectives, ONLY pure nouns + descriptors',
-              '- Use + to separate items within same category',
-              '- Use hyphens to connect related words',
-              '- Write "none" if category not visible',
-              '- Patterns/logos/brands are MANDATORY (Nike-swoosh, Adidas-stripes, polka-dots, checkered)',
-              '',
-              'EXCLUSIONS (photos taken minutes apart):',
-              '- NO gestures, hand positions, facial expressions, body poses',
-              '',
-              'Example:',
-              '"hair:short-wavy-brown face:clean-shaven top:white-Adidas-shirt-three-stripes+navy-blue-tie-white-polka-dots+black-suit-jacket bottom:charcoal-gray-dress-pants shoes:black-leather-oxfords accessories:gold-wedding-band+silver-digital-watch carried:none"',
-              '',
-              'DESCRIPTION field (for display):',
-              'Human-readable summary combining both metadata and discriminative details.',
-              '',
-              'CRITICAL: The discriminative field is PRIMARY for matching. Two people with same metadata but different outfits MUST have very different discriminative fields.',
-              'Example full response:',
-              '{"status":"ok","metadata":{"gender":"male","ageRange":"25-30","build":"slim","skinTone":"light","hairColor":"brown"},"discriminative":"hair:short-wavy-brown face:clean-shaven top:white-Nike-shirt-red-swoosh bottom:blue-distressed-jeans-ripped-knees shoes:white-Nike-sneakers accessories:brown-leather-belt+silver-watch+black-framed-glasses carried:none","description":"25-30, male, slim build, light skin, brown hair. Short wavy brown hair, clean shaven. White Nike shirt with red swoosh, blue distressed jeans with ripped knees. White Nike sneakers. Brown leather belt, silver watch, black framed glasses."}'
-            ].join(' ')
-          },
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: (
-                  role === 'you'
-                    ? 'Describe the person in this "You" photo with MAXIMUM detail.'
-                    : 'Describe the person in this "Me" selfie with MAXIMUM detail.'
-                ) + ' ' + selectionInstruction + ' This is for temporal matching - same person at same time will have same outfit. Photos may be taken 10 minutes apart, so exclude transient details (gestures, poses, expressions). If unclear, return {"status":"unclear","description":"Unclear photo"}. Otherwise return structured JSON with metadata (object) and discriminative (STRING - MUST be key:value format). CRITICAL FORMAT: discriminative MUST be "key:value key:value" with spaces between pairs, NO COMMAS, NO SENTENCES. Example CORRECT: "hair:shoulder-red face:none top:gray-coat+black-turtleneck bottom:black-pants shoes:black-boots accessories:sunglasses carried:coffee-cup". Example WRONG: "Gray coat, black turtleneck, black pants". Use + for multiple items (coat+shirt), hyphens to connect words (ankle-boots). Include ALL patterns, logos, brands. Required keys: hair face top bottom shoes accessories carried.'
-              },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: image,
-                  detail: 'high'
-                }
-              }
-            ]
-          }
-        ],
+         messages: [
+           {
+             role: 'system',
+             content: 'Return ONLY JSON with 3 fields: status, metadata, discriminative. ' +
+               'If unclear: {"status":"unclear"} ' +
+               'If OK: {"status":"ok","metadata":{"gender":"male","ageRange":"25-30","build":"average","skinTone":"light","hairColor":"brown"},"discriminative":"hair:short-brown face:none top:white-shirt bottom:blue-jeans shoes:sneakers accessories:watch carried:none"} ' +
+               'DISCRIMINATIVE FORMAT RULES: ' +
+               '1) MUST be string with format "hair:X face:Y top:Z bottom:W shoes:Q accessories:A carried:B" ' +
+               '2) Use hyphens in values (gray-coat, black-boots) ' +
+               '3) Use + for layers (coat+shirt, jacket+tie+shirt) ' +
+               '4) NO COMMAS, NO PERIODS, NO PROSE ' +
+               '5) All 7 keys REQUIRED: hair face top bottom shoes accessories carried (use "none" if not visible) ' +
+               'Examples: ' +
+               'discriminative:"hair:long-straight-red face:none top:gray-coat+black-turtleneck bottom:black-pants shoes:ankle-boots accessories:sunglasses carried:coffee" ' +
+               'discriminative:"hair:short-wavy-brown face:beard top:denim-jacket+white-shirt bottom:jeans shoes:sneakers accessories:none carried:none"'
+           },
+           {
+             role: 'user',
+             content: [
+               {
+                 type: 'text',
+                 text: 'Analyze person in photo. Return JSON: {"status":"ok","metadata":{gender,ageRange,build,skinTone,hairColor},"discriminative":"hair:X face:Y top:Z bottom:W shoes:Q accessories:A carried:B"}. ' +
+                   'Use hyphens (ankle-boots), + for layers (coat+shirt). Include brands/patterns. NO commas/prose. Example: hair:shoulder-red face:none top:gray-coat+black-turtleneck bottom:black-pants shoes:ankle-boots accessories:sunglasses carried:coffee'
+               },
+               {
+                 type: 'image_url',
+                 image_url: {
+                   url: image,
+                   detail: 'high'
+                 }
+               }
+             ]
+           }
+         ],
         max_tokens: 500,
         response_format: { type: "json_object" }
       })
@@ -712,17 +670,31 @@ exports.handler = async (event, context) => {
     }
 
     const status = typeof parsed?.status === 'string' ? parsed.status.trim().toLowerCase() : null;
-    const description = typeof parsed?.description === 'string' ? parsed.description.trim() : '';
     const metadata = parsed?.metadata && typeof parsed.metadata === 'object' ? parsed.metadata : null;
     let discriminative = typeof parsed?.discriminative === 'string' ? parsed.discriminative.trim() : '';
+    
+    // Build simple description from metadata and discriminative
+    let description = '';
+    if (status === 'ok' && metadata && discriminative) {
+      const metaParts = [
+        metadata.ageRange,
+        metadata.gender,
+        metadata.build,
+        metadata.skinTone,
+        metadata.hairColor
+      ].filter(Boolean).join(', ');
+      description = `${metaParts}. ${discriminative.replace(/:/g, ': ').replace(/\+/g, ' + ')}`;
+    } else if (status === 'unclear') {
+      description = 'Unclear photo';
+    }
 
     // DEBUG: Log what AI actually returned
     console.log('AI Response Parsed:', {
       status,
-      descriptionLength: description.length,
       discriminativeLength: discriminative.length,
       discriminativePreview: discriminative.substring(0, 150),
-      metadata: metadata
+      metadata: metadata,
+      generatedDescription: description.substring(0, 100)
     });
 
     // Validate discriminative format (must be key:value pairs)
