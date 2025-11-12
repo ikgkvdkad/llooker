@@ -50,7 +50,7 @@ function checkMetadataCompatibility(metadata1, metadata2) {
         }
     }
 
-    // Calculate age compatibility (lenient - AI estimates can be off by one range)
+    // Calculate age compatibility (lenient for AI estimation errors, strict for large gaps)
     let ageScore = 1.0;
     if (metadata1.ageRange && metadata2.ageRange) {
         const parseAgeRange = (range) => {
@@ -66,19 +66,19 @@ function checkMetadataCompatibility(metadata1, metadata2) {
         const mid2 = (age2.min + age2.max) / 2;
         const distance = Math.abs(mid1 - mid2);
 
-        // Lenient scoring: 
-        // 0-5 years apart = 100%
-        // 5-15 years apart = 80-100% (gradual decline)
-        // 15-30 years apart = 30-80% (steeper decline)
-        // 30+ years apart = 0-30% (very low but not fatal)
+        // Steeper penalties for large age gaps:
+        // 0-5 years apart = 100% (AI estimation margin)
+        // 5-10 years apart = 85-100% (still likely same person)
+        // 10-20 years apart = 25-85% (steep decline)
+        // 20+ years apart = 5-25% (near-fatal, very unlikely)
         if (distance <= 5) {
             ageScore = 1.0;
-        } else if (distance <= 15) {
-            ageScore = 1.0 - ((distance - 5) / 10) * 0.2; // 100% -> 80%
-        } else if (distance <= 30) {
-            ageScore = 0.8 - ((distance - 15) / 15) * 0.5; // 80% -> 30%
+        } else if (distance <= 10) {
+            ageScore = 1.0 - ((distance - 5) / 5) * 0.15; // 100% -> 85%
+        } else if (distance <= 20) {
+            ageScore = 0.85 - ((distance - 10) / 10) * 0.6; // 85% -> 25%
         } else {
-            ageScore = Math.max(0.1, 0.3 - ((distance - 30) / 30) * 0.2); // 30% -> 10%
+            ageScore = Math.max(0.05, 0.25 - ((distance - 20) / 20) * 0.2); // 25% -> 5%
         }
 
         console.log(`Age compatibility: ${metadata1.ageRange} vs ${metadata2.ageRange}, distance=${distance.toFixed(1)}y, score=${(ageScore*100).toFixed(0)}%`);
@@ -109,12 +109,28 @@ function checkMetadataCompatibility(metadata1, metadata2) {
     }
 
     // Weighted combination: age most important, then build, skin, hair
-    const compatibilityScore = (
+    let compatibilityScore = (
         ageScore * 0.4 +
         buildScore * 0.3 +
         skinScore * 0.15 +
         hairScore * 0.15
     );
+
+    // Compound penalty: Multiple mismatches suggest different people
+    // Count how many fields are significantly different (< 60%)
+    const significantMismatches = [
+        ageScore < 0.6 ? 1 : 0,
+        buildScore < 0.6 ? 1 : 0,
+        skinScore < 0.6 ? 1 : 0,
+        hairScore < 0.6 ? 1 : 0
+    ].reduce((a, b) => a + b, 0);
+
+    // Apply exponential penalty for multiple mismatches
+    if (significantMismatches >= 2) {
+        const compoundPenalty = Math.pow(0.7, significantMismatches - 1);
+        compatibilityScore *= compoundPenalty;
+        console.log(`Compound penalty applied: ${significantMismatches} mismatches, penalty=${(compoundPenalty*100).toFixed(0)}%`);
+    }
 
     console.log(`Metadata compatibility: age=${(ageScore*100).toFixed(0)}%, build=${(buildScore*100).toFixed(0)}%, skin=${(skinScore*100).toFixed(0)}%, hair=${(hairScore*100).toFixed(0)}%, overall=${(compatibilityScore*100).toFixed(0)}%`);
 
@@ -129,12 +145,13 @@ function transformSimilarity(rawSimilarity) {
     // Cosine similarity is typically 0.5-1.0 for text embeddings
     // We want to spread this range out more dramatically
     
-    // Normalize to 0-1 range (assuming min similarity of 0.4)
-    const normalized = Math.max(0, (rawSimilarity - 0.4) / 0.6);
+    // Normalize to 0-1 range (assuming min similarity of 0.35)
+    const normalized = Math.max(0, (rawSimilarity - 0.35) / 0.65);
     
     // Apply power function to exaggerate differences
-    // Power of 1.8 makes small differences more visible
-    const transformed = Math.pow(normalized, 1.8);
+    // Power of 2.2 makes differences even more dramatic
+    // This heavily penalizes partial matches (different outfits)
+    const transformed = Math.pow(normalized, 2.2);
     
     return transformed;
 }
@@ -186,8 +203,9 @@ export function updateSimilarityBar() {
     const transformedVectorSimilarity = transformSimilarity(rawVectorSimilarity);
 
     // Combine metadata and vector scores
-    // Metadata gates (30%), vector discriminates (70%)
-    const combinedScore = metadataScore * 0.3 + transformedVectorSimilarity * 0.7;
+    // Outfit should dominate: metadata gates (15%), vector discriminates (85%)
+    // This ensures different outfits result in low similarity even with compatible metadata
+    const combinedScore = metadataScore * 0.15 + transformedVectorSimilarity * 0.85;
     const percentage = Math.max(0, Math.min(100, combinedScore * 100));
 
     // Update bar height
