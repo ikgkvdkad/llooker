@@ -630,7 +630,8 @@ exports.handler = async (event, context) => {
             ]
           }
         ],
-        max_tokens: 500
+        max_tokens: 500,
+        response_format: { type: "json_object" }
       })
     });
 
@@ -717,23 +718,47 @@ exports.handler = async (event, context) => {
 
     // Validate discriminative format (must be key:value pairs)
     if (discriminative && status === 'ok') {
-      const hasKeyValueFormat = discriminative.includes('hair:') && 
-                                 discriminative.includes('top:') && 
-                                 discriminative.includes('bottom:');
+      // Check for required keys
+      const hasRequiredKeys = discriminative.includes('hair:') && 
+                              discriminative.includes('top:') && 
+                              discriminative.includes('bottom:');
       
-      if (!hasKeyValueFormat) {
-        console.error('AI returned invalid discriminative format (not key:value):', {
-          discriminative: discriminative.substring(0, 200),
+      // Check for forbidden characters (commas indicate prose format)
+      const hasForbiddenChars = discriminative.includes(',') || 
+                                 discriminative.includes('.') ||
+                                 discriminative.includes('wearing') ||
+                                 discriminative.includes('with');
+      
+      // Check format structure - should have multiple "key:" patterns
+      const keyPattern = /\w+:/g;
+      const keyMatches = discriminative.match(keyPattern);
+      const hasEnoughKeys = keyMatches && keyMatches.length >= 5; // At least 5 keys
+      
+      const isValidFormat = hasRequiredKeys && !hasForbiddenChars && hasEnoughKeys;
+      
+      if (!isValidFormat) {
+        console.error('AI returned invalid discriminative format:', {
+          discriminative: discriminative.substring(0, 300),
+          hasRequiredKeys,
+          hasForbiddenChars,
+          keyCount: keyMatches?.length || 0,
           requestMeta
         });
         return {
           statusCode: 500,
           body: JSON.stringify({ 
             error: 'AI returned invalid format - discriminative field must use key:value structure',
-            details: 'Expected format: "hair:X face:Y top:Z bottom:W shoes:Q accessories:A carried:C"'
+            details: 'Expected: "hair:X face:Y top:Z bottom:W shoes:Q accessories:A carried:C" with NO commas or prose',
+            actualFormat: discriminative.substring(0, 150)
           })
         };
       }
+      
+      console.log('Discriminative format validated:', {
+        length: discriminative.length,
+        keyCount: keyMatches.length,
+        preview: discriminative.substring(0, 100)
+      });
     }
 
     if (status !== 'ok' && status !== 'unclear') {
