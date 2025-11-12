@@ -472,6 +472,12 @@ async function requestDescription(side, photoDataUrl, viewportSnapshot, options 
         if (statusFlag === 'ok' && descriptionText) {
             setDescriptionState(side, 'success', `${label} description ready.`, descriptionText);
             
+            // Log API response for analysis
+            console.log(`=== ${label.toUpperCase()} API RESPONSE ===`);
+            console.log('Discriminative:', payload.discriminative || 'MISSING');
+            console.log('Metadata:', payload.metadata || 'MISSING');
+            console.log('Embedding dimensions:', payload.embedding?.length || 'MISSING');
+            
             // Store embedding and metadata for similarity comparison
             if (payload.embedding && Array.isArray(payload.embedding)) {
                 storeEmbedding(side, payload.embedding, payload.metadata || null);

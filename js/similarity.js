@@ -219,6 +219,11 @@ export function updateSimilarityBar() {
     }
 
     console.log(`Similarity: vector=${(rawVectorSimilarity * 100).toFixed(1)}%, metadata=${(metadataScore * 100).toFixed(0)}%, final=${percentage.toFixed(1)}%`);
+    console.log('=== SIMILARITY ANALYSIS ===');
+    console.log('You embedding dimensions:', youEmbedding.length);
+    console.log('Me embedding dimensions:', meEmbedding.length);
+    console.log('You metadata:', youMetadata);
+    console.log('Me metadata:', meMetadata);
 }
 
 /**

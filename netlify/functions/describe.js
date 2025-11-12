@@ -441,6 +441,10 @@ async function persistDescriptionRecord(recordInput, requestMeta) {
         const distinctive = distinctiveParts.join(' ');
         const base = baseParts.join(' ');
         embeddingText = `${categorical} ${distinctive} ${distinctive} ${distinctive} ${base}`;
+        
+        console.log('=== PINECONE EMBEDDING ===');
+        console.log('Distinctive (outer):', distinctive);
+        console.log('Base (inner):', base);
       }
       
       storeVectorEmbedding(insertedId, embeddingText, {
@@ -867,14 +871,13 @@ exports.handler = async (event, context) => {
       const base = baseParts.join(' ');
       embeddingText = `${categorical} ${distinctive} ${distinctive} ${distinctive} ${base}`;
       
-      // DEBUG: Log what will be embedded
-      console.log('Embedding Input:', {
-        categorical,
-        distinctive,
-        base,
-        totalEmbeddingLength: embeddingText.length,
-        embeddingPreview: embeddingText.substring(0, 200)
-      });
+      // DEBUG: Log what will be embedded with full details
+      console.log('=== EMBEDDING CONSTRUCTION ===');
+      console.log('Original discriminative:', discriminative);
+      console.log('Extracted distinctive (outer layers):', distinctive);
+      console.log('Extracted base (inner layers):', base);
+      console.log('Final embedding text:', embeddingText.substring(0, 300));
+      console.log('Distinctive repeat count: 3x, Base repeat count: 1x');
     }
     
     try {
