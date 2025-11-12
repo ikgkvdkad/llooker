@@ -8,6 +8,7 @@
     "lint": "echo \"No lint step\""
   },
   "dependencies": {
-    "pg": "^8.12.0"
+    "pg": "^8.12.0",
+    "@pinecone-database/pinecone": "^3.0.0"
   }
 }

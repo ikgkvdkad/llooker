@@ -1,6 +1,8 @@
 const { Pool } = require('pg');
+const { Pinecone } = require('@pinecone-database/pinecone');
 
 const DEFAULT_TABLE_NAME = 'portrait_descriptions';
+const PINECONE_INDEX_NAME = 'llooker2';
 
 function resolveTableName() {
   const configured = process.env.DESCRIPTIONS_TABLE;
@@ -23,6 +25,7 @@ function resolveTableName() {
 const TABLE_NAME = resolveTableName();
 let poolInstance = null;
 let ensureTablePromise = null;
+let pineconeClient = null;
 
 function estimateImageBytesFromDataUrl(dataUrl) {
   if (typeof dataUrl !== 'string') {
@@ -152,6 +155,131 @@ function getDatabasePool() {
   return poolInstance;
 }
 
+function getPineconeClient() {
+  if (pineconeClient) {
+    return pineconeClient;
+  }
+
+  const apiKey = process.env.PINECONEKEY || process.env.PINECONE_API_KEY;
+  
+  if (!apiKey) {
+    console.warn('Pinecone API key not configured. Vector embeddings will not be stored.');
+    return null;
+  }
+
+  try {
+    pineconeClient = new Pinecone({
+      apiKey: apiKey
+    });
+    return pineconeClient;
+  } catch (error) {
+    console.error('Failed to initialize Pinecone client:', error);
+    return null;
+  }
+}
+
+async function generateEmbedding(text, apiKey) {
+  if (!text || typeof text !== 'string') {
+    throw new Error('Invalid text for embedding generation');
+  }
+
+  const response = await fetch('https://api.openai.com/v1/embeddings', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: 'text-embedding-3-small',
+      input: text,
+      encoding_format: 'float'
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    throw new Error(`OpenAI Embedding API error: ${response.status} ${errorText}`);
+  }
+
+  const data = await response.json();
+  return data.data[0].embedding;
+}
+
+async function storeVectorEmbedding(recordId, description, metadata) {
+  const pc = getPineconeClient();
+  
+  if (!pc) {
+    console.warn('Pinecone not configured. Skipping vector storage.');
+    return null;
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY || process.env.OPENAIKEY;
+  
+  if (!apiKey) {
+    console.warn('OpenAI API key not configured. Cannot generate embeddings.');
+    return null;
+  }
+
+  try {
+    // Generate embedding from description text
+    const embedding = await generateEmbedding(description, apiKey);
+
+    if (!embedding || !Array.isArray(embedding) || embedding.length !== 1536) {
+      throw new Error(`Invalid embedding dimensions: ${embedding?.length}`);
+    }
+
+    // Get index
+    const index = pc.index(PINECONE_INDEX_NAME);
+
+    // Prepare metadata (Pinecone has size limits, so we keep it concise)
+    const pineconeMetadata = {
+      dbId: recordId.toString(),
+      description: description.substring(0, 1000), // Truncate to 1000 chars
+      role: metadata.role || 'unknown',
+      status: metadata.status || 'ok',
+      capturedAt: metadata.capturedAt || new Date().toISOString(),
+      createdAt: metadata.createdAt || new Date().toISOString()
+    };
+
+    // Add location if available
+    if (metadata.location) {
+      const loc = typeof metadata.location === 'string' 
+        ? JSON.parse(metadata.location) 
+        : metadata.location;
+      
+      if (loc.status === 'ok' && loc.coordinates) {
+        pineconeMetadata.latitude = loc.coordinates.latitude;
+        pineconeMetadata.longitude = loc.coordinates.longitude;
+        pineconeMetadata.accuracy = loc.accuracy || null;
+        pineconeMetadata.hasLocation = true;
+      } else {
+        pineconeMetadata.hasLocation = false;
+      }
+    } else {
+      pineconeMetadata.hasLocation = false;
+    }
+
+    // Upsert to Pinecone
+    await index.upsert([{
+      id: `desc_${recordId}`,
+      values: embedding,
+      metadata: pineconeMetadata
+    }]);
+
+    console.log(`Successfully stored embedding for record ${recordId} in Pinecone`);
+    return `desc_${recordId}`;
+
+  } catch (error) {
+    console.error('Failed to store vector embedding:', {
+      message: error?.message,
+      stack: error?.stack,
+      recordId
+    });
+    // Don't fail the whole request if vector storage fails
+    return null;
+  }
+}
+
 async function ensureTableExists(pool) {
   if (!pool) {
     throw new Error('Database pool not initialized.');
@@ -254,7 +382,22 @@ async function persistDescriptionRecord(recordInput, requestMeta) {
 
   try {
     const result = await pool.query(insertQuery);
-    return result.rows?.[0]?.id ?? null;
+    const insertedId = result.rows?.[0]?.id ?? null;
+    
+    // Store vector embedding asynchronously (don't wait for it)
+    if (insertedId && recordInput.status === 'ok') {
+      storeVectorEmbedding(insertedId, recordInput.description, {
+        role: recordInput.role,
+        status: recordInput.status,
+        capturedAt: capturedAtDate?.toISOString() || new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        location: locationDoc
+      }).catch(err => {
+        console.error('Vector embedding storage failed (non-blocking):', err);
+      });
+    }
+    
+    return insertedId;
   } catch (databaseError) {
     console.error('Failed to persist description record to database.', {
       message: databaseError?.message,
