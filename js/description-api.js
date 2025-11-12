@@ -472,15 +472,17 @@ async function requestDescription(side, photoDataUrl, viewportSnapshot, options 
         if (statusFlag === 'ok' && descriptionText) {
             setDescriptionState(side, 'success', `${label} description ready.`, descriptionText);
             
-            // Store embedding for similarity comparison
+            // Store embedding and metadata for similarity comparison
             if (payload.embedding && Array.isArray(payload.embedding)) {
-                storeEmbedding(side, payload.embedding);
+                storeEmbedding(side, payload.embedding, payload.metadata || null);
             }
             
             // Add to history
             addToHistory(side, {
                 id: payload.recordId || Date.now(), // Use DB ID if available
                 description: descriptionText,
+                metadata: payload.metadata || null,
+                discriminative: payload.discriminative || '',
                 status: statusFlag,
                 role: side,
                 capturedAt: capturedAt,

@@ -109,13 +109,15 @@ export const descriptionState = {
         panel: dom.youDescriptionPanel,
         statusEl: dom.youDescriptionStatus,
         contentEl: dom.youDescriptionContent,
-        embedding: null
+        embedding: null,
+        metadata: null
     },
     me: {
         panel: dom.meDescriptionPanel,
         statusEl: dom.meDescriptionStatus,
         contentEl: dom.meDescriptionContent,
-        embedding: null
+        embedding: null,
+        metadata: null
     }
 };
 

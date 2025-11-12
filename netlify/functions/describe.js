@@ -205,7 +205,7 @@ async function generateEmbedding(text, apiKey) {
   return data.data[0].embedding;
 }
 
-async function storeVectorEmbedding(recordId, description, metadata) {
+async function storeVectorEmbedding(recordId, embeddingText, metadata) {
   const pc = getPineconeClient();
   
   if (!pc) {
@@ -221,8 +221,8 @@ async function storeVectorEmbedding(recordId, description, metadata) {
   }
 
   try {
-    // Generate embedding from description text
-    const embedding = await generateEmbedding(description, apiKey);
+    // Generate embedding from weighted text
+    const embedding = await generateEmbedding(embeddingText, apiKey);
 
     if (!embedding || !Array.isArray(embedding) || embedding.length !== 1536) {
       throw new Error(`Invalid embedding dimensions: ${embedding?.length}`);
@@ -231,15 +231,33 @@ async function storeVectorEmbedding(recordId, description, metadata) {
     // Get index
     const index = pc.index(PINECONE_INDEX_NAME);
 
-    // Prepare metadata (Pinecone has size limits, so we keep it concise)
+    // Prepare structured metadata for Pinecone
     const pineconeMetadata = {
       dbId: recordId.toString(),
-      description: description.substring(0, 1000), // Truncate to 1000 chars
       role: metadata.role || 'unknown',
       status: metadata.status || 'ok',
       capturedAt: metadata.capturedAt || new Date().toISOString(),
       createdAt: metadata.createdAt || new Date().toISOString()
     };
+
+    // Add categorical metadata (for filtering)
+    if (metadata.personMetadata) {
+      pineconeMetadata.gender = metadata.personMetadata.gender || 'unknown';
+      pineconeMetadata.ageRange = metadata.personMetadata.ageRange || 'unknown';
+      pineconeMetadata.build = metadata.personMetadata.build || 'unknown';
+      pineconeMetadata.skinTone = metadata.personMetadata.skinTone || 'unknown';
+      pineconeMetadata.hairColor = metadata.personMetadata.hairColor || 'unknown';
+    }
+
+    // Add discriminative text (for reference, truncated)
+    if (metadata.discriminative) {
+      pineconeMetadata.discriminative = metadata.discriminative.substring(0, 500);
+    }
+
+    // Add description (for reference, truncated)
+    if (metadata.description) {
+      pineconeMetadata.description = metadata.description.substring(0, 500);
+    }
 
     // Add location if available
     if (metadata.location) {
@@ -386,9 +404,28 @@ async function persistDescriptionRecord(recordInput, requestMeta) {
     
     // Store vector embedding asynchronously (don't wait for it)
     if (insertedId && recordInput.status === 'ok') {
-      storeVectorEmbedding(insertedId, recordInput.description, {
+      // Build weighted embedding text if metadata available
+      let embeddingText = recordInput.description;
+      
+      if (recordInput.metadata && recordInput.discriminative) {
+        const categorical = [
+          recordInput.metadata.ageRange || '',
+          recordInput.metadata.gender || '',
+          recordInput.metadata.build || '',
+          recordInput.metadata.skinTone || '',
+          recordInput.metadata.hairColor || ''
+        ].filter(Boolean).join(' ');
+        
+        // Discriminative repeated 3x for outfit emphasis
+        embeddingText = `${categorical} ${recordInput.discriminative} ${recordInput.discriminative} ${recordInput.discriminative}`;
+      }
+      
+      storeVectorEmbedding(insertedId, embeddingText, {
         role: recordInput.role,
         status: recordInput.status,
+        personMetadata: recordInput.metadata,
+        discriminative: recordInput.discriminative,
+        description: recordInput.description,
         capturedAt: capturedAtDate?.toISOString() || new Date().toISOString(),
         createdAt: new Date().toISOString(),
         location: locationDoc
@@ -521,19 +558,36 @@ exports.handler = async (event, context) => {
           {
             role: 'system',
             content: [
-              'You provide maximally detailed descriptions for life-or-death person identification. Every visible detail matters.',
+              'You provide structured person descriptions for temporal matching and identification.',
               'Always assess only the individual within the selected area.',
               'If the person is not clearly visible, respond with {"status":"unclear","description":"Unclear photo"}.',
-              'Otherwise respond with {"status":"ok","description":"[description]"}.',
-              'Description format: Single sentence with comma-separated traits. List EVERY detail you can see.',
-              'Mandatory order: age-range, gender, build, skin-tone, hair-color-texture-and-style, clothing-with-ALL-details, accessories-with-details.',
-              'For CLOTHING: Include patterns (polka-dots, stripes, plaid, checkered), logos/brands (Nike, Adidas, visible text), textures (leather, denim, cotton), specific colors (navy-blue not blue, burgundy-red not red), details (buttons, collar-style, pockets, zippers).',
-              'For HAIR: Include texture (wavy, straight, curly, kinky), style (ponytail, bun, braided, dreadlocks, buzzcut), facial-hair (stubble, full-beard, goatee, mustache).',
-              'For ACCESSORIES: Include specific details (gold-wedding-band, silver-chain-cross-pendant, black-framed-glasses, leather-brown-belt).',
-              'Example: "25-30, male, athletic-build, light-skin, short-wavy-brown-hair, white-Adidas-shirt-three-stripes navy-blue-tie-white-polka-dots black-suit-jacket, gold-wedding-band-left-hand"',
-              'Use hyphens to connect all related words. No articles, no verbs, no qualifiers.',
-              'CRITICAL: Patterns, logos, and distinctive features are ESSENTIAL for identification. Never generalize - be maximally specific.',
-              'NEVER skip visible details no matter how small. A pattern or logo could be the key identifier.'
+              'Otherwise respond with structured JSON:',
+              '{"status":"ok","metadata":{"gender":"...","ageRange":"...","build":"...","skinTone":"...","hairColor":"..."},"discriminative":"...","description":"..."}',
+              '',
+              'METADATA fields (slow-changing categorical traits):',
+              '- gender: "male", "female", "non-binary", or "unknown"',
+              '- ageRange: e.g. "20-25", "30-35", "45-50"',
+              '- build: "slim", "athletic", "average", "stocky", "heavy"',
+              '- skinTone: "very-light", "light", "medium", "tan", "brown", "dark"',
+              '- hairColor: base color only, e.g. "black", "brown", "blonde", "red", "gray", "white", "bald"',
+              '',
+              'DISCRIMINATIVE field (session-specific appearance - THE MOST CRITICAL):',
+              'This field is for outfit matching - it distinguishes different people at different times.',
+              'Use hyphens to connect related words. Include MAXIMUM detail:',
+              '- Hair STYLE: texture-and-style (wavy-shoulder-length, short-buzzcut, long-straight-ponytail, curly-afro, braided-cornrows)',
+              '- Facial hair: full-beard, goatee, mustache, stubble, clean-shaven',
+              '- Clothing: EVERY piece with patterns/logos/brands/colors/textures (white-Nike-shirt-red-swoosh, navy-blue-tie-white-polka-dots, black-leather-jacket)',
+              '- Accessories: ALL visible items with details (gold-wedding-band-left-hand, silver-watch-black-band, black-framed-glasses, brown-leather-belt)',
+              '- Objects carried: backpack, purse, phone, etc.',
+              'Format: comma-separated list of hyphenated traits.',
+              'Example: "short-wavy-brown-hair clean-shaven, white-Adidas-shirt-three-stripes navy-blue-tie-white-polka-dots black-suit-jacket, gold-wedding-band-left-hand silver-digital-watch"',
+              '',
+              'DESCRIPTION field (for display):',
+              'Human-readable summary combining both metadata and discriminative details.',
+              '',
+              'CRITICAL: The discriminative field is PRIMARY for matching. Two people with same metadata but different outfits MUST have very different discriminative fields.',
+              'Example response:',
+              '{"status":"ok","metadata":{"gender":"male","ageRange":"25-30","build":"slim","skinTone":"light","hairColor":"brown"},"discriminative":"short-wavy-brown-hair clean-shaven, white-Nike-shirt-red-swoosh blue-distressed-jeans-ripped-knees, brown-leather-belt-silver-buckle white-sneakers, silver-watch-left-wrist","description":"25-30, male, slim build, light skin, brown hair - short wavy style, clean shaven. White Nike shirt with red swoosh, blue distressed jeans with ripped knees, brown leather belt with silver buckle, white sneakers. Silver watch on left wrist."}'
             ].join(' ')
           },
           {
@@ -545,7 +599,7 @@ exports.handler = async (event, context) => {
                   role === 'you'
                     ? 'Describe the person in this "You" photo with MAXIMUM detail.'
                     : 'Describe the person in this "Me" selfie with MAXIMUM detail.'
-                ) + ' ' + selectionInstruction + ' This is for critical identification - every detail matters. If unclear, return {"status":"unclear","description":"Unclear photo"}. Otherwise return {"status":"ok","description":"[single sentence with ALL visible details]"}. Include: age-range, gender, build, skin-tone, hair-texture-and-style, clothing-WITH-PATTERNS-LOGOS-BRANDS-TEXTURES-COLORS, accessories-with-specifics. Example: "30-35, male, average-build, medium-skin, short-curly-black-hair-full-beard, white-Nike-shirt-swoosh-logo navy-striped-tie gray-suit-jacket, silver-watch-left-wrist black-framed-glasses". Include patterns (dots, stripes), logos (Nike, Adidas), brands, textures. Be maximally specific.'
+                ) + ' ' + selectionInstruction + ' This is for temporal matching - same person at same time will have same outfit. If unclear, return {"status":"unclear","description":"Unclear photo"}. Otherwise return structured JSON with metadata (categorical traits) and discriminative (outfit details). Focus especially on OUTFIT - include patterns, logos, brands, specific colors, textures. The discriminative field is THE KEY for matching - be maximally specific.'
               },
               {
                 type: 'image_url',
@@ -557,7 +611,7 @@ exports.handler = async (event, context) => {
             ]
           }
         ],
-        max_tokens: 400
+        max_tokens: 500
       })
     });
 
@@ -639,6 +693,8 @@ exports.handler = async (event, context) => {
 
     const status = typeof parsed?.status === 'string' ? parsed.status.trim().toLowerCase() : null;
     const description = typeof parsed?.description === 'string' ? parsed.description.trim() : '';
+    const metadata = parsed?.metadata && typeof parsed.metadata === 'object' ? parsed.metadata : null;
+    const discriminative = typeof parsed?.discriminative === 'string' ? parsed.discriminative.trim() : '';
 
     if (status !== 'ok' && status !== 'unclear') {
       return {
@@ -654,10 +710,21 @@ exports.handler = async (event, context) => {
       };
     }
 
+    // For 'ok' status, we expect structured data
+    if (status === 'ok' && (!metadata || !discriminative)) {
+      console.warn('AI response missing metadata or discriminative fields, using fallback', {
+        hasMetadata: !!metadata,
+        hasDiscriminative: !!discriminative,
+        requestMeta
+      });
+    }
+
     const recordPayload = {
       role,
       status,
       description,
+      metadata,
+      discriminative,
       tone: typeof tone === 'string' && tone.length ? tone : 'neutral',
       imageDataUrl: image,
       imageBytesEstimated: requestMeta.imageBytesEstimated,
@@ -686,12 +753,29 @@ exports.handler = async (event, context) => {
       };
     }
 
-    // Generate embedding for similarity comparison (don't wait for Pinecone storage)
+    // Generate weighted embedding for similarity comparison
+    // Discriminative details repeated 3x to emphasize outfit matching
     let embedding = null;
+    let embeddingText = description; // Fallback to full description
+    
+    if (status === 'ok' && metadata && discriminative) {
+      // Build categorical part (1x)
+      const categorical = [
+        metadata.ageRange || '',
+        metadata.gender || '',
+        metadata.build || '',
+        metadata.skinTone || '',
+        metadata.hairColor || ''
+      ].filter(Boolean).join(' ');
+      
+      // Build weighted embedding text: categorical 1x, discriminative 3x
+      embeddingText = `${categorical} ${discriminative} ${discriminative} ${discriminative}`;
+    }
+    
     try {
       const openaiKey = process.env.OPENAI_API_KEY || process.env.OPENAIKEY;
       if (openaiKey) {
-        embedding = await generateEmbedding(description, openaiKey);
+        embedding = await generateEmbedding(embeddingText, openaiKey);
       }
     } catch (embeddingError) {
       console.warn('Failed to generate embedding for response:', embeddingError);
@@ -706,6 +790,8 @@ exports.handler = async (event, context) => {
       body: JSON.stringify({
         status,
         description,
+        metadata: metadata || {},
+        discriminative: discriminative || '',
         embedding: embedding,
         recordId: recordId
       })
