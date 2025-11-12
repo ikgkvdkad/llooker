@@ -69,14 +69,15 @@ TASK:
 Determine the probability (0-100%) that these are photos of the SAME PERSON.
 
 CRITICAL RULES:
-1. GENDER MISMATCH = 0% (instant fatal)
-2. Photos taken close in time = outfit MUST be identical or nearly identical
-3. Focus on OUTFIT as primary differentiator (colors, layers, accessories)
-4. Age must be compatible (20-year gap = very unlikely same person)
-5. Build/body type must align
-6. Hair color and style must match
-7. Small differences OK: gestures, facial expressions, camera angle
-8. When uncertain, be conservative (better to separate than incorrectly merge)
+  1. GENDER MISMATCH = 0% (instant fatal)
+  2. Photos captured close together, so major appearance changes (e.g., facial hair appearing or disappearing) are disqualifying
+  3. Photos taken close in time = outfit MUST be identical or nearly identical
+  4. Focus on OUTFIT as primary differentiator (colors, layers, accessories)
+  5. Age must be compatible (20-year gap = very unlikely same person)
+  6. Build/body type must align
+  7. Hair color and style must match
+  8. Small differences OK: gestures, facial expressions, camera angle
+  9. When uncertain, be conservative (better to separate than incorrectly merge)
 
 COMPARISON PRIORITIES (in order):
 1. Gender (must match)
