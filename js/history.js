@@ -2,7 +2,7 @@
 
 import { ANALYSIS_API_URL } from './config.js';
 import { historyState, photoSlots, interactionState, analysisState } from './state.js';
-import { setAnalysisState, renderAnalysisSummary } from './analysis-api.js';
+import { setAnalysisState, renderAnalysisSummary, appendDiagnosticMessage } from './analysis-api.js';
 import { setPersonIdentifierBadge } from './ui.js';
 import { hideSelectionOverlay } from './selection.js';
 import * as dom from './dom.js';
@@ -113,6 +113,10 @@ export async function fetchAnalyses(side, options = {}) {
         return data;
     } catch (error) {
         console.error(`Failed to fetch ${side} analyses:`, error);
+        appendDiagnosticMessage(side, `History sync failed: ${error?.message || 'Unknown error.'}`, {
+            level: 'error',
+            detail: error?.stack || error?.message || null
+        });
         throw error;
     } finally {
         state.isLoading = false;
@@ -146,6 +150,10 @@ export async function navigatePrevious(side) {
             await fetchAnalyses(side);
         } catch (error) {
             console.error('Failed to load history:', error);
+            appendDiagnosticMessage(side, `History load failed: ${error?.message || 'Unknown error.'}`, {
+                level: 'error',
+                detail: error?.stack || error?.message || null
+            });
             return;
         }
     }
