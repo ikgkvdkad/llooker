@@ -16,10 +16,12 @@ import {
 } from './state.js';
 import { getPhotoSlotByAnalysisSide, clampRectToBounds, loadImageElement } from './utils.js';
 import { snapshotViewportState, clearMovementDebounce } from './zoom.js';
-import { requestCurrentLocation } from './geo.js';
 import { showWarning } from './ui.js';
 import { addToHistory } from './history.js';
 import { storePhotoData } from './similarity.js';
+import { extractGpsLocationFromDataUrl } from './exif.js';
+
+const missingGpsWarningShown = new Set();
 
 /**
  * Reset analysis state for a side
@@ -322,6 +324,15 @@ async function createViewportDataUrl(photoDataUrl, viewportSnapshot) {
         outputCanvas = resizedCanvas;
     }
 
+    try {
+        const jpegDataUrl = outputCanvas.toDataURL('image/jpeg', 0.85);
+        if (typeof jpegDataUrl === 'string' && jpegDataUrl.startsWith('data:image/jpeg')) {
+            return jpegDataUrl;
+        }
+    } catch (error) {
+        console.warn('Falling back to PNG viewport rendering after JPEG export failure:', error);
+    }
+
     return outputCanvas.toDataURL('image/png');
 }
 
@@ -479,45 +490,10 @@ async function requestAnalysis(side, photoDataUrl, viewportSnapshot, options = {
         ? options.capturedAt
         : new Date().toISOString();
 
-    let locationPayload = null;
-    try {
-        const locationResult = await requestCurrentLocation();
-        if (locationResult) {
-            if (locationResult.status === 'ok' && locationResult.coords) {
-                locationPayload = {
-                    status: 'ok',
-                    timestamp: locationResult.timestamp,
-                    coords: {
-                        latitude: locationResult.coords.latitude,
-                        longitude: locationResult.coords.longitude,
-                        accuracy: locationResult.coords.accuracy,
-                        altitude: locationResult.coords.altitude,
-                        altitudeAccuracy: locationResult.coords.altitudeAccuracy,
-                        heading: locationResult.coords.heading,
-                        speed: locationResult.coords.speed
-                    }
-                };
-            } else {
-                locationPayload = {
-                    status: locationResult.status || 'unknown',
-                    timestamp: locationResult.timestamp || Date.now(),
-                    error: locationResult.error || 'Location unavailable.',
-                    coords: null
-                };
-                const statusMessage = locationResult.error || `Geolocation status: ${locationResult.status}`;
-                showWarning(`${label} location unavailable: ${statusMessage}`);
-            }
-        }
-    } catch (locationError) {
-        const message = locationError?.message || 'Unexpected geolocation failure.';
-        console.error(`${label} location retrieval failed:`, locationError);
-        showWarning(`${label} location error: ${message}`);
-        locationPayload = {
-            status: 'error',
-            timestamp: Date.now(),
-            error: message,
-            coords: null
-        };
+    const locationPayload = extractGpsLocationFromDataUrl(photoDataUrl);
+    if (!locationPayload && !missingGpsWarningShown.has(side)) {
+        showWarning(`${label} photo is missing embedded GPS metadata. Location will be omitted from the analysis.`);
+        missingGpsWarningShown.add(side);
     }
 
     let renderedViewportDataUrl;
