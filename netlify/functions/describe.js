@@ -172,50 +172,57 @@ function sanitizeAnalysisDoc(raw) {
     return null;
   }
 
+  const normaliseTokenList = (value) => normaliseStringList(
+    Array.isArray(value)
+      ? value
+      : (typeof value === 'string' && value.trim().length ? [value] : [])
+  );
+
+  const sanitiseString = (value) => {
+    if (typeof value !== 'string') {
+      return null;
+    }
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed.toLowerCase() : null;
+  };
+
   const analysis = {
     subject: ensureObject(raw.subject),
     appearance: ensureObject(raw.appearance),
     clothing: ensureObject(raw.clothing),
     accessories: ensureObject(raw.accessories),
-    carriedItems: normaliseStringList(raw.carriedItems),
-    notes: ensureObject(raw.notes),
+    carriedItems: normaliseTokenList(raw.carriedItems),
     confidence: ensureObject(raw.confidence),
-    environment: ensureObject(raw.environment),
-    tags: normaliseStringList(raw.tags)
+    environment: ensureObject(raw.environment)
   };
 
   const subject = analysis.subject;
-  subject.distinguishingFeatures = normaliseStringList(subject.distinguishingFeatures);
-
+  subject.distinguishingFeatures = normaliseTokenList(subject.distinguishingFeatures);
   if (subject.hair && typeof subject.hair === 'object') {
-    const hair = { ...subject.hair };
-    ['color', 'length', 'style', 'coverage'].forEach((key) => {
-      if (typeof hair[key] === 'string') {
-        hair[key] = hair[key].trim().toLowerCase();
-      } else {
-        hair[key] = null;
-      }
+    const hair = {};
+    ['color', 'length', 'style'].forEach((key) => {
+      hair[key] = sanitiseString(subject.hair[key]);
     });
     subject.hair = hair;
   } else {
-    subject.hair = {};
+    subject.hair = { color: null, length: null, style: null };
+  }
+  ['gender', 'ageRange', 'ageBucket', 'build', 'bodyType', 'heightCategory', 'skinTone', 'facialHair', 'eyewear', 'headwear'].forEach((key) => {
+    subject[key] = sanitiseString(subject[key]);
+  });
+  if (Number.isFinite(subject.genderConfidence)) {
+    subject.genderConfidence = Math.max(0, Math.min(1, Number(subject.genderConfidence)));
+  } else {
+    subject.genderConfidence = null;
   }
 
   const appearance = analysis.appearance;
-  appearance.dominantColors = normaliseStringList(appearance.dominantColors);
-  const palette = ensureObject(appearance.colorPalette);
-  ['primary', 'secondary', 'accent'].forEach((key) => {
-    if (typeof palette[key] === 'string') {
-      palette[key] = palette[key].trim().toLowerCase();
-    } else {
-      palette[key] = null;
-    }
-  });
-  appearance.colorPalette = palette;
-  appearance.styleDescriptors = normaliseStringList(appearance.styleDescriptors);
-  appearance.textureDescriptors = normaliseStringList(appearance.textureDescriptors);
-  appearance.patterns = normaliseStringList(appearance.patterns);
-  appearance.notableFeatures = normaliseStringList(appearance.notableFeatures);
+  appearance.dominantColors = normaliseTokenList(appearance.dominantColors);
+  appearance.styleDescriptors = normaliseTokenList(appearance.styleDescriptors);
+  appearance.patterns = normaliseTokenList(appearance.patterns);
+  delete appearance.colorPalette;
+  delete appearance.textureDescriptors;
+  delete appearance.notableFeatures;
 
   const clothingKeys = ['top', 'bottom', 'outerwear', 'footwear'];
   clothingKeys.forEach((key) => {
@@ -224,42 +231,40 @@ function sanitizeAnalysisDoc(raw) {
       analysis.clothing[key] = {};
       return;
     }
-    const clone = { ...block };
-    ['category', 'pattern', 'style', 'fit', 'condition', 'layerOrder', 'material'].forEach((prop) => {
-      if (typeof clone[prop] === 'string') {
-        clone[prop] = clone[prop].trim().toLowerCase();
-      } else {
-        clone[prop] = null;
-      }
-    });
-    clone.colors = normaliseStringList(clone.colors);
-    clone.layers = normaliseStringList(clone.layers);
-    clone.details = normaliseStringList(clone.details);
-    analysis.clothing[key] = clone;
+    const sanitised = {};
+    sanitised.category = sanitiseString(block.category);
+    sanitised.colors = normaliseTokenList(block.colors);
+    sanitised.pattern = sanitiseString(block.pattern);
+    sanitised.style = sanitiseString(block.style);
+    analysis.clothing[key] = sanitised;
   });
-  analysis.clothing.additionalLayers = normaliseStringList(analysis.clothing.additionalLayers);
-  analysis.clothing.brandLogos = normaliseStringList(analysis.clothing.brandLogos);
-  analysis.clothing.textOrGraphics = normaliseStringList(analysis.clothing.textOrGraphics);
+  analysis.clothing.dominantColors = normaliseTokenList(analysis.clothing.dominantColors);
+  delete analysis.clothing.additionalLayers;
+  delete analysis.clothing.brandLogos;
+  delete analysis.clothing.textOrGraphics;
 
   const accessories = analysis.accessories;
-  const accessoryBuckets = ['jewelry', 'headwear', 'eyewear', 'handheld', 'bags', 'tech', 'other'];
-  accessoryBuckets.forEach((bucket) => {
-    accessories[bucket] = normaliseStringList(accessories[bucket]);
+  ['jewelry', 'headwear', 'eyewear', 'handheld', 'bags', 'tech', 'other'].forEach((bucket) => {
+    accessories[bucket] = normaliseTokenList(accessories[bucket]);
   });
 
-  const notes = analysis.notes;
-  notes.distinguishingMarks = normaliseStringList(notes.distinguishingMarks);
-  notes.tattoos = normaliseStringList(notes.tattoos);
-  notes.scars = normaliseStringList(notes.scars);
-  notes.cosmetics = normaliseStringList(notes.cosmetics);
-  notes.other = normaliseStringList(notes.other);
-
   const environment = analysis.environment;
-  ['setting', 'background', 'lighting', 'crowdLevel', 'weather', 'cameraAngle'].forEach((key) => {
-    if (typeof environment[key] === 'string') {
-      environment[key] = environment[key].trim().toLowerCase();
+  ['setting', 'background', 'lighting', 'crowdLevel'].forEach((key) => {
+    environment[key] = sanitiseString(environment[key]);
+  });
+
+  const confidence = analysis.confidence;
+  ['overall', 'gender', 'age', 'clothing', 'accessories'].forEach((key) => {
+    const value = confidence[key];
+    if (Number.isFinite(value)) {
+      confidence[key] = Math.max(0, Math.min(1, Number(value)));
+    } else if (typeof value === 'string' && value.trim().length) {
+      const numeric = Number(value);
+      confidence[key] = Number.isFinite(numeric)
+        ? Math.max(0, Math.min(1, numeric))
+        : null;
     } else {
-      environment[key] = null;
+      confidence[key] = null;
     }
   });
 
@@ -411,38 +416,28 @@ async function persistAnalysisRecord(recordInput, requestMeta) {
 }
 
 const SYSTEM_PROMPT = [
-  'Return ONLY compact JSON with top-level fields: status, analysis, discriminators.',
-  'status must be "ok", "unclear", or "error".',
-  'analysis object MUST contain:',
-  '  subject (gender, genderConfidence 0-1, ageRange, ageBucket, build, bodyType, heightCategory, skinTone, hair{color,length,style,coverage}, facialHair, eyewear, headwear, distinguishingFeatures[]),',
-  '  appearance (dominantColors[], colorPalette{primary,secondary,accent}, styleDescriptors[], textureDescriptors[], patterns[], notableFeatures[]),',
-  '  clothing (overallStyle, top, bottom, outerwear, footwear, additionalLayers[], brandLogos[], textOrGraphics[]).',
-  'Each clothing item (top/bottom/outerwear/footwear) must include category, colors[], pattern, style, layerOrder, condition, fit.',
-  'analysis.accessories must include buckets: jewelry[], headwear[], eyewear[], handheld[], bags[], tech[], other[].',
-  'analysis.carriedItems array should list obvious objects being held or strapped.',
-  'analysis.environment should describe setting, background, lighting, crowdLevel, weather, cameraAngle.',
-  'analysis.notes should include distinguishingMarks[], tattoos[], scars[], cosmetics[], other[].',
-  'analysis.confidence should provide numeric scores (0-1) for overall, gender, age, clothing, accessories, distinguishingFeatures.',
-  'analysis.tags should be an array of hyphenated keywords (e.g., "formal-attire", "athletic").',
-  'dominantColors MUST be lower-case basic colour words or hex codes (e.g., "navy-blue").',
-  'discriminators must be an object with exactly: hair, face, top, bottom, footwear, accessories, carried.',
-  'discriminator values must be hyphenated tokens with optional "+" for layers. No commas or prose sentences.',
-  'If subject is unclear or not human: return {"status":"unclear"}',
-  'If status is "ok" every required field must be filled with best-effort values; use "unknown" or empty arrays where detail is missing.',
-  'Do NOT include any free-form description or explanation outside the JSON.'
+  'Return ONLY JSON with top-level fields {status, analysis, discriminators}.',
+  'status must be "ok", "unclear", or "error". When status is not "ok", omit analysis and discriminators.',
+  'If status is "ok", analysis must include:',
+  '  subject: gender, genderConfidence (0-1), ageRange, ageBucket, build, bodyType, heightCategory, skinTone, hair{color,length,style}, facialHair, eyewear, headwear, distinguishingFeatures[].',
+  '  appearance: dominantColors[], styleDescriptors[], patterns[].',
+  '  clothing: dominantColors[] plus objects top/bottom/outerwear/footwear each with category, colors[], pattern, style.',
+  '  accessories: buckets jewelry[], headwear[], eyewear[], handheld[], bags[], tech[], other[].',
+  '  carriedItems: array listing obvious handheld or worn items.',
+  '  environment: setting, background, lighting, crowdLevel.',
+  '  confidence: overall, gender, age, clothing, accessories as numbers between 0 and 1.',
+  'discriminators must contain hair, face, top, bottom, footwear, accessories, carried using concise hyphenated tokens (allow "+").',
+  'Use "unknown" or [] when uncertain. Do NOT include prose outside the JSON.'
 ].join(' ');
 
 function buildUserPrompt(selectionInstruction) {
   return [
-    'Analyze the visible person for metadata-driven re-identification.',
-    'Return structured JSON as instructed by the system message.',
-    'Pay attention to: gender cues, estimated age, body build, skin tone, hair colour/length/style, facial details (eyewear, facial hair, makeup, distinguishing marks).',
-    'Capture clothing in detail: item categories, dominant and secondary colours, materials, notable patterns or logos, fit, and layering order.',
-    'Record accessories such as bags, jewelry, headwear, eyewear, tech devices, handheld objects.',
-    'List dominant colours across the outfit and specify hex or descriptive strings (navy-blue, burgundy, #8a2be2).',
-    'Include environment cues that help disambiguate (indoor/outdoor, lighting, background type).',
-    'Use hyphenated tokens (dark-blue, white-sneakers) and "+" when multiple layers are visible (jacket+hoodie+tee).',
-    'If unsure about a field, set it to "unknown" or an empty array rather than omitting it.',
+    'Analyze the framed person for re-identification metadata.',
+    'Fill every requested field even if approximate, using concise hyphenated tokens.',
+    'Report gender cues, age range, build, skin tone, hair details, eyewear/headwear, and distinguishing features.',
+    'Describe clothing (top/bottom/outerwear/footwear) with categories and dominant colours, and list overall outfit colours and patterns.',
+    'List accessories (jewelry, bags, tech, handheld items) and any carried objects.',
+    'Capture environment setting/background/lighting/crowd level plus confidence scores (0-1).',
     selectionInstruction
   ].join(' ');
 }
@@ -509,6 +504,10 @@ exports.handler = async (event) => {
     tableName: TABLE_NAME
   };
 
+  requestMeta.promptVersion = 'v2-compact';
+  requestMeta.imageDetail = 'low';
+  requestMeta.maxTokens = 550;
+
   try {
     const databasePool = getDatabasePool();
     if (!databasePool) {
@@ -567,13 +566,13 @@ exports.handler = async (event) => {
                 type: 'image_url',
                 image_url: {
                   url: image,
-                  detail: 'high'
+                  detail: 'low'
                 }
               }
             ]
           }
         ],
-        max_tokens: 900,
+        max_tokens: 550,
         response_format: { type: 'json_object' },
         temperature: 0.1
       })

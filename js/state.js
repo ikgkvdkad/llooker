@@ -8,12 +8,16 @@ export const photoSlots = {
     back: {
         imageEl: dom.backCapturedPhoto,
         placeholderEl: dom.backPlaceholder,
-        lastPhotoDataUrl: null
+        lastPhotoDataUrl: null,
+        cachedLocationPayload: null,
+        cachedLocationSignature: null
     },
     selfie: {
         imageEl: dom.selfieCapturedPhoto,
         placeholderEl: dom.selfiePlaceholder,
-        lastPhotoDataUrl: null
+        lastPhotoDataUrl: null,
+        cachedLocationPayload: null,
+        cachedLocationSignature: null
     }
 };
 
