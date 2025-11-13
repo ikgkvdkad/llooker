@@ -117,7 +117,9 @@ export const analysisState = {
         analysis: null,
         discriminators: null,
         capturedAt: null,
-        personGroup: null
+        personGroup: null,
+        diagnostics: [],
+        analysisText: ''
     },
     me: {
         panel: dom.meAnalysisPanel,
@@ -127,7 +129,9 @@ export const analysisState = {
         analysis: null,
         discriminators: null,
         capturedAt: null,
-        personGroup: null
+        personGroup: null,
+        diagnostics: [],
+        analysisText: ''
     },
     lastSimilarityResult: null,
     lastSimilarityError: null

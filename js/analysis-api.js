@@ -70,6 +70,170 @@ function runWithTiming(label, fn) {
 }
 
 const personGroupAssignmentInFlight = new Map();
+const MAX_DIAGNOSTIC_ENTRIES = 12;
+
+function truncateText(value, maxLength) {
+    if (typeof value !== 'string') {
+        return '';
+    }
+    if (value.length <= maxLength) {
+        return value;
+    }
+    return `${value.slice(0, Math.max(0, maxLength - 3))}...`;
+}
+
+function sanitizeDiagnosticLevel(level) {
+    if (typeof level !== 'string') {
+        return 'INFO';
+    }
+    const normalized = level.trim().toLowerCase();
+    if (!normalized.length) {
+        return 'INFO';
+    }
+    if (normalized === 'error' || normalized === 'warning' || normalized === 'info') {
+        return normalized.toUpperCase();
+    }
+    return normalized.slice(0, 1).toUpperCase() + normalized.slice(1, 5).toLowerCase();
+}
+
+function normalizeDiagnosticDetail(detail) {
+    if (typeof detail === 'string') {
+        const trimmed = detail.trim();
+        return trimmed.length ? truncateText(trimmed, 600) : null;
+    }
+
+    if (Array.isArray(detail)) {
+        const joined = detail
+            .map(item => (typeof item === 'string' ? item.trim() : ''))
+            .filter(Boolean)
+            .join(' | ');
+        return joined.length ? truncateText(joined, 600) : null;
+    }
+
+    if (detail && typeof detail === 'object') {
+        try {
+            const json = JSON.stringify(detail);
+            return json.length ? truncateText(json, 600) : null;
+        } catch {
+            return null;
+        }
+    }
+
+    return null;
+}
+
+function formatDiagnosticTimestamp(timestamp) {
+    if (timestamp instanceof Date && !Number.isNaN(timestamp.getTime())) {
+        return timestamp.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+
+    if (typeof timestamp === 'number' && Number.isFinite(timestamp)) {
+        const asDate = new Date(timestamp);
+        if (!Number.isNaN(asDate.getTime())) {
+            return asDate.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        }
+    }
+
+    if (typeof timestamp === 'string' && timestamp.trim().length) {
+        return timestamp.trim();
+    }
+
+    return null;
+}
+
+function formatDiagnosticEntry(entry) {
+    if (!entry) {
+        return '';
+    }
+
+    if (typeof entry === 'string') {
+        return entry.trim();
+    }
+
+    if (typeof entry.message !== 'string' || !entry.message.trim().length) {
+        return '';
+    }
+
+    const timestampLabel = formatDiagnosticTimestamp(entry.timestamp);
+    const level = typeof entry.level === 'string' && entry.level.trim().length
+        ? entry.level.trim().toUpperCase()
+        : null;
+
+    const labels = [];
+    if (timestampLabel) {
+        labels.push(timestampLabel);
+    }
+    if (level) {
+        labels.push(level);
+    }
+
+    const prefix = labels.length ? `[${labels.join(' ')}] ` : '';
+    const baseMessage = `${prefix}${entry.message.trim()}`;
+    const detail = typeof entry.detail === 'string' && entry.detail.trim().length
+        ? entry.detail.trim()
+        : '';
+
+    if (!detail.length) {
+        return baseMessage;
+    }
+
+    return `${baseMessage}\n   ↳ ${detail}`;
+}
+
+function refreshAnalysisContent(side) {
+    const state = analysisState[side];
+    if (!state || !state.contentEl) {
+        return;
+    }
+
+    const parts = [];
+    const summary = typeof state.analysisText === 'string' ? state.analysisText.trim() : '';
+    if (summary.length) {
+        parts.push(summary);
+    }
+
+    const diagnostics = Array.isArray(state.diagnostics) ? state.diagnostics : [];
+    const formattedDiagnostics = diagnostics
+        .map(formatDiagnosticEntry)
+        .filter(line => line.length > 0);
+
+    if (formattedDiagnostics.length) {
+        parts.push('[Diagnostics]', formattedDiagnostics.join('\n'));
+    }
+
+    state.contentEl.textContent = parts.join('\n\n');
+}
+
+export function appendDiagnosticMessage(side, message, options = {}) {
+    const state = analysisState[side];
+    if (!state) {
+        return;
+    }
+
+    const normalizedMessage = typeof message === 'string' ? message.trim() : '';
+    if (!normalizedMessage.length) {
+        return;
+    }
+
+    if (!Array.isArray(state.diagnostics)) {
+        state.diagnostics = [];
+    }
+
+    const entry = {
+        message: truncateText(normalizedMessage, 400),
+        detail: normalizeDiagnosticDetail(options.detail ?? null),
+        level: sanitizeDiagnosticLevel(options.level ?? options.type ?? 'info'),
+        timestamp: options.timestamp ?? new Date()
+    };
+
+    state.diagnostics.push(entry);
+
+    if (state.diagnostics.length > MAX_DIAGNOSTIC_ENTRIES) {
+        state.diagnostics.splice(0, state.diagnostics.length - MAX_DIAGNOSTIC_ENTRIES);
+    }
+
+    refreshAnalysisContent(side);
+}
 
 async function assignPersonGroupForRecord(side, recordId) {
     if (!Number.isFinite(recordId)) {
@@ -139,7 +303,10 @@ async function assignPersonGroupForRecord(side, recordId) {
             return personGroup;
         } catch (error) {
             console.error(`[${label}] person grouping failed:`, error);
-            showWarning(`${label} identifier unavailable: ${error?.message || 'Unable to group this photo.'}`);
+            showWarning(`${label} identifier unavailable: ${error?.message || 'Unable to group this photo.'}`, {
+                side,
+                detail: error?.stack || error?.message || null
+            });
             setPersonIdentifierBadge(side, null);
 
             const sideState = analysisState[side];
@@ -172,7 +339,9 @@ export function resetAnalysisState(side) {
     state.statusEl.textContent = side === 'you'
         ? 'Waiting for a You capture. Capture or upload a photo, then pan and zoom to frame the subject.'
         : 'Waiting for a Me capture. Capture or upload your selfie, then center yourself in the frame.';
-    state.contentEl.textContent = '';
+    state.analysisText = '';
+    state.diagnostics = [];
+    refreshAnalysisContent(side);
     state.analysis = null;
     state.imageDataUrl = null;
     state.discriminators = null;
@@ -198,7 +367,8 @@ export function setAnalysisState(side, status, message, analysisText = '') {
     if (typeof message === 'string') {
         state.statusEl.textContent = message;
     }
-    state.contentEl.textContent = analysisText;
+    state.analysisText = typeof analysisText === 'string' ? analysisText : '';
+    refreshAnalysisContent(side);
 }
 
 /**
@@ -658,7 +828,10 @@ async function requestAnalysis(side, photoDataUrl, viewportSnapshot, options = {
     }
 
     if (!locationPayload && !missingGpsWarningShown.has(side)) {
-        showWarning(`${label} photo is missing embedded GPS metadata. Location will be omitted from the analysis.`);
+        showWarning(`${label} photo is missing embedded GPS metadata. Location will be omitted from the analysis.`, {
+            side,
+            detail: 'EXIF GPS fields missing or unreadable'
+        });
         missingGpsWarningShown.add(side);
     }
 
@@ -784,6 +957,10 @@ async function requestAnalysis(side, photoDataUrl, viewportSnapshot, options = {
                 ? `${label} analysis request timed out after ${Math.round(ANALYSIS_API_TIMEOUT_MS / 1000)}s.`
                 : `${label} analysis failed: ${error?.message || 'Unknown error.'}`;
             setAnalysisState(side, 'error', message);
+            appendDiagnosticMessage(side, message, {
+                level: 'error',
+                detail: error?.stack || error?.message || null
+            });
         }
         totalOutcome = 'error';
         throw error;

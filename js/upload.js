@@ -58,7 +58,7 @@ export function attachUploadHandler(button, input, side) {
         if (file.type && !file.type.startsWith('image/')) {
             const message = `${label} upload failed: selected file is not an image.`;
             console.warn(message);
-            showError(message);
+            showError(message, { side });
             setAnalysisState(side, 'error', message);
             input.value = '';
             return;
@@ -75,7 +75,7 @@ export function attachUploadHandler(button, input, side) {
         } catch (error) {
             console.error(`${label} photo upload failed:`, error);
             const message = `${label} upload failed: ${error?.message || 'Unable to process image.'}`;
-            showError(message);
+            showError(message, { side, detail: error?.stack || null });
             setAnalysisState(side, 'error', message);
         } finally {
             input.value = '';

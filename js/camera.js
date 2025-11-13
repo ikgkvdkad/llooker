@@ -125,7 +125,9 @@ async function stopAllCamerasAndWait(timeoutMs = CAMERA_RELEASE_TIMEOUT_MS) {
  */
 function checkCameraSupport() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        showError('Camera API is not supported in this browser.');
+        showError('Camera API is not supported in this browser.', {
+            detail: 'navigator.mediaDevices.getUserMedia is unavailable'
+        });
         return false;
     }
     return true;
@@ -319,7 +321,13 @@ async function activateBackStream(stream) {
     const zoomResult = await applyZoomSetting(stream, BACK_TARGET_ZOOM);
     if (!zoomResult.success) {
         stopStream(stream);
-        showError('Back camera (requires 2x zoom): ' + zoomResult.reason);
+        showError('Back camera (requires 2x zoom): ' + zoomResult.reason, {
+            side: 'you',
+            detail: {
+                targetZoom: BACK_TARGET_ZOOM,
+                reason: zoomResult.reason
+            }
+        });
         return false;
     }
 
@@ -347,7 +355,13 @@ async function activateBackStream(stream) {
         if (shouldVerifyZoom && !zoomSettled.success) {
             stopStream(stream);
             dom.backVideoElement.srcObject = null;
-            showError('Back camera (requires 2x zoom): ' + zoomSettled.reason);
+            showError('Back camera (requires 2x zoom): ' + zoomSettled.reason, {
+                side: 'you',
+                detail: {
+                    expectedZoom,
+                    reason: zoomSettled.reason
+                }
+            });
             return false;
         }
 
@@ -359,7 +373,13 @@ async function activateBackStream(stream) {
             if (typeof verifiedZoom === 'number' && Math.abs(verifiedZoom - expectedZoom) > 0.05) {
                 stopStream(stream);
                 dom.backVideoElement.srcObject = null;
-                showError('Back camera (requires 2x zoom): Device reported ' + verifiedZoom.toFixed(2) + 'x zoom.');
+                showError('Back camera (requires 2x zoom): Device reported ' + verifiedZoom.toFixed(2) + 'x zoom.', {
+                    side: 'you',
+                    detail: {
+                        expectedZoom,
+                        reportedZoom: typeof verifiedZoom === 'number' ? Number(verifiedZoom.toFixed(4)) : null
+                    }
+                });
                 return false;
             }
             const backState = interactionState.back;
@@ -384,12 +404,18 @@ async function activateBackStream(stream) {
         console.error('Back camera stream failed to become ready:', error);
         stopStream(stream);
         dom.backVideoElement.srcObject = null;
-        showError('Back camera (requires 2x zoom): Unable to load camera stream.');
+        showError('Back camera (requires 2x zoom): Unable to load camera stream.', {
+            side: 'you',
+            detail: error?.stack || error?.message || null
+        });
         return false;
     }
 
     if (zoomResult.warning) {
-        showWarning('Back camera: ' + zoomResult.warning + ' Displaying the default field of view.');
+        showWarning('Back camera: ' + zoomResult.warning + ' Displaying the default field of view.', {
+            side: 'you',
+            detail: zoomResult.warning
+        });
     } else {
         hideError();
     }
@@ -431,7 +457,13 @@ async function activateSelfieStream(stream) {
     const zoomResult = await applyZoomSetting(stream, SELFIE_ZOOM_MODE);
     if (!zoomResult.success) {
         stopStream(stream);
-        showError('Me camera (requires 2x zoom): ' + zoomResult.reason);
+        showError('Me camera (requires 2x zoom): ' + zoomResult.reason, {
+            side: 'me',
+            detail: {
+                targetZoom: SELFIE_ZOOM_MODE,
+                reason: zoomResult.reason
+            }
+        });
         return false;
     }
 
@@ -460,7 +492,13 @@ async function activateSelfieStream(stream) {
             stopStream(stream);
             setSelfieStream(null);
             dom.selfieVideoElement.srcObject = null;
-            showError('Me camera (requires 2x zoom): ' + zoomSettled.reason);
+            showError('Me camera (requires 2x zoom): ' + zoomSettled.reason, {
+                side: 'me',
+                detail: {
+                    expectedZoom,
+                    reason: zoomSettled.reason
+                }
+            });
             return false;
         }
 
@@ -473,7 +511,13 @@ async function activateSelfieStream(stream) {
                 stopStream(stream);
                 setSelfieStream(null);
                 dom.selfieVideoElement.srcObject = null;
-                showError('Me camera (requires 2x zoom): Device reported ' + verifiedZoom.toFixed(2) + 'x zoom.');
+                showError('Me camera (requires 2x zoom): Device reported ' + verifiedZoom.toFixed(2) + 'x zoom.', {
+                    side: 'me',
+                    detail: {
+                        expectedZoom,
+                        reportedZoom: typeof verifiedZoom === 'number' ? Number(verifiedZoom.toFixed(4)) : null
+                    }
+                });
                 return false;
             }
 
@@ -500,12 +544,18 @@ async function activateSelfieStream(stream) {
         stopStream(stream);
         setSelfieStream(null);
         dom.selfieVideoElement.srcObject = null;
-        showError('Me camera (requires 2x zoom): Unable to load camera stream.');
+        showError('Me camera (requires 2x zoom): Unable to load camera stream.', {
+            side: 'me',
+            detail: error?.stack || error?.message || null
+        });
         return false;
     }
 
     if (zoomResult.warning) {
-        showWarning('Me camera: ' + zoomResult.warning + ' Displaying the default field of view.');
+        showWarning('Me camera: ' + zoomResult.warning + ' Displaying the default field of view.', {
+            side: 'me',
+            detail: zoomResult.warning
+        });
     } else {
         hideError();
     }
@@ -565,9 +615,15 @@ export async function openBackCamera() {
             console.error('Error accessing back camera:', error);
             
             if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-                showError('Back camera access was denied.');
+                showError('Back camera access was denied.', {
+                    side: 'you',
+                    detail: error?.message || error?.name || null
+                });
             } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
-                showError('No back camera found.');
+                showError('No back camera found.', {
+                    side: 'you',
+                    detail: error?.message || error?.name || null
+                });
             } else {
                 try {
                     const stream = await navigator.mediaDevices.getUserMedia({
@@ -587,7 +643,10 @@ export async function openBackCamera() {
                         }
                     } catch (finalRetryError) {
                         console.error('Final attempt to access back camera failed:', finalRetryError);
-                        showError('Failed to access back camera.');
+                        showError('Failed to access back camera.', {
+                            side: 'you',
+                            detail: finalRetryError?.message || finalRetryError?.name || null
+                        });
                     }
                 }
             }
@@ -633,9 +692,15 @@ export async function openSelfieCamera() {
             console.error('Error accessing me camera:', error);
 
             if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-                showError('Me camera access was denied.');
+                showError('Me camera access was denied.', {
+                    side: 'me',
+                    detail: error?.message || error?.name || null
+                });
             } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
-                showError('No back camera found for the Me view.');
+                showError('No back camera found for the Me view.', {
+                    side: 'me',
+                    detail: error?.message || error?.name || null
+                });
             } else {
                 try {
                     const stream = await navigator.mediaDevices.getUserMedia({
@@ -655,7 +720,10 @@ export async function openSelfieCamera() {
                         }
                     } catch (finalRetryError) {
                         console.error('Final attempt to access me camera failed:', finalRetryError);
-                        showError('Failed to access me camera.');
+                        showError('Failed to access me camera.', {
+                            side: 'me',
+                            detail: finalRetryError?.message || finalRetryError?.name || null
+                        });
                     }
                 }
             }

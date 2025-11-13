@@ -3,6 +3,7 @@
 import { analysisState } from './state.js';
 import * as dom from './dom.js';
 import { setPersonIdentifierBadge } from './ui.js';
+import { appendDiagnosticMessage } from './analysis-api.js';
 
 /**
  * Store photo data for a side and trigger similarity check
@@ -141,6 +142,11 @@ export async function updateSimilarityBar() {
             message: error.message,
             timestamp: new Date().toISOString()
         };
+
+        const diagnosticMessage = `Similarity match failed: ${error?.message || 'Unknown error.'}`;
+        const diagnosticDetail = error?.stack || error?.message || null;
+        appendDiagnosticMessage('you', diagnosticMessage, { level: 'error', detail: diagnosticDetail });
+        appendDiagnosticMessage('me', diagnosticMessage, { level: 'error', detail: diagnosticDetail });
     }
 }
 
