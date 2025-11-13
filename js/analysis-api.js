@@ -23,6 +23,52 @@ import { extractGpsLocationFromDataUrl } from './exif.js';
 
 const missingGpsWarningShown = new Set();
 
+const DEBUG_METADATA_TIMING = Boolean(
+    typeof window !== 'undefined' && window.__DEBUG_METADATA_TIMING__
+);
+
+function now() {
+    if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+        return performance.now();
+    }
+    return Date.now();
+}
+
+function logTiming(label, durationMs, outcome = 'ok') {
+    if (!DEBUG_METADATA_TIMING) {
+        return;
+    }
+    const suffix = outcome === 'ok' ? '' : ` (${outcome})`;
+    console.log(`[analysis-timing] ${label}: ${durationMs.toFixed(2)}ms${suffix}`);
+}
+
+function runWithTiming(label, fn) {
+    if (!DEBUG_METADATA_TIMING) {
+        return fn();
+    }
+    const start = now();
+    try {
+        const result = fn();
+        if (result && typeof result.then === 'function') {
+            return result.then(
+                (value) => {
+                    logTiming(label, now() - start);
+                    return value;
+                },
+                (error) => {
+                    logTiming(label, now() - start, 'error');
+                    throw error;
+                }
+            );
+        }
+        logTiming(label, now() - start);
+        return result;
+    } catch (error) {
+        logTiming(label, now() - start, 'error');
+        throw error;
+    }
+}
+
 /**
  * Reset analysis state for a side
  */
@@ -472,6 +518,8 @@ function processAnalysisQueue() {
  * Request analysis from API
  */
 async function requestAnalysis(side, photoDataUrl, viewportSnapshot, options = {}) {
+    const totalStart = now();
+    let totalOutcome = 'ok';
     const state = analysisState[side];
     if (!state) {
         return;
@@ -490,7 +538,30 @@ async function requestAnalysis(side, photoDataUrl, viewportSnapshot, options = {
         ? options.capturedAt
         : new Date().toISOString();
 
-    const locationPayload = extractGpsLocationFromDataUrl(photoDataUrl);
+    const slotForCaching = getPhotoSlotByAnalysisSide(side);
+    const locationSignature = typeof photoDataUrl === 'string' && photoDataUrl.length
+        ? photoDataUrl.slice(0, 128)
+        : null;
+
+    let locationPayload;
+    if (slotForCaching && locationSignature) {
+        if (slotForCaching.cachedLocationSignature === locationSignature) {
+            locationPayload = slotForCaching.cachedLocationPayload || null;
+        } else {
+            locationPayload = runWithTiming(
+                `${label.toLowerCase()}-gps-extraction`,
+                () => extractGpsLocationFromDataUrl(photoDataUrl)
+            );
+            slotForCaching.cachedLocationSignature = locationSignature;
+            slotForCaching.cachedLocationPayload = locationPayload || null;
+        }
+    } else {
+        locationPayload = runWithTiming(
+            `${label.toLowerCase()}-gps-extraction`,
+            () => extractGpsLocationFromDataUrl(photoDataUrl)
+        );
+    }
+
     if (!locationPayload && !missingGpsWarningShown.has(side)) {
         showWarning(`${label} photo is missing embedded GPS metadata. Location will be omitted from the analysis.`);
         missingGpsWarningShown.add(side);
@@ -499,7 +570,10 @@ async function requestAnalysis(side, photoDataUrl, viewportSnapshot, options = {
     let renderedViewportDataUrl;
 
     try {
-        renderedViewportDataUrl = await createViewportDataUrl(photoDataUrl, viewportSnapshot);
+        renderedViewportDataUrl = await runWithTiming(
+            `${label.toLowerCase()}-viewport-render`,
+            () => createViewportDataUrl(photoDataUrl, viewportSnapshot)
+        );
     } catch (renderError) {
         let message;
         if (renderError?.name === 'SelectionAreaError') {
@@ -522,29 +596,38 @@ async function requestAnalysis(side, photoDataUrl, viewportSnapshot, options = {
     const timeoutId = window.setTimeout(() => controller.abort(), ANALYSIS_API_TIMEOUT_MS);
 
     try {
-        const response = await fetch(ANALYSIS_API_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                role: side,
-                image: renderedViewportDataUrl,
-                viewport: viewportSnapshot,
-                reason: options.reason || 'interaction',
-                signature: options.signature || null,
-                capturedAt,
-                location: locationPayload
-            }),
-            signal: controller.signal
-        });
+        const response = await runWithTiming(
+            `${label.toLowerCase()}-analysis-fetch`,
+            () => fetch(ANALYSIS_API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    role: side,
+                    image: renderedViewportDataUrl,
+                    viewport: viewportSnapshot,
+                    reason: options.reason || 'interaction',
+                    signature: options.signature || null,
+                    capturedAt,
+                    location: locationPayload
+                }),
+                signal: controller.signal
+            })
+        );
 
         if (!response.ok) {
-            const errorText = await response.text().catch(() => '');
+            const errorText = await runWithTiming(
+                `${label.toLowerCase()}-analysis-error-body`,
+                () => response.text().catch(() => '')
+            );
             throw new Error(errorText || `HTTP ${response.status}`);
         }
 
-        const payload = await response.json();
+        const payload = await runWithTiming(
+            `${label.toLowerCase()}-analysis-parse`,
+            () => response.json()
+        );
         const statusFlag = typeof payload?.status === 'string'
             ? payload.status.trim().toLowerCase()
             : null;
@@ -600,9 +683,11 @@ async function requestAnalysis(side, photoDataUrl, viewportSnapshot, options = {
                 : `${label} analysis failed: ${error?.message || 'Unknown error.'}`;
             setAnalysisState(side, 'error', message);
         }
+        totalOutcome = 'error';
         throw error;
     } finally {
         window.clearTimeout(timeoutId);
+        logTiming(`${label.toLowerCase()}-analysis-total`, now() - totalStart, totalOutcome);
     }
 }
 

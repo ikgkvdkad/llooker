@@ -2,6 +2,7 @@
 
 const JPEG_SOI = 0xffd8;
 const TIFF_TAG_GPS_POINTER = 0x8825;
+const EXIF_MAX_SCAN_BYTES = 256 * 1024;
 
 const GPS_TAGS = {
     LATITUDE_REF: 0x0001,
@@ -275,7 +276,7 @@ function parseExifGps(dataView, start, length) {
     return null;
 }
 
-export function extractGpsLocationFromDataUrl(dataUrl) {
+export function extractGpsLocationFromDataUrl(dataUrl, { maxBytes = EXIF_MAX_SCAN_BYTES } = {}) {
     if (typeof dataUrl !== 'string') {
         return null;
     }
@@ -291,9 +292,13 @@ export function extractGpsLocationFromDataUrl(dataUrl) {
     }
 
     const base64 = dataUrl.slice(headerEnd + 1);
+    const maxCharLength = maxBytes && Number.isFinite(maxBytes) && maxBytes > 0
+        ? Math.min(base64.length, Math.ceil(maxBytes / 3) * 4)
+        : base64.length;
+    const truncated = maxCharLength < base64.length;
     let binary;
     try {
-        binary = atob(base64);
+        binary = atob(base64.slice(0, maxCharLength));
     } catch (error) {
         console.warn('EXIF GPS extraction failed: unable to decode base64.', error);
         return null;
@@ -326,11 +331,22 @@ export function extractGpsLocationFromDataUrl(dataUrl) {
             break;
         }
 
+        if (offset + segmentLength > dataView.byteLength) {
+            if (truncated) {
+                console.info('EXIF GPS extraction stopped: segment extends beyond scan window.');
+            }
+            break;
+        }
+
         if (marker === 0xe1) {
             return parseExifGps(dataView, offset + 2, segmentLength - 2);
         }
 
         offset += segmentLength;
+    }
+
+    if (truncated) {
+        console.info(`EXIF GPS metadata not found within first ${Math.round(maxBytes / 1024)} KiB; skipping full JPEG decode.`);
     }
 
     return null;

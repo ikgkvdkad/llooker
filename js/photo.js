@@ -17,6 +17,8 @@ export function initializePhotoSlot(slotKey) {
     }
 
     slot.lastPhotoDataUrl = null;
+    slot.cachedLocationPayload = null;
+    slot.cachedLocationSignature = null;
 
     if (slot.imageEl) {
         slot.imageEl.classList.remove('active');
@@ -77,6 +79,8 @@ export function displayPhotoForSide(side, dataUrl) {
     }
 
     slot.lastPhotoDataUrl = dataUrl;
+    slot.cachedLocationPayload = null;
+    slot.cachedLocationSignature = null;
     slot.imageEl.src = dataUrl;
     slot.imageEl.classList.add('active');
     showSelectionOverlay(slotKey);
