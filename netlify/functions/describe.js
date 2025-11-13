@@ -34,23 +34,54 @@ function extractJsonContent(messageContent) {
   }
 
   if (Array.isArray(messageContent)) {
-    const pieces = messageContent.reduce((acc, segment) => {
+    let structuredPayload = null;
+    const fragments = [];
+
+    for (const segment of messageContent) {
       if (!segment || typeof segment !== 'object') {
-        return acc;
+        continue;
+      }
+
+      if (
+        segment.type === 'output_json'
+        && segment.output_json
+        && typeof segment.output_json === 'object'
+      ) {
+        structuredPayload = segment.output_json;
+        break;
       }
 
       if (typeof segment.text === 'string') {
-        acc.push(segment.text);
-      } else if (typeof segment.content === 'string') {
-        acc.push(segment.content);
-      } else if (typeof segment.json === 'string') {
-        acc.push(segment.json);
+        fragments.push(segment.text);
+        continue;
       }
 
-      return acc;
-    }, []).join('').trim();
+      if (typeof segment.content === 'string') {
+        fragments.push(segment.content);
+        continue;
+      }
 
-    return pieces.length ? pieces : null;
+      if (typeof segment.json === 'string') {
+        fragments.push(segment.json);
+        continue;
+      }
+
+      if (
+        segment.type === 'json'
+        && typeof segment.data === 'object'
+        && segment.data !== null
+      ) {
+        structuredPayload = segment.data;
+        break;
+      }
+    }
+
+    if (structuredPayload) {
+      return structuredPayload;
+    }
+
+    const joined = fragments.join('').trim();
+    return joined.length ? joined : null;
   }
 
   return null;
@@ -725,23 +756,32 @@ exports.handler = async (event) => {
       };
       }
 
-      const data = await response.json();
-      const messageContent = data.choices?.[0]?.message?.content;
-      const normalizedContent = extractJsonContent(messageContent);
+    const data = await response.json();
+    const messageContent = data.choices?.[0]?.message?.content;
+    const normalizedContent = extractJsonContent(messageContent);
 
-      if (!normalizedContent) {
-        console.error('AI response missing JSON content.', {
-          rawMessageContent: messageContent,
-          requestMeta
-        });
-        return {
-          statusCode: 500,
-          body: JSON.stringify({ error: 'AI response missing JSON payload' })
-        };
-      }
+    if (normalizedContent == null) {
+      console.error('AI response missing JSON content.', {
+        rawMessageContent: messageContent,
+        requestMeta
+      });
+      return {
+        statusCode: 500,
+        body: JSON.stringify({ error: 'AI response missing JSON payload' })
+      };
+    }
 
-      let parsed;
+    if (normalizedContent && typeof normalizedContent === 'object') {
+      console.log('AI response provided structured JSON payload.', {
+        requestId: openAiRequestId,
+        keys: Object.keys(normalizedContent),
+        requestMeta
+      });
+    }
 
+    let parsed;
+
+    if (typeof normalizedContent === 'string') {
       try {
         parsed = JSON.parse(normalizedContent);
       } catch (parseError) {
@@ -755,6 +795,9 @@ exports.handler = async (event) => {
           body: JSON.stringify({ error: 'AI response format invalid' })
         };
       }
+    } else {
+      parsed = normalizedContent;
+    }
 
     const status = typeof parsed?.status === 'string' ? parsed.status.trim().toLowerCase() : null;
     const analysisDoc = sanitizeAnalysisDoc(parsed?.analysis);
