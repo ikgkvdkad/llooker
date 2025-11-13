@@ -4,7 +4,7 @@ import { DEFAULT_SELECTION_RECT, MIN_SELECTION_EDGE_PX } from './config.js';
 import { photoSlots, selectionState, interactionState, selectionElements } from './state.js';
 import { clamp, cloneSelectionRect, getSelectionElements, getSelectionMinSize, clampRectToBounds } from './utils.js';
 import { getCameraHalfElement } from './camera.js';
-import { scheduleViewportDescription } from './description-api.js';
+import { scheduleViewportAnalysis } from './analysis-api.js';
 import { clearMovementDebounce } from './zoom.js';
 
 /**
@@ -102,7 +102,7 @@ export function resetSelectionRect(slotKey, { notify = false } = {}) {
             interaction.lastSubmittedSignature = null;
             clearMovementDebounce(slotKey);
         }
-        scheduleViewportDescription(slotKey, { reason: 'selection-reset', force: true });
+        scheduleViewportAnalysis(slotKey, { reason: 'selection-reset', force: true });
     }
 }
 
@@ -273,7 +273,7 @@ function continueSelectionInteraction(slotKey, event) {
     updateSelectionStyles(slotKey);
 
     if (selectionHasActivePhoto(slotKey)) {
-        scheduleViewportDescription(slotKey, { reason: 'selection-change' });
+        scheduleViewportAnalysis(slotKey, { reason: 'selection-change' });
     }
 }
 
@@ -306,7 +306,7 @@ function finishSelectionInteraction(slotKey, event) {
     syncSelectionInteractionClasses(slotKey);
 
     if (selectionHasActivePhoto(slotKey)) {
-        scheduleViewportDescription(slotKey, { reason: 'selection-release' });
+        scheduleViewportAnalysis(slotKey, { reason: 'selection-release' });
     }
 }
 

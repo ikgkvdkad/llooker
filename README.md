@@ -1,13 +1,13 @@
 # Camera Photo Capture
 
-A web application that allows users to capture photos and get AI-powered descriptions using OpenAI's GPT-4o-mini vision model.
+A web application that allows users to capture photos and generate structured, AI-powered appearance metadata using OpenAI's GPT-4o-mini vision model.
 
 ## Features
 
 - Dual camera interface (back and front camera)
 - Photo capture from live video stream
 - Image upload support
-- AI-powered person descriptions (non-identifying)
+- AI-generated subject metadata (gender, age range, colours, clothing, accessories)
 - Selection box for targeting specific subjects
 - Pan, zoom, and pinch-to-zoom controls
 - Modern, responsive UI
@@ -31,13 +31,13 @@ llooker/
 │   ├── camera.js           # Camera lifecycle (⚠️ incomplete)
 │   ├── zoom.js             # Zoom & transform (⚠️ incomplete)
 │   ├── interactions.js     # Touch/pointer handlers (⚠️ incomplete)
-│   ├── description-api.js  # AI API communication (⚠️ incomplete)
+│   ├── analysis-api.js     # AI metadata analysis API
 │   ├── upload.js           # File upload handling
 │   ├── ui.js               # UI helpers
 │   └── main.js             # Application initialization
 ├── netlify/
 │   └── functions/
-│       └── describe.js     # Serverless AI description function
+│       └── describe.js     # Serverless AI analysis function
 ├── netlify.toml
 ├── vercel.json
 ├── mephoto.jpg             # Sample image
@@ -52,19 +52,20 @@ The application has been successfully refactored from a monolithic 2,984-line HT
 - ✅ `js/camera.js` - Complete camera lifecycle management
 - ✅ `js/zoom.js` - Full zoom/transform implementation
 - ✅ `js/interactions.js` - All pointer/touch event handlers
-- ✅ `js/description-api.js` - Complete AI API integration
-- ✅ `js/upload.js` - Full file upload and resubmit handling
+- ✅ `js/analysis-api.js` - Structured metadata analysis workflow
+- ✅ `js/upload.js` - Full file upload and re-analysis handling
 - ✅ All other modules complete and functional
 
 The original code is preserved in `index.html.backup` for reference.
 
-## Serverless Vision Description
+## Serverless Vision Analysis
 
-The Netlify function at `netlify/functions/describe.js` sends captured images to OpenAI's `gpt-4o-mini` vision model and returns detailed, non-identifying descriptions focusing on:
+The Netlify function at `netlify/functions/describe.js` sends captured images to OpenAI's `gpt-4o-mini` vision model and returns structured, non-identifying metadata focused on:
 
-- Basic physical attributes (age range, build, posture, skin tone, hairstyle)
-- Clothing & style details (layers, colors, textures, accessories)
-- Additional context (lighting, mood, distinctive features)
+- Subject attributes (gender, age range, build, height category, skin tone, hair profile)
+- Clothing detail (categories, dominant colours, layers, patterns, logos, condition)
+- Accessories & carried items (jewelry, eyewear, bags, handheld objects, tech)
+- Environment context (lighting, setting, crowd level) and discriminators for fast filtering
 
 ### Environment Variables
 
@@ -76,12 +77,12 @@ If the key is missing, the function returns a 500 error.
 
 ### Database Configuration
 
-The `describe` Netlify function now stores successful descriptions in a Postgres database (Netlify Database backed by Neon). Configure it with:
+The `describe` Netlify function now stores successful analyses in a Postgres database (Netlify Database backed by Neon). Configure it with:
 
 - `DATABASE_URL` or `NETLIFY_DATABASE_URL`: Postgres connection string. When using Netlify Postgres addon, `NETLIFY_DATABASE_URL` is automatically set. For local `netlify dev` runs, copy the value from your Netlify dashboard into a `.env` file as `DATABASE_URL`.
-- `DESCRIPTIONS_TABLE` *(optional)*: Override the default table name `portrait_descriptions`.
+- `ANALYSES_TABLE` *(optional)*: Override the default table name `portrait_analyses`.
 
-The function will create the table on first write with columns for status, description, metadata, and request diagnostics. If `DATABASE_URL` is missing, the function returns a 500 error with guidance instead of attempting a fallback.
+The function will create the table on first write with columns for status, structured analysis JSON, discriminators, and request diagnostics. If `DATABASE_URL` is missing, the function returns a 500 error with guidance instead of attempting a fallback.
 
 ## Deployment
 
@@ -132,7 +133,7 @@ php -S localhost:8000
 
 Then open `http://localhost:8000` in your browser. Camera access works on `localhost` even without HTTPS.
 
-**Note:** The AI description feature requires the Netlify function to be running. For local testing of that feature, use:
+**Note:** The AI analysis feature requires the Netlify function to be running. For local testing of that feature, use:
 
 ```bash
 # Install Netlify CLI
@@ -156,7 +157,7 @@ Any modern browser with MediaDevices API support will work.
 - HTTPS connection (required for camera access, except localhost)
 - User must grant camera permissions
 - A working camera device
-- OpenAI API key (for description feature)
+- OpenAI API key (for analysis feature)
 
 ## Development
 

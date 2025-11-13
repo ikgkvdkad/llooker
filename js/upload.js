@@ -4,7 +4,7 @@ import { readFileAsDataUrl } from './utils.js';
 import { displayPhotoForSide } from './photo.js';
 import { stopAllCameras } from './camera.js';
 import { showError, hideError } from './ui.js';
-import { setDescriptionState, handleResubmitDescription } from './description-api.js';
+import { setAnalysisState, handleReanalyze } from './analysis-api.js';
 
 export function attachUploadHandler(button, input, side) {
     if (!button || !input) {
@@ -59,7 +59,7 @@ export function attachUploadHandler(button, input, side) {
             const message = `${label} upload failed: selected file is not an image.`;
             console.warn(message);
             showError(message);
-            setDescriptionState(side, 'error', message);
+            setAnalysisState(side, 'error', message);
             input.value = '';
             return;
         }
@@ -76,21 +76,21 @@ export function attachUploadHandler(button, input, side) {
             console.error(`${label} photo upload failed:`, error);
             const message = `${label} upload failed: ${error?.message || 'Unable to process image.'}`;
             showError(message);
-            setDescriptionState(side, 'error', message);
+            setAnalysisState(side, 'error', message);
         } finally {
             input.value = '';
         }
     });
 }
 
-export function attachResubmitHandlers(button, side) {
+export function attachReanalyzeHandlers(button, side) {
     if (!button) {
         return;
     }
-    button.addEventListener('click', () => handleResubmitDescription(side));
+    button.addEventListener('click', () => handleReanalyze(side));
     button.addEventListener('touchstart', (event) => {
         event.preventDefault();
-        handleResubmitDescription(side);
+        handleReanalyze(side);
     }, { passive: false });
 }
 

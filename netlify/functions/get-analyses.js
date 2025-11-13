@@ -1,9 +1,10 @@
 const { Pool } = require('pg');
 
-const DEFAULT_TABLE_NAME = 'portrait_descriptions';
+const DEFAULT_TABLE_NAME = 'portrait_analyses';
+const TABLE_ENV_KEY = 'ANALYSES_TABLE';
 
 function resolveTableName() {
-  const configured = process.env.DESCRIPTIONS_TABLE;
+  const configured = process.env[TABLE_ENV_KEY];
   if (!configured) {
     return DEFAULT_TABLE_NAME;
   }
@@ -11,7 +12,7 @@ function resolveTableName() {
   const sanitized = configured.trim();
   const isSafe = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(sanitized);
   if (!isSafe) {
-    console.warn('Invalid DESCRIPTIONS_TABLE provided. Falling back to default.', {
+    console.warn(`Invalid ${TABLE_ENV_KEY} provided. Using default.`, {
       provided: configured
     });
     return DEFAULT_TABLE_NAME;
@@ -54,8 +55,24 @@ function getDatabasePool() {
   return poolInstance;
 }
 
-exports.handler = async (event, context) => {
-  // Only allow GET requests
+function parseJsonColumn(value) {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value === 'object') {
+    return value;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    console.warn('Failed to parse JSON column value.', { error: error?.message });
+    return null;
+  }
+}
+
+exports.handler = async (event) => {
   if (event.httpMethod !== 'GET') {
     return {
       statusCode: 405,
@@ -73,14 +90,12 @@ exports.handler = async (event, context) => {
     };
   }
 
-  // Parse query parameters
   const params = event.queryStringParameters || {};
-  const role = params.role; // 'you' or 'me'
-  const limit = parseInt(params.limit, 10) || 50;
-  const offset = parseInt(params.offset, 10) || 0;
-  const status = params.status || 'ok'; // Default to successful descriptions only
+  const role = params.role;
+  const limit = Math.min(Math.max(parseInt(params.limit, 10) || 50, 1), 200);
+  const offset = Math.max(parseInt(params.offset, 10) || 0, 0);
+  const status = params.status || 'ok';
 
-  // Build query
   let query = `
     SELECT 
       id,
@@ -88,11 +103,11 @@ exports.handler = async (event, context) => {
       captured_at,
       role,
       status,
-      description,
+      analysis,
+      discriminators,
       image_data_url,
       location,
-      viewport_signature,
-      tone
+      viewport_signature
     FROM ${TABLE_NAME}
     WHERE 1=1
   `;
@@ -100,63 +115,38 @@ exports.handler = async (event, context) => {
   const values = [];
   let valueIndex = 1;
 
-  // Filter by role if specified
   if (role && (role === 'you' || role === 'me')) {
     query += ` AND role = $${valueIndex}`;
     values.push(role);
     valueIndex++;
   }
 
-  // Filter by status if specified
   if (status) {
     query += ` AND status = $${valueIndex}`;
     values.push(status);
     valueIndex++;
   }
 
-  // Order by created_at descending (newest first)
   query += ` ORDER BY created_at DESC`;
-
-  // Add limit and offset
   query += ` LIMIT $${valueIndex} OFFSET $${valueIndex + 1}`;
   values.push(limit, offset);
 
   try {
     const result = await pool.query(query, values);
 
-    // Format the results
-    const descriptions = result.rows.map(row => {
-      const record = {
-        id: row.id,
-        createdAt: row.created_at,
-        capturedAt: row.captured_at,
-        role: row.role,
-        status: row.status,
-        description: row.description,
-        imageDataUrl: row.image_data_url,
-        tone: row.tone,
-        signature: row.viewport_signature
-      };
+    const analyses = result.rows.map(row => ({
+      id: row.id,
+      createdAt: row.created_at,
+      capturedAt: row.captured_at,
+      role: row.role,
+      status: row.status,
+      analysis: parseJsonColumn(row.analysis) || {},
+      discriminators: parseJsonColumn(row.discriminators) || {},
+      imageDataUrl: row.image_data_url,
+      location: parseJsonColumn(row.location),
+      signature: row.viewport_signature
+    }));
 
-      // Parse location JSON if present
-      if (row.location) {
-        try {
-          const locationData = typeof row.location === 'string' 
-            ? JSON.parse(row.location) 
-            : row.location;
-          record.location = locationData;
-        } catch (parseError) {
-          console.warn('Failed to parse location data:', parseError);
-          record.location = null;
-        }
-      } else {
-        record.location = null;
-      }
-
-      return record;
-    });
-
-    // Get total count for pagination
     const countQuery = `
       SELECT COUNT(*) as total
       FROM ${TABLE_NAME}
@@ -174,18 +164,17 @@ exports.handler = async (event, context) => {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        descriptions,
+        analyses,
         pagination: {
           total,
           limit,
           offset,
-          hasMore: offset + descriptions.length < total
+          hasMore: offset + analyses.length < total
         }
       })
     };
-
   } catch (error) {
-    console.error('Failed to retrieve descriptions:', {
+    console.error('Failed to retrieve analyses:', {
       message: error?.message,
       stack: error?.stack
     });
@@ -193,7 +182,7 @@ exports.handler = async (event, context) => {
     return {
       statusCode: 500,
       body: JSON.stringify({
-        error: 'Failed to retrieve descriptions',
+        error: 'Failed to retrieve analyses',
         details: error?.message || 'Unknown error'
       })
     };

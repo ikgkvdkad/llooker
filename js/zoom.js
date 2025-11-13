@@ -1,12 +1,11 @@
 // Zoom and transform logic
 
-import { DESCRIPTION_MOVEMENT_DEBOUNCE_MS } from './config.js';
 import { photoSlots, interactionState, selectionState, getBackStream, getSelfieStream } from './state.js';
 import { clampRectToBounds } from './utils.js';
 import { getCameraHalfElement } from './camera.js';
 
 /**
- * Snapshot viewport state for description API
+ * Snapshot viewport state for analysis API
  */
 export function snapshotViewportState(slotKey) {
     const slot = photoSlots[slotKey];

@@ -55,7 +55,7 @@ This document tracks the progress of refactoring the monolithic `index.html` fil
 
 ### 9. `js/upload.js` (92 lines)
 - ✅ `attachUploadHandler()` - Complete
-- ⚠️ `attachResubmitHandlers()` - **NEEDS EXTRACTION**
+- ⚠️ `attachReanalyzeHandlers()` - **NEEDS EXTRACTION**
   - Source: `index.html.backup` lines 1877-1886
 
 ### 10. `js/main.js` (72 lines)
@@ -123,19 +123,19 @@ This document tracks the progress of refactoring the monolithic `index.html` fil
 - ❌ `handlePointerCancelOnHalf()` - Lines 1682-1710
 - ❌ `handleTapOnHalf()` - Lines 1712-1764
 
-### 4. `js/description-api.js`
+### 4. `js/analysis-api.js`
 **Status:** Placeholder only (~30 lines written, ~435 lines needed)
 
 **Needs Extraction:**
 - ❌ `buildViewportSignature()` - Lines 1273-1299
-- ❌ `submitViewportDescription()` - Lines 1301-1328
-- ❌ `scheduleViewportDescription()` - Lines 1330-1344
-- ❌ `resetDescriptionState()` - Lines 1808-1816
-- ❌ `setDescriptionState()` - Lines 1818-1833
-- ❌ `handleResubmitDescription()` - Lines 1835-1875
+- ❌ `submitViewportAnalysis()` - Lines 1301-1328
+- ❌ `scheduleViewportAnalysis()` - Lines 1330-1344
+- ❌ `resetAnalysisState()` - Lines 1808-1816
+- ❌ `setAnalysisState()` - Lines 1818-1833
+- ❌ `handleReanalyze()` - Lines 1835-1875
 - ❌ `loadImageElement()` - Lines 1965-1973
 - ❌ `drawCrosshairOverlay()` - Lines 1975-2090
-- ❌ `processDescriptionRequest()` - Lines 2092-2235
+- ❌ `processAnalysisRequest()` - Lines 2092-2235
 
 ## Extraction Guide
 
@@ -181,8 +181,8 @@ Once all modules are complete:
 - [ ] Selection box is resizable
 - [ ] Zoom/pan works on captured photos
 - [ ] Pinch-to-zoom works on touch devices
-- [ ] AI description API calls work
-- [ ] Resubmit button works
+- [ ] AI analysis API calls work
+- [ ] Reanalyze button works
 - [ ] Error messages display correctly
 - [ ] Version badge displays
 
@@ -199,8 +199,8 @@ Once all modules are complete:
 1. Extract remaining camera.js functions (highest priority - app won't run without it)
 2. Extract interactions.js functions (needed for user input)
 3. Extract zoom.js functions (needed for photo manipulation)
-4. Extract description-api.js functions (needed for AI features)
-5. Complete upload.js `attachResubmitHandlers()`
+4. Extract analysis-api.js functions (needed for AI features)
+5. Complete upload.js `attachReanalyzeHandlers()`
 6. Test thoroughly
 7. Remove `index.html.backup` once confirmed working
 

@@ -5,7 +5,7 @@ import { interactionState } from './state.js';
 import { calculateDistance } from './utils.js';
 import { isCameraActive, isCameraFrozen, openBackCamera, openSelfieCamera, captureBackPhoto, captureSelfiePhoto, resetBackCamera, resetSelfieCamera } from './camera.js';
 import { applyPhotoTransform, scheduleCameraZoomUpdate, clearMovementDebounce } from './zoom.js';
-import { scheduleViewportDescription, submitViewportDescription } from './description-api.js';
+import { scheduleViewportAnalysis, submitViewportAnalysis } from './analysis-api.js';
 
 /**
  * Reset pointer tracking for a slot
@@ -200,7 +200,7 @@ export function handlePointerMoveOnHalf(slotKey, event) {
 
     if (viewportChanged) {
         state.lastInteractionAt = performance.now();
-        scheduleViewportDescription(slotKey, { reason: 'interaction' });
+        scheduleViewportAnalysis(slotKey, { reason: 'interaction' });
     }
 }
 
@@ -331,7 +331,7 @@ export function handleTapOnHalf(slotKey, event) {
             return;
         }
 
-        submitViewportDescription(slotKey, { force: true, reason: 'tap' });
+        submitViewportAnalysis(slotKey, { force: true, reason: 'tap' });
         return;
     }
 

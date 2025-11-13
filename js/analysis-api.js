@@ -1,8 +1,20 @@
-// AI description API communication
+// AI analysis API communication
 
-import { WAITING_FOR_DESCRIPTION_MESSAGE, DESCRIPTION_API_TIMEOUT_MS, DESCRIPTION_MOVEMENT_DEBOUNCE_MS, DESCRIPTION_API_URL } from './config.js';
-import { photoSlots, interactionState, descriptionState, descriptionQueue, setDescriptionInFlight, getDescriptionInFlight } from './state.js';
-import { getPhotoSlotByDescriptionSide, clampRectToBounds, loadImageElement } from './utils.js';
+import {
+    WAITING_FOR_ANALYSIS_MESSAGE,
+    ANALYSIS_API_TIMEOUT_MS,
+    ANALYSIS_MOVEMENT_DEBOUNCE_MS,
+    ANALYSIS_API_URL
+} from './config.js';
+import {
+    photoSlots,
+    interactionState,
+    analysisState,
+    analysisQueue,
+    setAnalysisInFlight,
+    getAnalysisInFlight
+} from './state.js';
+import { getPhotoSlotByAnalysisSide, clampRectToBounds, loadImageElement } from './utils.js';
 import { snapshotViewportState, clearMovementDebounce } from './zoom.js';
 import { requestCurrentLocation } from './geo.js';
 import { showWarning } from './ui.js';
@@ -10,23 +22,27 @@ import { addToHistory } from './history.js';
 import { storePhotoData } from './similarity.js';
 
 /**
- * Reset description state for a side
+ * Reset analysis state for a side
  */
-export function resetDescriptionState(side) {
-    const state = descriptionState[side];
+export function resetAnalysisState(side) {
+    const state = analysisState[side];
     if (!state) return;
     state.panel.classList.remove('loading', 'error', 'success');
     state.statusEl.textContent = side === 'you'
-        ? 'Waiting for a You capture. Capture or upload a photo, then pan and zoom to center the subject.'
+        ? 'Waiting for a You capture. Capture or upload a photo, then pan and zoom to frame the subject.'
         : 'Waiting for a Me capture. Capture or upload your selfie, then center yourself in the frame.';
     state.contentEl.textContent = '';
+    state.analysis = null;
+    state.imageDataUrl = null;
+    state.discriminators = null;
+    state.capturedAt = null;
 }
 
 /**
- * Set description state for a side
+ * Set analysis state for a side
  */
-export function setDescriptionState(side, status, message, descriptionText = '') {
-    const state = descriptionState[side];
+export function setAnalysisState(side, status, message, analysisText = '') {
+    const state = analysisState[side];
     if (!state) return;
     state.panel.classList.remove('loading', 'error', 'success');
     if (status === 'loading') {
@@ -39,7 +55,7 @@ export function setDescriptionState(side, status, message, descriptionText = '')
     if (typeof message === 'string') {
         state.statusEl.textContent = message;
     }
-    state.contentEl.textContent = descriptionText;
+    state.contentEl.textContent = analysisText;
 }
 
 /**
@@ -74,9 +90,9 @@ export function buildViewportSignature(photoDataUrl, viewportSnapshot) {
 }
 
 /**
- * Submit viewport description
+ * Submit viewport analysis
  */
-export function submitViewportDescription(slotKey, { force = false, reason = 'interaction' } = {}) {
+export function submitViewportAnalysis(slotKey, { force = false, reason = 'interaction' } = {}) {
     const slot = photoSlots[slotKey];
     const state = interactionState[slotKey];
     if (!slot || !state) {
@@ -101,28 +117,27 @@ export function submitViewportDescription(slotKey, { force = false, reason = 'in
 
     state.lastSubmittedSignature = signature;
     const label = side === 'you' ? 'You' : 'Me';
-    setDescriptionState(side, 'loading', WAITING_FOR_DESCRIPTION_MESSAGE, WAITING_FOR_DESCRIPTION_MESSAGE);
-    enqueueDescription(side, photoDataUrl, viewport, {
+    setAnalysisState(side, 'loading', WAITING_FOR_ANALYSIS_MESSAGE, WAITING_FOR_ANALYSIS_MESSAGE);
+    enqueueAnalysis(side, photoDataUrl, viewport, {
         reason,
         signature,
-        capturedAt: new Date().toISOString(),
-        tone: 'neutral'
+        capturedAt: new Date().toISOString()
     });
 }
 
 /**
- * Schedule viewport description
+ * Schedule viewport analysis
  */
-export function scheduleViewportDescription(slotKey, options = {}) {
+export function scheduleViewportAnalysis(slotKey, options = {}) {
     const state = interactionState[slotKey];
     if (!state) {
         return;
     }
     clearMovementDebounce(slotKey);
-    const delay = options.immediate ? 0 : DESCRIPTION_MOVEMENT_DEBOUNCE_MS;
+    const delay = options.immediate ? 0 : ANALYSIS_MOVEMENT_DEBOUNCE_MS;
     state.movementDebounceId = window.setTimeout(() => {
         state.movementDebounceId = null;
-        submitViewportDescription(slotKey, {
+        submitViewportAnalysis(slotKey, {
             force: options.force === true,
             reason: options.reason || 'interaction'
         });
@@ -130,14 +145,14 @@ export function scheduleViewportDescription(slotKey, options = {}) {
 }
 
 /**
- * Handle resubmit description
+ * Handle re-analyze request
  */
-export function handleResubmitDescription(side) {
-    const slot = getPhotoSlotByDescriptionSide(side);
+export function handleReanalyze(side) {
+    const slot = getPhotoSlotByAnalysisSide(side);
     const label = side === 'you' ? 'You' : 'Me';
 
     if (!slot) {
-        console.warn(`No photo slot available for ${side} resubmission request.`);
+        console.warn(`No photo slot available for ${side} re-analysis request.`);
         return;
     }
 
@@ -147,8 +162,8 @@ export function handleResubmitDescription(side) {
     if (!photoDataUrl) {
         const message = hasActivePhoto
             ? `${label} photo data is still loading. Try again shortly or capture a new photo.`
-            : `${label} photo not captured yet. Capture a photo before requesting a description.`;
-        setDescriptionState(side, 'error', message);
+            : `${label} photo not captured yet. Capture a photo before requesting analysis.`;
+        setAnalysisState(side, 'error', message);
         return;
     }
 
@@ -159,7 +174,7 @@ export function handleResubmitDescription(side) {
         clearMovementDebounce(slotKey);
     }
 
-    const submit = () => submitViewportDescription(slotKey, { force: true, reason: 'resubmit' });
+    const submit = () => submitViewportAnalysis(slotKey, { force: true, reason: 'reanalyze' });
 
     if (slot.imageEl && slot.imageEl.complete && slot.imageEl.naturalWidth > 0) {
         submit();
@@ -311,65 +326,158 @@ async function createViewportDataUrl(photoDataUrl, viewportSnapshot) {
 }
 
 /**
- * Enqueue description request
+ * Render analysis summary as readable text
  */
-function enqueueDescription(side, photoDataUrl, viewportSnapshot = null, options = {}) {
-    const slot = getPhotoSlotByDescriptionSide(side);
-    if (slot && typeof photoDataUrl === 'string' && photoDataUrl.length > 0) {
-        slot.lastPhotoDataUrl = photoDataUrl;
+export function renderAnalysisSummary(analysis, discriminators) {
+    if (!analysis) {
+        return '';
     }
-    descriptionQueue.push({ side, photoDataUrl, viewport: viewportSnapshot, options });
-    processDescriptionQueue();
+
+    const subject = analysis.subject || {};
+    const appearance = analysis.appearance || {};
+    const clothing = analysis.clothing || {};
+    const accessories = analysis.accessories || {};
+    const environment = analysis.environment || {};
+    const confidence = analysis.confidence || {};
+
+    const formatArray = (value) => Array.isArray(value) && value.length
+        ? value.join(', ')
+        : 'none';
+
+    const formatObject = (value) => value && typeof value === 'object'
+        ? Object.entries(value)
+            .filter(([, v]) => v !== null && v !== undefined && v !== '')
+            .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+            .join(' | ')
+        : '';
+
+    const subjectLines = [
+        `Gender: ${subject.gender || 'unknown'} (${subject.genderConfidence ?? 'n/a'})`,
+        `Age: ${subject.ageRange || subject.ageBucket || 'unknown'} (${subject.confidence?.age ?? 'n/a'})`,
+        `Build: ${subject.build || subject.bodyType || 'unknown'} | Height: ${subject.heightCategory || 'unknown'}`,
+        `Skin tone: ${subject.skinTone || 'unknown'} | Hair: ${formatObject(subject.hair) || 'unknown'}`,
+        `Facial hair: ${subject.facialHair || 'none'} | Eyewear: ${subject.eyewear || 'none'} | Headwear: ${subject.headwear || 'none'}`,
+        `Distinctive: ${formatArray(subject.distinguishingFeatures)}`
+    ];
+
+    const appearanceLines = [
+        `Dominant colours: ${formatArray(appearance.dominantColors)}`,
+        `Palette: ${formatObject(appearance.colorPalette) || 'n/a'}`,
+        `Style tags: ${formatArray(appearance.styleDescriptors)}`,
+        `Patterns/textures: ${formatArray(appearance.patterns)}`
+    ];
+
+    const clothingLines = [
+        `Top: ${formatObject(clothing.top) || 'unknown'}`,
+        `Bottom: ${formatObject(clothing.bottom) || 'unknown'}`,
+        `Outerwear: ${formatObject(clothing.outerwear) || 'none'}`,
+        `Footwear: ${formatObject(clothing.footwear) || 'unknown'}`,
+        `Layers: ${formatArray(clothing.additionalLayers)}`
+    ];
+
+    const accessoryLines = Object.entries(accessories)
+        .map(([bucket, values]) => `${bucket}: ${formatArray(values)}`)
+        .join('\n');
+
+    const environmentLines = [
+        `Setting: ${environment.setting || 'unknown'} | Background: ${environment.background || 'unknown'}`,
+        `Lighting: ${environment.lighting || 'unknown'} | Crowd: ${environment.crowdLevel || 'unknown'}`
+    ];
+
+    const discriminatorLines = discriminators
+        ? Object.entries(discriminators)
+            .map(([key, value]) => `${key}: ${value}`)
+            .join(', ')
+        : '';
+
+    const confidenceLines = [
+        `Confidence overall: ${confidence.overall ?? 'n/a'}`,
+        `Gender/age/clothing/accessories: ${confidence.gender ?? 'n/a'} / ${confidence.age ?? 'n/a'} / ${confidence.clothing ?? 'n/a'} / ${confidence.accessories ?? 'n/a'}`
+    ];
+
+    const sections = [
+        '[Subject]',
+        ...subjectLines,
+        '',
+        '[Appearance]',
+        ...appearanceLines,
+        '',
+        '[Clothing]',
+        ...clothingLines,
+        '',
+        '[Accessories]',
+        accessoryLines || 'none',
+        '',
+        '[Environment]',
+        ...environmentLines,
+        '',
+        '[Discriminators]',
+        discriminatorLines || 'none',
+        '',
+        '[Confidence]',
+        ...confidenceLines
+    ];
+
+    return sections.join('\n');
 }
 
 /**
- * Process description queue
+ * Enqueue analysis request
  */
-function processDescriptionQueue() {
-    if (getDescriptionInFlight()) {
+function enqueueAnalysis(side, photoDataUrl, viewportSnapshot = null, options = {}) {
+    const slot = getPhotoSlotByAnalysisSide(side);
+    if (slot && typeof photoDataUrl === 'string' && photoDataUrl.length > 0) {
+        slot.lastPhotoDataUrl = photoDataUrl;
+    }
+    analysisQueue.push({ side, photoDataUrl, viewport: viewportSnapshot, options });
+    processAnalysisQueue();
+}
+
+/**
+ * Process analysis queue
+ */
+function processAnalysisQueue() {
+    if (getAnalysisInFlight()) {
         return;
     }
 
-    const next = descriptionQueue.shift();
+    const next = analysisQueue.shift();
     if (!next) {
         return;
     }
 
-    setDescriptionInFlight(true);
-    requestDescription(next.side, next.photoDataUrl, next.viewport, next.options)
+    setAnalysisInFlight(true);
+    requestAnalysis(next.side, next.photoDataUrl, next.viewport, next.options)
         .catch(error => {
-            console.error('Description request failed:', error);
+            console.error('Analysis request failed:', error);
         })
         .finally(() => {
-            setDescriptionInFlight(false);
-            processDescriptionQueue();
+            setAnalysisInFlight(false);
+            processAnalysisQueue();
         });
 }
 
 /**
- * Request description from API
+ * Request analysis from API
  */
-async function requestDescription(side, photoDataUrl, viewportSnapshot, options = {}) {
-    const state = descriptionState[side];
+async function requestAnalysis(side, photoDataUrl, viewportSnapshot, options = {}) {
+    const state = analysisState[side];
     if (!state) {
         return;
     }
 
     const label = side === 'you' ? 'You' : 'Me';
 
-    if (!DESCRIPTION_API_URL) {
-        setDescriptionState(side, 'error', `${label} description API is not configured.`);
+    if (!ANALYSIS_API_URL) {
+        setAnalysisState(side, 'error', `${label} analysis API is not configured.`);
         return;
     }
 
-    setDescriptionState(side, 'loading', WAITING_FOR_DESCRIPTION_MESSAGE, WAITING_FOR_DESCRIPTION_MESSAGE);
+    setAnalysisState(side, 'loading', WAITING_FOR_ANALYSIS_MESSAGE, WAITING_FOR_ANALYSIS_MESSAGE);
 
     const capturedAt = typeof options.capturedAt === 'string' && options.capturedAt.length
         ? options.capturedAt
         : new Date().toISOString();
-    const tone = typeof options.tone === 'string' && options.tone.length
-        ? options.tone
-        : 'neutral';
 
     let locationPayload = null;
     try {
@@ -419,15 +527,15 @@ async function requestDescription(side, photoDataUrl, viewportSnapshot, options 
     } catch (renderError) {
         let message;
         if (renderError?.name === 'SelectionAreaError') {
-            message = `${label} description failed: adjust the white bounding box so it fully covers the subject, then try again.`;
+            message = `${label} analysis failed: adjust the white bounding box so it fully covers the subject, then try again.`;
         } else if (renderError?.name === 'ViewportNotReadyError') {
-            message = `${label} description failed: viewing area is still loading. Hold steady and try again once the photo stabilizes.`;
+            message = `${label} analysis failed: viewing area is still loading. Hold steady and try again once the photo stabilizes.`;
         } else if (renderError?.name === 'ViewportScaleError') {
-            message = `${label} description failed: unable to align the zoomed image. Re-center the photo and retry.`;
+            message = `${label} analysis failed: unable to align the zoomed image. Re-center the photo and retry.`;
         } else {
-            message = `${label} description failed: unable to render the framed view (${renderError?.message || 'unknown error.'})`;
+            message = `${label} analysis failed: unable to render the framed view (${renderError?.message || 'unknown error.'})`;
         }
-        setDescriptionState(side, 'error', message);
+        setAnalysisState(side, 'error', message);
         const error = new Error(renderError?.message || 'Viewport rendering failed.');
         error.name = 'ViewportRenderingError';
         error.cause = renderError;
@@ -435,10 +543,10 @@ async function requestDescription(side, photoDataUrl, viewportSnapshot, options 
     }
 
     const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), DESCRIPTION_API_TIMEOUT_MS);
+    const timeoutId = window.setTimeout(() => controller.abort(), ANALYSIS_API_TIMEOUT_MS);
 
     try {
-        const response = await fetch(DESCRIPTION_API_URL, {
+        const response = await fetch(ANALYSIS_API_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -450,7 +558,6 @@ async function requestDescription(side, photoDataUrl, viewportSnapshot, options 
                 reason: options.reason || 'interaction',
                 signature: options.signature || null,
                 capturedAt,
-                tone,
                 location: locationPayload
             }),
             signal: controller.signal
@@ -465,60 +572,61 @@ async function requestDescription(side, photoDataUrl, viewportSnapshot, options 
         const statusFlag = typeof payload?.status === 'string'
             ? payload.status.trim().toLowerCase()
             : null;
-        const descriptionText = typeof payload?.description === 'string'
-            ? payload.description.trim()
-            : '';
 
-        if (statusFlag === 'ok' && descriptionText) {
-            setDescriptionState(side, 'success', `${label} description ready.`, descriptionText);
-            
-            // Log API response for analysis
-            console.log(`=== ${label.toUpperCase()} API RESPONSE ===`);
-            console.log('Discriminative:', payload.discriminative || 'MISSING');
-            console.log('Metadata:', payload.metadata || 'MISSING');
-            
-            // Store photo data for AI vision-based similarity comparison
-            storePhotoData(side, renderedViewportDataUrl, payload.metadata || null, capturedAt);
-            
-            // Add to history
+        if (statusFlag === 'ok' && payload.analysis) {
+            const summary = renderAnalysisSummary(payload.analysis, payload.discriminators);
+            setAnalysisState(side, 'success', `${label} analysis ready.`, summary);
+
+            analysisState[side].analysis = payload.analysis;
+            analysisState[side].imageDataUrl = renderedViewportDataUrl;
+            analysisState[side].capturedAt = capturedAt;
+            analysisState[side].discriminators = payload.discriminators || {};
+
+            console.log(`=== ${label.toUpperCase()} ANALYSIS RESPONSE ===`);
+            console.log('Analysis:', payload.analysis);
+            console.log('Discriminators:', payload.discriminators || {});
+
+            storePhotoData(side, renderedViewportDataUrl, payload.analysis || null, capturedAt, payload.discriminators || null);
+
             addToHistory(side, {
-                id: payload.recordId || Date.now(), // Use DB ID if available
-                description: descriptionText,
-                metadata: payload.metadata || null,
-                discriminative: payload.discriminative || '',
+                id: payload.recordId || Date.now(),
+                analysis: payload.analysis || {},
+                discriminators: payload.discriminators || {},
                 status: statusFlag,
                 role: side,
-                capturedAt: capturedAt,
+                capturedAt,
                 createdAt: new Date().toISOString(),
                 imageDataUrl: renderedViewportDataUrl,
-                location: locationPayload,
-                tone: tone
+                location: locationPayload
             });
-            
+
             return;
         }
 
-        if (statusFlag === 'unclear') {
-            const unclearMessage = descriptionText || 'Unclear photo';
-            setDescriptionState(
+        if (statusFlag === 'unclear' || statusFlag === 'error') {
+            const unclearMessage = statusFlag === 'unclear'
+                ? 'Subject not clear. Retake a closer photo.'
+                : 'Analysis failed. Retake the photo and try again.';
+            setAnalysisState(
                 side,
                 'error',
-                `${label} description unavailable: subject not clear. Retake a closer photo.`,
-                unclearMessage
+                `${label} analysis unavailable: ${unclearMessage}`,
+                ''
             );
             return;
         }
 
-        throw new Error('API response did not include a usable description.');
+        throw new Error('API response did not include a usable analysis.');
     } catch (error) {
         if (error?.name !== 'ViewportRenderingError') {
             const message = error?.name === 'AbortError'
-                ? `${label} description request timed out after ${Math.round(DESCRIPTION_API_TIMEOUT_MS / 1000)}s.`
-                : `${label} description failed: ${error?.message || 'Unknown error.'}`;
-            setDescriptionState(side, 'error', message);
+                ? `${label} analysis request timed out after ${Math.round(ANALYSIS_API_TIMEOUT_MS / 1000)}s.`
+                : `${label} analysis failed: ${error?.message || 'Unknown error.'}`;
+            setAnalysisState(side, 'error', message);
         }
         throw error;
     } finally {
         window.clearTimeout(timeoutId);
     }
 }
+

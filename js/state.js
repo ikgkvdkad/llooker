@@ -103,51 +103,53 @@ export const selectionState = {
     selfie: createSelectionState()
 };
 
-// Description state
-export const descriptionState = {
+// Analysis state
+export const analysisState = {
     you: {
-        panel: dom.youDescriptionPanel,
-        statusEl: dom.youDescriptionStatus,
-        contentEl: dom.youDescriptionContent,
+        panel: dom.youAnalysisPanel,
+        statusEl: dom.youAnalysisStatus,
+        contentEl: dom.youAnalysisContent,
         imageDataUrl: null,
-        metadata: null,
+        analysis: null,
+        discriminators: null,
         capturedAt: null
     },
     me: {
-        panel: dom.meDescriptionPanel,
-        statusEl: dom.meDescriptionStatus,
-        contentEl: dom.meDescriptionContent,
+        panel: dom.meAnalysisPanel,
+        statusEl: dom.meAnalysisStatus,
+        contentEl: dom.meAnalysisContent,
         imageDataUrl: null,
-        metadata: null,
+        analysis: null,
+        discriminators: null,
         capturedAt: null
     },
     lastSimilarityResult: null,
     lastSimilarityError: null
 };
 
-// Description queue
-export const descriptionQueue = [];
-export let isDescriptionInFlight = false;
+// Analysis queue
+export const analysisQueue = [];
+export let isAnalysisInFlight = false;
 
-export function setDescriptionInFlight(value) {
-    isDescriptionInFlight = value;
+export function setAnalysisInFlight(value) {
+    isAnalysisInFlight = value;
 }
 
-export function getDescriptionInFlight() {
-    return isDescriptionInFlight;
+export function getAnalysisInFlight() {
+    return isAnalysisInFlight;
 }
 
 // History state
 export const historyState = {
     you: {
-        descriptions: [],
+        analyses: [],
         currentIndex: -1, // -1 means showing live/latest
         isLoading: false,
         hasLoaded: false,
         total: 0
     },
     me: {
-        descriptions: [],
+        analyses: [],
         currentIndex: -1,
         isLoading: false,
         hasLoaded: false,

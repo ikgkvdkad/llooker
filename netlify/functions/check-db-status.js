@@ -1,9 +1,9 @@
 const { Pool } = require('pg');
 
-const DEFAULT_TABLE_NAME = 'portrait_descriptions';
+const DEFAULT_TABLE_NAME = 'portrait_analyses';
 
 function resolveTableName() {
-  const configured = process.env.DESCRIPTIONS_TABLE;
+  const configured = process.env.ANALYSES_TABLE;
   if (!configured) {
     return DEFAULT_TABLE_NAME;
   }
@@ -91,8 +91,9 @@ exports.handler = async (event, context) => {
 
     // Get last 5 records
     const recentQuery = `
-      SELECT id, created_at, role, status, 
-             LENGTH(description) as desc_length,
+      SELECT id, created_at, role, status,
+             jsonb_array_length(COALESCE(analysis->'appearance'->'dominantColors', '[]'::jsonb)) AS dominant_color_count,
+             jsonb_array_length(COALESCE(analysis->'accessories'->'handheld', '[]'::jsonb)) AS handheld_count,
              LENGTH(image_data_url) as image_size,
              location IS NOT NULL as has_location
       FROM ${TABLE_NAME}
@@ -120,7 +121,8 @@ exports.handler = async (event, context) => {
           createdAt: row.created_at,
           role: row.role,
           status: row.status,
-          descriptionLength: row.desc_length,
+          dominantColorCount: row.dominant_color_count,
+          handheldItemCount: row.handheld_count,
           imageSize: row.image_size,
           hasLocation: row.has_location
         }))

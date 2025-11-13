@@ -62,7 +62,7 @@ export function clampRectToBounds(rect) {
 }
 
 // Photo slot utilities
-export function getPhotoSlotByDescriptionSide(side) {
+export function getPhotoSlotByAnalysisSide(side) {
     if (side === 'you') {
         return photoSlots.back;
     }

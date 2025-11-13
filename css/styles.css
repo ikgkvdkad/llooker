@@ -44,7 +44,7 @@ body {
     border-bottom: 1.5px solid rgba(255, 255, 255, 0.3);
 }
 
-.description-row {
+.analysis-row {
     display: flex;
     width: 100%;
     background: #000;
@@ -100,7 +100,7 @@ body {
     background: #444;
 }
 
-.description-half {
+.analysis-half {
     position: relative;
     width: calc(50% - 20px);
     flex: 1 1 calc(50% - 20px);
@@ -166,15 +166,15 @@ body {
     margin-bottom: 8px;
 }
 
-.description-half.left {
+.analysis-half.left {
     border-right-width: 1.5px;
 }
 
-.description-half.right {
+.analysis-half.right {
     border-left-width: 1.5px;
 }
 
-.description-title-button {
+.analysis-title-button {
     font-size: 18px;
     font-weight: 500;
     letter-spacing: 0.02em;
@@ -188,28 +188,28 @@ body {
     border-radius: 6px;
 }
 
-.description-title-button:hover {
+.analysis-title-button:hover {
     text-decoration: underline;
 }
 
-.description-title-button:focus-visible {
+.analysis-title-button:focus-visible {
     outline: 2px solid rgba(255, 255, 255, 0.7);
     outline-offset: 3px;
     text-decoration: none;
 }
 
-.description-title-button:active {
+.analysis-title-button:active {
     text-decoration: none;
     background: rgba(255, 255, 255, 0.08);
 }
 
-.description-title-row {
+.analysis-title-row {
     display: flex;
     align-items: center;
     gap: 10px;
 }
 
-.description-upload-button {
+.analysis-upload-button {
     font-size: 13px;
     font-weight: 500;
     letter-spacing: 0.01em;
@@ -222,27 +222,27 @@ body {
     transition: background 0.2s ease, border-color 0.2s ease;
 }
 
-.description-upload-button:hover {
+.analysis-upload-button:hover {
     background: rgba(255, 255, 255, 0.2);
     border-color: rgba(255, 255, 255, 0.35);
 }
 
-.description-upload-button:focus-visible {
+.analysis-upload-button:focus-visible {
     outline: 2px solid rgba(255, 255, 255, 0.7);
     outline-offset: 3px;
 }
 
-.description-upload-button:active {
+.analysis-upload-button:active {
     background: rgba(255, 255, 255, 0.28);
 }
 
-.description-upload-button.camera-active {
+.analysis-upload-button.camera-active {
     background: rgba(255, 77, 77, 0.25);
     border-color: rgba(255, 77, 77, 0.5);
     color: rgba(255, 120, 120, 0.95);
 }
 
-.description-upload-button.camera-active:hover {
+.analysis-upload-button.camera-active:hover {
     background: rgba(255, 77, 77, 0.35);
     border-color: rgba(255, 77, 77, 0.65);
 }
@@ -355,17 +355,17 @@ body {
     border: 0;
 }
 
-.description-upload-input {
+.analysis-upload-input {
     display: none;
 }
 
-.description-status {
+.analysis-status {
     font-size: 13px;
     line-height: 1.35;
     color: rgba(255, 255, 255, 0.65);
 }
 
-.description-content {
+.analysis-content {
     font-size: 15px;
     line-height: 1.45;
     white-space: pre-line;
@@ -377,17 +377,17 @@ body {
     -webkit-overflow-scrolling: touch;
 }
 
-.description-half.loading .description-status::before {
+.analysis-half.loading .analysis-status::before {
     content: 'Loading… ';
     font-weight: 400;
     color: rgba(255, 255, 255, 0.75);
 }
 
-.description-half.error .description-status {
+.analysis-half.error .analysis-status {
     color: rgba(255, 99, 99, 0.95);
 }
 
-.description-half.success .description-status {
+.analysis-half.success .analysis-status {
     color: rgba(112, 255, 166, 0.9);
 }
 
@@ -651,7 +651,7 @@ body {
 
 /* Mobile adjustments */
 @media (max-width: 768px) {
-    .description-half {
+    .analysis-half {
         padding: 12px 10px;
         gap: 8px;
     }

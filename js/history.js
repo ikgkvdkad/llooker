@@ -1,12 +1,12 @@
 // History browsing and navigation
 
-import { DESCRIPTION_API_URL } from './config.js';
+import { ANALYSIS_API_URL } from './config.js';
 import { historyState, photoSlots, interactionState } from './state.js';
-import { setDescriptionState } from './description-api.js';
+import { setAnalysisState, renderAnalysisSummary } from './analysis-api.js';
 import { hideSelectionOverlay } from './selection.js';
 import * as dom from './dom.js';
 
-const HISTORY_API_URL = DESCRIPTION_API_URL?.replace('/describe', '/get-descriptions') || '/.netlify/functions/get-descriptions';
+const HISTORY_API_URL = ANALYSIS_API_URL?.replace('/describe', '/get-analyses') || '/.netlify/functions/get-analyses';
 
 /**
  * Format timestamp for display
@@ -73,9 +73,9 @@ function formatLocation(location) {
 }
 
 /**
- * Fetch descriptions from database
+ * Fetch analyses from database
  */
-export async function fetchDescriptions(side, options = {}) {
+export async function fetchAnalyses(side, options = {}) {
     const state = historyState[side];
     const limit = options.limit || 50;
     const offset = options.offset || 0;
@@ -99,9 +99,9 @@ export async function fetchDescriptions(side, options = {}) {
         const data = await response.json();
         
         if (offset === 0) {
-            state.descriptions = data.descriptions || [];
+            state.analyses = data.analyses || [];
         } else {
-            state.descriptions.push(...(data.descriptions || []));
+            state.analyses.push(...(data.analyses || []));
         }
         
         state.total = data.pagination?.total || 0;
@@ -111,7 +111,7 @@ export async function fetchDescriptions(side, options = {}) {
         
         return data;
     } catch (error) {
-        console.error(`Failed to fetch ${side} descriptions:`, error);
+        console.error(`Failed to fetch ${side} analyses:`, error);
         throw error;
     } finally {
         state.isLoading = false;
@@ -119,7 +119,7 @@ export async function fetchDescriptions(side, options = {}) {
 }
 
 /**
- * Navigate to previous description (older)
+ * Navigate to previous analysis (older)
  */
 export async function navigatePrevious(side) {
     const state = historyState[side];
@@ -142,14 +142,14 @@ export async function navigatePrevious(side) {
     // Load history if not loaded yet
     if (!state.hasLoaded) {
         try {
-            await fetchDescriptions(side);
+            await fetchAnalyses(side);
         } catch (error) {
             console.error('Failed to load history:', error);
             return;
         }
     }
     
-    if (state.descriptions.length === 0) {
+    if (state.analyses.length === 0) {
         return;
     }
     
@@ -157,7 +157,7 @@ export async function navigatePrevious(side) {
     // Otherwise increment index
     if (state.currentIndex === -1) {
         state.currentIndex = 0;
-    } else if (state.currentIndex < state.descriptions.length - 1) {
+    } else if (state.currentIndex < state.analyses.length - 1) {
         state.currentIndex++;
     } else {
         // Already at oldest, do nothing
@@ -169,7 +169,7 @@ export async function navigatePrevious(side) {
 }
 
 /**
- * Navigate to next description (newer)
+ * Navigate to next analysis (newer)
  */
 export function navigateNext(side) {
     const state = historyState[side];
@@ -211,7 +211,7 @@ export function navigateNext(side) {
  */
 function displayHistoryItem(side) {
     const state = historyState[side];
-    const item = state.descriptions[state.currentIndex];
+    const item = state.analyses[state.currentIndex];
     
     if (!item) {
         console.warn(`No history item at index ${state.currentIndex} for ${side}`);
@@ -251,11 +251,10 @@ function displayHistoryItem(side) {
         }
     }
     
-    // Build description text with metadata
+    // Build analysis text with metadata
     const timestamp = formatTimestamp(item.capturedAt || item.createdAt);
     const location = formatLocation(item.location);
     
-    let descriptionText = item.description || '';
     let statusText = `${side === 'you' ? 'You' : 'Me'} - ${timestamp}`;
     
     if (location && location !== 'Location unavailable') {
@@ -264,10 +263,11 @@ function displayHistoryItem(side) {
     
     // Show history indicator
     const position = state.currentIndex + 1;
-    const total = state.descriptions.length;
+    const total = state.analyses.length;
     statusText += `\n[History: ${position} of ${total}]`;
     
-    setDescriptionState(side, 'success', statusText, descriptionText);
+    const analysisSummary = renderAnalysisSummary(item.analysis || {}, item.discriminators || {});
+    setAnalysisState(side, 'success', statusText, analysisSummary);
 }
 
 /**
@@ -284,9 +284,9 @@ function returnToLiveView(side) {
     // Don't clear the photo - just reset to current state
     // The user will need to capture a new photo or open camera
     
-    // Reset description to waiting state
+    // Reset analysis panel to waiting state
     const label = side === 'you' ? 'You' : 'Me';
-    setDescriptionState(
+    setAnalysisState(
         side,
         null,
         `Waiting for a ${label} capture. Capture or upload a photo, then pan and zoom to center the subject.`
@@ -325,8 +325,8 @@ function updateNavigationButtons(side) {
     // Previous button (go to older)
     // Enable if: not loaded yet (allows triggering fetch), OR currently at live view with history, OR viewing history with more items
     const canGoPrev = !state.hasLoaded || 
-                      (state.currentIndex === -1 && state.descriptions.length > 0) ||
-                      (state.currentIndex >= 0 && state.currentIndex < state.descriptions.length - 1);
+                      (state.currentIndex === -1 && state.analyses.length > 0) ||
+                      (state.currentIndex >= 0 && state.currentIndex < state.analyses.length - 1);
     prevButton.disabled = !canGoPrev;
     
     // Next button (go to newer)
@@ -362,13 +362,13 @@ export function initHistoryNavigation() {
 }
 
 /**
- * Add new description to history (called after successful API response)
+ * Add new analysis to history (called after successful API response)
  */
-export function addToHistory(side, description) {
+export function addToHistory(side, analysisRecord) {
     const state = historyState[side];
     
     // Add to front of array (newest first)
-    state.descriptions.unshift(description);
+    state.analyses.unshift(analysisRecord);
     state.total++;
     
     // If we're at live view, stay at live view

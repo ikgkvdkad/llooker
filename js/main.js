@@ -6,8 +6,8 @@ import { initializePhotoSlot } from './photo.js';
 import { setupSelectionInteractions, updateSelectionStyles } from './selection.js';
 import { updateCameraHalfAspect, stopAllCameras, handleCameraButtonClick } from './camera.js';
 import { renderAppVersion } from './ui.js';
-import { resetDescriptionState } from './description-api.js';
-import { attachUploadHandler, attachResubmitHandlers } from './upload.js';
+import { resetAnalysisState } from './analysis-api.js';
+import { attachUploadHandler, attachReanalyzeHandlers } from './upload.js';
 import { handlePointerDownOnHalf, handlePointerMoveOnHalf, handlePointerUpOnHalf, handlePointerCancelOnHalf } from './interactions.js';
 import { initHistoryNavigation } from './history.js';
 
@@ -37,9 +37,9 @@ function init() {
         stopAllCameras();
     });
 
-    // Setup upload and resubmit handlers
-    attachResubmitHandlers(dom.youResubmitButton, 'you');
-    attachResubmitHandlers(dom.meResubmitButton, 'me');
+    // Setup upload and re-analyze handlers
+    attachReanalyzeHandlers(dom.youReanalyzeButton, 'you');
+    attachReanalyzeHandlers(dom.meReanalyzeButton, 'me');
     attachUploadHandler(dom.youUploadButton, dom.youUploadInput, 'you');
     attachUploadHandler(dom.meUploadButton, dom.meUploadInput, 'me');
     
@@ -73,9 +73,9 @@ function init() {
     // Render app version
     renderAppVersion();
 
-    // Reset description states
-    resetDescriptionState('you');
-    resetDescriptionState('me');
+    // Reset analysis panels
+    resetAnalysisState('you');
+    resetAnalysisState('me');
     
     // Initialize history navigation
     initHistoryNavigation();

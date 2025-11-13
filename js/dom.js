@@ -36,18 +36,18 @@ export const selfieSelectionHandles = {
 export const toastStack = document.getElementById('toastStack');
 export const versionDisplay = document.getElementById('versionDisplay');
 
-// Description panels
-export const youDescriptionPanel = document.getElementById('youDescriptionPanel');
-export const youDescriptionStatus = document.getElementById('youDescriptionStatus');
-export const youDescriptionContent = document.getElementById('youDescriptionContent');
+// Analysis panels
+export const youAnalysisPanel = document.getElementById('youAnalysisPanel');
+export const youAnalysisStatus = document.getElementById('youAnalysisStatus');
+export const youAnalysisContent = document.getElementById('youAnalysisContent');
 
-export const meDescriptionPanel = document.getElementById('meDescriptionPanel');
-export const meDescriptionStatus = document.getElementById('meDescriptionStatus');
-export const meDescriptionContent = document.getElementById('meDescriptionContent');
+export const meAnalysisPanel = document.getElementById('meAnalysisPanel');
+export const meAnalysisStatus = document.getElementById('meAnalysisStatus');
+export const meAnalysisContent = document.getElementById('meAnalysisContent');
 
 // Control buttons
-export const youResubmitButton = document.getElementById('youResubmitButton');
-export const meResubmitButton = document.getElementById('meResubmitButton');
+export const youReanalyzeButton = document.getElementById('youReanalyzeButton');
+export const meReanalyzeButton = document.getElementById('meReanalyzeButton');
 export const youCameraButton = document.getElementById('youCameraButton');
 export const meCameraButton = document.getElementById('meCameraButton');
 export const youUploadButton = document.getElementById('youUploadButton');

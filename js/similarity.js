@@ -1,31 +1,32 @@
 // AI vision-based similarity calculation and visualization
 
-import { descriptionState } from './state.js';
+import { analysisState } from './state.js';
 import * as dom from './dom.js';
 
 /**
  * Store photo data for a side and trigger similarity check
  */
-export function storePhotoData(side, imageDataUrl, metadata = null, capturedAt = null) {
+export function storePhotoData(side, imageDataUrl, analysis = null, capturedAt = null, discriminators = null) {
     if (!imageDataUrl || typeof imageDataUrl !== 'string') {
         console.warn(`Invalid imageDataUrl for ${side}`);
         return;
     }
 
-    const state = descriptionState[side];
+    const state = analysisState[side];
     if (!state) {
         console.warn(`Invalid side: ${side}`);
         return;
     }
 
     state.imageDataUrl = imageDataUrl;
-    state.metadata = metadata;
+    state.analysis = analysis;
+    state.discriminators = discriminators;
     state.capturedAt = capturedAt;
     
     console.log(`Stored photo data for ${side}:`, {
         hasImage: !!imageDataUrl,
-        gender: metadata?.gender,
-        ageRange: metadata?.ageRange,
+        gender: analysis?.subject?.gender,
+        ageRange: analysis?.subject?.ageRange || analysis?.subject?.ageBucket,
         capturedAt: capturedAt
     });
 
@@ -37,8 +38,8 @@ export function storePhotoData(side, imageDataUrl, metadata = null, capturedAt =
  * Update similarity bar using AI vision comparison
  */
 export async function updateSimilarityBar() {
-    const youData = descriptionState.you;
-    const meData = descriptionState.me;
+    const youData = analysisState.you;
+    const meData = analysisState.me;
 
     // Check if both photos are ready
     if (!youData.imageDataUrl || !meData.imageDataUrl) {
@@ -59,13 +60,13 @@ export async function updateSimilarityBar() {
 
     console.log('=== REQUESTING AI VISION MATCH ===');
     console.log('You:', { 
-        gender: youData.metadata?.gender, 
-        age: youData.metadata?.ageRange,
+        gender: youData.analysis?.subject?.gender, 
+        age: youData.analysis?.subject?.ageRange || youData.analysis?.subject?.ageBucket,
         capturedAt: youData.capturedAt 
     });
     console.log('Me:', { 
-        gender: meData.metadata?.gender, 
-        age: meData.metadata?.ageRange,
+        gender: meData.analysis?.subject?.gender, 
+        age: meData.analysis?.subject?.ageRange || meData.analysis?.subject?.ageBucket,
         capturedAt: meData.capturedAt 
     });
 
@@ -79,12 +80,14 @@ export async function updateSimilarityBar() {
             body: JSON.stringify({
                 photo1: {
                     imageDataUrl: youData.imageDataUrl,
-                    metadata: youData.metadata,
+                    analysis: youData.analysis,
+                    discriminators: youData.discriminators,
                     capturedAt: youData.capturedAt
                 },
                 photo2: {
                     imageDataUrl: meData.imageDataUrl,
-                    metadata: meData.metadata,
+                    analysis: meData.analysis,
+                    discriminators: meData.discriminators,
                     capturedAt: meData.capturedAt
                 }
             })
@@ -116,7 +119,7 @@ export async function updateSimilarityBar() {
         }
 
         // Store result in state for reference
-        descriptionState.lastSimilarityResult = {
+        analysisState.lastSimilarityResult = {
             similarity: percentage,
             confidence: result.confidence,
             reasoning: result.reasoning,
@@ -133,7 +136,7 @@ export async function updateSimilarityBar() {
         }
         
         // Store error for debugging
-        descriptionState.lastSimilarityError = {
+        analysisState.lastSimilarityError = {
             message: error.message,
             timestamp: new Date().toISOString()
         };
@@ -144,11 +147,12 @@ export async function updateSimilarityBar() {
  * Clear photo data for a side
  */
 export function clearPhotoData(side) {
-    const state = descriptionState[side];
+    const state = analysisState[side];
     if (!state) return;
 
     state.imageDataUrl = null;
-    state.metadata = null;
+    state.analysis = null;
+    state.discriminators = null;
     state.capturedAt = null;
     
     // Reset similarity bar
@@ -159,16 +163,18 @@ export function clearPhotoData(side) {
  * Clear all photo data
  */
 export function clearAllPhotoData() {
-    descriptionState.you.imageDataUrl = null;
-    descriptionState.you.metadata = null;
-    descriptionState.you.capturedAt = null;
-    descriptionState.me.imageDataUrl = null;
-    descriptionState.me.metadata = null;
-    descriptionState.me.capturedAt = null;
+    analysisState.you.imageDataUrl = null;
+    analysisState.you.analysis = null;
+    analysisState.you.discriminators = null;
+    analysisState.you.capturedAt = null;
+    analysisState.me.imageDataUrl = null;
+    analysisState.me.analysis = null;
+    analysisState.me.discriminators = null;
+    analysisState.me.capturedAt = null;
     
     // Clear stored results
-    descriptionState.lastSimilarityResult = null;
-    descriptionState.lastSimilarityError = null;
+    analysisState.lastSimilarityResult = null;
+    analysisState.lastSimilarityError = null;
     
     updateSimilarityBar();
 }

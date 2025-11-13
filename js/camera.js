@@ -8,7 +8,7 @@ import { initializePhotoSlot, prepareSlotForLiveView, displayPhotoForSide } from
 import { showError, showWarning, hideError } from './ui.js';
 import { initializeZoomStateFromTrack, clearMovementDebounce } from './zoom.js';
 import { resetPointerTracking } from './interactions.js';
-import { resetDescriptionState } from './description-api.js';
+import { resetAnalysisState } from './analysis-api.js';
 
 /**
  * Get camera half element
@@ -762,7 +762,7 @@ export function resetBackCamera() {
     
     initializePhotoSlot('back');
     setIsBackFrozen(false);
-    resetDescriptionState('you');
+    resetAnalysisState('you');
     
     // Update button state
     if (dom.youCameraButton) {
@@ -778,7 +778,7 @@ export function resetSelfieCamera() {
     
     initializePhotoSlot('selfie');
     setIsSelfieFrozen(false);
-    resetDescriptionState('me');
+    resetAnalysisState('me');
     
     // Update button state
     if (dom.meCameraButton) {

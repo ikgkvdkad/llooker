@@ -5,7 +5,7 @@ import { photoSlots, interactionState, selectionState, setIsBackFrozen, setIsSel
 import { cloneSelectionRect } from './utils.js';
 import { hideSelectionOverlay, showSelectionOverlay, updateSelectionStyles, syncSelectionInteractionClasses, resetSelectionRect } from './selection.js';
 import { resetPhotoTransform, clearMovementDebounce } from './zoom.js';
-import { scheduleViewportDescription } from './description-api.js';
+import { scheduleViewportAnalysis } from './analysis-api.js';
 
 /**
  * Initialize a photo slot to its default state
@@ -104,7 +104,7 @@ export function displayPhotoForSide(side, dataUrl) {
         setIsSelfieFrozen(true);
     }
     
-    const schedule = () => scheduleViewportDescription(slotKey, { force: true, reason: 'photo-load' });
+    const schedule = () => scheduleViewportAnalysis(slotKey, { force: true, reason: 'photo-load' });
     if (slot.imageEl.complete && slot.imageEl.naturalWidth > 0) {
         schedule();
     } else {
