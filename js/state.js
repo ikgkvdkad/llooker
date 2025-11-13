@@ -116,7 +116,8 @@ export const analysisState = {
         imageDataUrl: null,
         analysis: null,
         discriminators: null,
-        capturedAt: null
+        capturedAt: null,
+        personGroup: null
     },
     me: {
         panel: dom.meAnalysisPanel,
@@ -125,7 +126,8 @@ export const analysisState = {
         imageDataUrl: null,
         analysis: null,
         discriminators: null,
-        capturedAt: null
+        capturedAt: null,
+        personGroup: null
     },
     lastSimilarityResult: null,
     lastSimilarityError: null
