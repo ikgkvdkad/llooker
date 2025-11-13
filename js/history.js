@@ -1,8 +1,9 @@
 // History browsing and navigation
 
 import { ANALYSIS_API_URL } from './config.js';
-import { historyState, photoSlots, interactionState } from './state.js';
+import { historyState, photoSlots, interactionState, analysisState } from './state.js';
 import { setAnalysisState, renderAnalysisSummary } from './analysis-api.js';
+import { setPersonIdentifierBadge } from './ui.js';
 import { hideSelectionOverlay } from './selection.js';
 import * as dom from './dom.js';
 
@@ -260,6 +261,10 @@ function displayHistoryItem(side) {
     if (location && location !== 'Location unavailable') {
         statusText += `\nLocation: ${location}`;
     }
+
+    if (item.personGroup?.identifier) {
+        statusText += `\nIdentifier: ${item.personGroup.identifier}`;
+    }
     
     // Show history indicator
     const position = state.currentIndex + 1;
@@ -268,6 +273,12 @@ function displayHistoryItem(side) {
     
     const analysisSummary = renderAnalysisSummary(item.analysis || {}, item.discriminators || {});
     setAnalysisState(side, 'success', statusText, analysisSummary);
+
+    const sideAnalysisState = analysisState[side];
+    if (sideAnalysisState) {
+        sideAnalysisState.personGroup = item.personGroup || null;
+    }
+    setPersonIdentifierBadge(side, item.personGroup?.identifier || null);
 }
 
 /**
@@ -291,6 +302,9 @@ function returnToLiveView(side) {
         null,
         `Waiting for a ${label} capture. Capture or upload a photo, then pan and zoom to center the subject.`
     );
+
+    const currentIdentifier = analysisState[side]?.personGroup?.identifier || null;
+    setPersonIdentifierBadge(side, currentIdentifier);
 }
 
 /**
@@ -378,5 +392,20 @@ export function addToHistory(side, analysisRecord) {
     }
     
     updateNavigationButtons(side);
+}
+
+/**
+ * Update the stored person group for an existing history record
+ */
+export function updateHistoryPersonGroup(side, recordId, personGroup) {
+    const state = historyState[side];
+    if (!state || !Array.isArray(state.analyses)) {
+        return;
+    }
+    const entry = state.analyses.find(item => item.id === recordId);
+    if (!entry) {
+        return;
+    }
+    entry.personGroup = personGroup || null;
 }
 

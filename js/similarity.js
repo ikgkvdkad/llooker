@@ -2,6 +2,7 @@
 
 import { analysisState } from './state.js';
 import * as dom from './dom.js';
+import { setPersonIdentifierBadge } from './ui.js';
 
 /**
  * Store photo data for a side and trigger similarity check
@@ -154,6 +155,8 @@ export function clearPhotoData(side) {
     state.analysis = null;
     state.discriminators = null;
     state.capturedAt = null;
+    state.personGroup = null;
+    setPersonIdentifierBadge(side, null);
     
     // Reset similarity bar
     updateSimilarityBar();
@@ -167,10 +170,14 @@ export function clearAllPhotoData() {
     analysisState.you.analysis = null;
     analysisState.you.discriminators = null;
     analysisState.you.capturedAt = null;
+    analysisState.you.personGroup = null;
+    setPersonIdentifierBadge('you', null);
     analysisState.me.imageDataUrl = null;
     analysisState.me.analysis = null;
     analysisState.me.discriminators = null;
     analysisState.me.capturedAt = null;
+    analysisState.me.personGroup = null;
+    setPersonIdentifierBadge('me', null);
     
     // Clear stored results
     analysisState.lastSimilarityResult = null;

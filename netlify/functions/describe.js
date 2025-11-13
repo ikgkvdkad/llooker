@@ -22,7 +22,9 @@ function resolveTableName() {
 }
 
 const TABLE_NAME = resolveTableName();
+const PERSON_GROUPS_TABLE = 'person_groups';
 let poolInstance = null;
+let ensureGroupsTablePromise = null;
 let ensureTablePromise = null;
 
 function estimateImageBytesFromDataUrl(dataUrl) {
@@ -301,6 +303,57 @@ function sanitizeDiscriminators(raw) {
   return discriminators;
 }
 
+async function ensurePersonGroupsTable(pool) {
+  if (!pool) {
+    throw new Error('Database pool not initialized.');
+  }
+
+  if (ensureGroupsTablePromise) {
+    return ensureGroupsTablePromise;
+  }
+
+  const createGroupsSql = `
+    CREATE TABLE IF NOT EXISTS ${PERSON_GROUPS_TABLE} (
+      id BIGSERIAL PRIMARY KEY,
+      identifier TEXT NOT NULL UNIQUE,
+      representative_analysis_id BIGINT REFERENCES ${TABLE_NAME}(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `;
+
+  ensureGroupsTablePromise = pool.query(createGroupsSql).then(async () => {
+    const triggerStatements = [
+      `
+        CREATE OR REPLACE FUNCTION ${PERSON_GROUPS_TABLE}_set_updated_at()
+        RETURNS TRIGGER AS $$
+        BEGIN
+          NEW.updated_at = NOW();
+          RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+      `,
+      `DROP TRIGGER IF EXISTS ${PERSON_GROUPS_TABLE}_set_updated_at ON ${PERSON_GROUPS_TABLE}`,
+      `
+        CREATE TRIGGER ${PERSON_GROUPS_TABLE}_set_updated_at
+        BEFORE UPDATE ON ${PERSON_GROUPS_TABLE}
+        FOR EACH ROW
+        EXECUTE FUNCTION ${PERSON_GROUPS_TABLE}_set_updated_at()
+      `
+    ];
+
+    for (const statement of triggerStatements) {
+      // eslint-disable-next-line no-await-in-loop
+      await pool.query(statement);
+    }
+  }).catch((error) => {
+    ensureGroupsTablePromise = null;
+    throw error;
+  });
+
+  return ensureGroupsTablePromise;
+}
+
 async function ensureTableExists(pool) {
   if (!pool) {
     throw new Error('Database pool not initialized.');
@@ -310,7 +363,7 @@ async function ensureTableExists(pool) {
     return ensureTablePromise;
   }
 
-  const createTableSql = `
+  const createAnalysesTableSql = `
     CREATE TABLE IF NOT EXISTS ${TABLE_NAME} (
       id BIGSERIAL PRIMARY KEY,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -331,10 +384,23 @@ async function ensureTableExists(pool) {
     );
   `;
 
-  ensureTablePromise = pool.query(createTableSql).catch((error) => {
-    ensureTablePromise = null;
-    throw error;
-  });
+  ensureTablePromise = pool.query(createAnalysesTableSql)
+    .then(() => ensurePersonGroupsTable(pool))
+    .then(async () => {
+      const alterStatements = [
+        `ALTER TABLE ${TABLE_NAME} ADD COLUMN IF NOT EXISTS person_group_id BIGINT REFERENCES ${PERSON_GROUPS_TABLE}(id) ON DELETE SET NULL`,
+        `CREATE INDEX IF NOT EXISTS idx_${TABLE_NAME}_person_group_id ON ${TABLE_NAME}(person_group_id)`
+      ];
+
+      for (const sql of alterStatements) {
+        // eslint-disable-next-line no-await-in-loop
+        await pool.query(sql);
+      }
+    })
+    .catch((error) => {
+      ensureTablePromise = null;
+      throw error;
+    });
 
   return ensureTablePromise;
 }
@@ -378,9 +444,10 @@ async function persistAnalysisRecord(recordInput, requestMeta) {
         captured_at,
         openai_request_id,
         model,
-        request_meta
+        request_meta,
+        person_group_id
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
       RETURNING id;
     `,
     values: [
@@ -397,7 +464,8 @@ async function persistAnalysisRecord(recordInput, requestMeta) {
       capturedAtDate || null,
       recordInput.openAiRequestId || null,
       recordInput.model || null,
-      requestMeta ? JSON.stringify(requestMeta) : null
+      requestMeta ? JSON.stringify(requestMeta) : null,
+      recordInput.personGroupId || null
     ]
   };
 

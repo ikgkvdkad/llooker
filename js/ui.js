@@ -118,3 +118,36 @@ export function renderAppVersion() {
     dom.versionDisplay.setAttribute('aria-label', `Application version ${APP_VERSION}`);
 }
 
+/**
+ * Update the visible person identifier badge for a side
+ */
+export function setPersonIdentifierBadge(side, identifier, options = {}) {
+    const badge = side === 'you' ? dom.youIdentifierBadge : dom.meIdentifierBadge;
+    if (!badge) {
+        return;
+    }
+
+    const normalized = typeof identifier === 'string' ? identifier.trim().toUpperCase() : '';
+    const isVisible = normalized.length > 0;
+
+    if (isVisible) {
+        badge.textContent = normalized;
+        badge.setAttribute('aria-label', `${side === 'you' ? 'You' : 'Me'} identifier ${normalized}`);
+    } else {
+        badge.textContent = '';
+        badge.removeAttribute('aria-label');
+    }
+
+    badge.classList.toggle('is-visible', isVisible);
+
+    const highlightNew = Boolean(options.highlightNew);
+    if (highlightNew && isVisible) {
+        badge.classList.add('person-identifier-new');
+        window.setTimeout(() => {
+            badge.classList.remove('person-identifier-new');
+        }, 2200);
+    } else {
+        badge.classList.remove('person-identifier-new');
+    }
+}
+
