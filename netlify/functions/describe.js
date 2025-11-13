@@ -87,6 +87,69 @@ function extractJsonContent(messageContent) {
   return null;
 }
 
+function parseJsonStringWithFallback(raw) {
+  if (typeof raw !== 'string') {
+    return { parsed: null, cleanup: 'non_string' };
+  }
+
+  const trimmed = raw.trim();
+  if (!trimmed.length) {
+    return { parsed: null, cleanup: 'empty_string' };
+  }
+
+  const attemptParse = (value, reason) => {
+    if (typeof value !== 'string') {
+      return null;
+    }
+    const candidate = value.trim();
+    if (!candidate.length) {
+      return null;
+    }
+    try {
+      return { parsed: JSON.parse(candidate), cleanup: reason };
+    } catch {
+      return null;
+    }
+  };
+
+  const direct = attemptParse(trimmed, null);
+  if (direct) {
+    return direct;
+  }
+
+  const fencedBlockMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)```$/i);
+  if (fencedBlockMatch) {
+    const fenced = attemptParse(fencedBlockMatch[1], 'code_fence_block');
+    if (fenced) {
+      return fenced;
+    }
+  }
+
+  if (trimmed.startsWith('```')) {
+    const withoutFenceHeader = trimmed.replace(/^```(?:json)?\s*/i, '');
+    const closingFenceIndex = withoutFenceHeader.indexOf('```');
+    const insideFence = closingFenceIndex !== -1
+      ? withoutFenceHeader.slice(0, closingFenceIndex)
+      : withoutFenceHeader;
+    const strippedFence = attemptParse(insideFence, 'code_fence_stripped');
+    if (strippedFence) {
+      return strippedFence;
+    }
+  }
+
+  const firstBrace = trimmed.indexOf('{');
+  const lastBrace = trimmed.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    const braceSlice = trimmed.slice(firstBrace, lastBrace + 1);
+    const braceParsed = attemptParse(braceSlice, 'brace_slice');
+    if (braceParsed) {
+      return braceParsed;
+    }
+  }
+
+  return { parsed: null, cleanup: 'unparseable' };
+}
+
 function estimateImageBytesFromDataUrl(dataUrl) {
   if (typeof dataUrl !== 'string') {
     return null;
@@ -781,13 +844,32 @@ exports.handler = async (event) => {
 
     let parsed;
 
-    if (typeof normalizedContent === 'string') {
-      try {
-        parsed = JSON.parse(normalizedContent);
-      } catch (parseError) {
-        console.error('Failed to parse AI response as JSON.', {
-          parseError: parseError?.message,
-          rawContentSnippet: normalizedContent.slice(0, 500),
+      if (typeof normalizedContent === 'string') {
+        const parseOutcome = parseJsonStringWithFallback(normalizedContent);
+        parsed = parseOutcome.parsed;
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          console.error('Failed to parse AI response as JSON.', {
+            parseError: 'Parsed content is not a JSON object',
+            cleanupReason: parseOutcome.cleanup,
+            rawContentSnippet: normalizedContent.slice(0, 500),
+            requestMeta
+          });
+          return {
+            statusCode: 500,
+            body: JSON.stringify({ error: 'AI response format invalid' })
+          };
+        }
+        if (parseOutcome.cleanup) {
+          console.warn('AI response JSON required cleanup before parsing.', {
+            cleanupReason: parseOutcome.cleanup,
+            requestMeta
+          });
+        }
+      } else if (normalizedContent && typeof normalizedContent === 'object' && !Array.isArray(normalizedContent)) {
+        parsed = normalizedContent;
+      } else {
+        console.error('AI response contained unusable JSON payload.', {
+          rawMessageContent: messageContent,
           requestMeta
         });
         return {
@@ -795,9 +877,6 @@ exports.handler = async (event) => {
           body: JSON.stringify({ error: 'AI response format invalid' })
         };
       }
-    } else {
-      parsed = normalizedContent;
-    }
 
     const status = typeof parsed?.status === 'string' ? parsed.status.trim().toLowerCase() : null;
     const analysisDoc = sanitizeAnalysisDoc(parsed?.analysis);
