@@ -27,6 +27,35 @@ let poolInstance = null;
 let ensureGroupsTablePromise = null;
 let ensureTablePromise = null;
 
+function extractJsonContent(messageContent) {
+  if (typeof messageContent === 'string') {
+    const trimmed = messageContent.trim();
+    return trimmed.length ? trimmed : null;
+  }
+
+  if (Array.isArray(messageContent)) {
+    const pieces = messageContent.reduce((acc, segment) => {
+      if (!segment || typeof segment !== 'object') {
+        return acc;
+      }
+
+      if (typeof segment.text === 'string') {
+        acc.push(segment.text);
+      } else if (typeof segment.content === 'string') {
+        acc.push(segment.content);
+      } else if (typeof segment.json === 'string') {
+        acc.push(segment.json);
+      }
+
+      return acc;
+    }, []).join('').trim();
+
+    return pieces.length ? pieces : null;
+  }
+
+  return null;
+}
+
 function estimateImageBytesFromDataUrl(dataUrl) {
   if (typeof dataUrl !== 'string') {
     return null;
@@ -694,33 +723,38 @@ exports.handler = async (event) => {
           }
         })
       };
-    }
+      }
 
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
+      const data = await response.json();
+      const messageContent = data.choices?.[0]?.message?.content;
+      const normalizedContent = extractJsonContent(messageContent);
 
-    if (!content) {
-      return {
-        statusCode: 500,
-        body: JSON.stringify({ error: 'No analysis returned from OpenAI' })
-      };
-    }
+      if (!normalizedContent) {
+        console.error('AI response missing JSON content.', {
+          rawMessageContent: messageContent,
+          requestMeta
+        });
+        return {
+          statusCode: 500,
+          body: JSON.stringify({ error: 'AI response missing JSON payload' })
+        };
+      }
 
-    let parsed;
+      let parsed;
 
-    try {
-      parsed = JSON.parse(content);
-    } catch (parseError) {
-      console.error('Failed to parse AI response as JSON.', {
-        parseError: parseError?.message,
-        rawContentSnippet: typeof content === 'string' ? content.slice(0, 500) : null,
-        requestMeta
-      });
-      return {
-        statusCode: 500,
-        body: JSON.stringify({ error: 'AI response format invalid' })
-      };
-    }
+      try {
+        parsed = JSON.parse(normalizedContent);
+      } catch (parseError) {
+        console.error('Failed to parse AI response as JSON.', {
+          parseError: parseError?.message,
+          rawContentSnippet: normalizedContent.slice(0, 500),
+          requestMeta
+        });
+        return {
+          statusCode: 500,
+          body: JSON.stringify({ error: 'AI response format invalid' })
+        };
+      }
 
     const status = typeof parsed?.status === 'string' ? parsed.status.trim().toLowerCase() : null;
     const analysisDoc = sanitizeAnalysisDoc(parsed?.analysis);
