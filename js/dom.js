@@ -5,14 +5,12 @@ export const backVideoElement = document.getElementById('backVideoElement');
 export const backCapturedPhoto = document.getElementById('backCapturedPhoto');
 export const backCameraHalf = document.getElementById('backCameraHalf');
 export const backPlaceholder = document.getElementById('backPlaceholder');
-export const youIdentifierBadge = document.getElementById('youIdentifierBadge');
 
 // Selfie camera elements
 export const selfieVideoElement = document.getElementById('selfieVideoElement');
 export const selfieCapturedPhoto = document.getElementById('selfieCapturedPhoto');
 export const selfieCameraHalf = document.getElementById('selfieCameraHalf');
 export const selfiePlaceholder = document.getElementById('selfiePlaceholder');
-export const meIdentifierBadge = document.getElementById('meIdentifierBadge');
 
 // Selection overlays
 export const backSelectionOverlay = document.getElementById('backSelectionOverlay');

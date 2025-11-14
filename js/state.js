@@ -117,7 +117,6 @@ export const analysisState = {
         analysis: null,
         discriminators: null,
         capturedAt: null,
-        personGroup: null,
         diagnostics: [],
         analysisText: ''
     },
@@ -129,7 +128,6 @@ export const analysisState = {
         analysis: null,
         discriminators: null,
         capturedAt: null,
-        personGroup: null,
         diagnostics: [],
         analysisText: ''
     },

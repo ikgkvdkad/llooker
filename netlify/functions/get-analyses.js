@@ -22,7 +22,6 @@ function resolveTableName() {
 }
 
 const TABLE_NAME = resolveTableName();
-const PERSON_GROUPS_TABLE = 'person_groups';
 let poolInstance = null;
 let ensureTablesPromise = null;
 
@@ -86,54 +85,7 @@ async function ensureTables(pool) {
       request_meta JSONB
     );
   `;
-
-  const createGroupsSql = `
-    CREATE TABLE IF NOT EXISTS ${PERSON_GROUPS_TABLE} (
-      id BIGSERIAL PRIMARY KEY,
-      identifier TEXT NOT NULL UNIQUE,
-      representative_analysis_id BIGINT REFERENCES ${TABLE_NAME}(id) ON DELETE SET NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `;
-
-  const triggerStatements = [
-    `
-      CREATE OR REPLACE FUNCTION ${PERSON_GROUPS_TABLE}_set_updated_at()
-      RETURNS TRIGGER AS $$
-      BEGIN
-        NEW.updated_at = NOW();
-        RETURN NEW;
-      END;
-      $$ LANGUAGE plpgsql;
-    `,
-    `DROP TRIGGER IF EXISTS ${PERSON_GROUPS_TABLE}_set_updated_at ON ${PERSON_GROUPS_TABLE}`,
-    `
-      CREATE TRIGGER ${PERSON_GROUPS_TABLE}_set_updated_at
-      BEFORE UPDATE ON ${PERSON_GROUPS_TABLE}
-      FOR EACH ROW
-      EXECUTE FUNCTION ${PERSON_GROUPS_TABLE}_set_updated_at()
-    `
-  ];
-
-  const alterStatements = [
-    `ALTER TABLE ${TABLE_NAME} ADD COLUMN IF NOT EXISTS person_group_id BIGINT REFERENCES ${PERSON_GROUPS_TABLE}(id) ON DELETE SET NULL`,
-    `CREATE INDEX IF NOT EXISTS idx_${TABLE_NAME}_person_group_id ON ${TABLE_NAME}(person_group_id)`
-  ];
-
   ensureTablesPromise = pool.query(createAnalysesSql)
-    .then(() => pool.query(createGroupsSql))
-    .then(async () => {
-      for (const statement of triggerStatements) {
-        // eslint-disable-next-line no-await-in-loop
-        await pool.query(statement);
-      }
-
-      for (const statement of alterStatements) {
-        // eslint-disable-next-line no-await-in-loop
-        await pool.query(statement);
-      }
-    })
     .catch((error) => {
       ensureTablesPromise = null;
       throw error;
@@ -210,12 +162,8 @@ exports.handler = async (event) => {
       a.discriminators,
       a.image_data_url,
       a.location,
-      a.viewport_signature,
-      a.person_group_id,
-      pg.identifier AS person_group_identifier,
-      pg.representative_analysis_id AS person_group_representative_id
+      a.viewport_signature
     FROM ${TABLE_NAME} a
-    LEFT JOIN ${PERSON_GROUPS_TABLE} pg ON pg.id = a.person_group_id
     WHERE 1=1
   `;
 
@@ -251,12 +199,7 @@ exports.handler = async (event) => {
       discriminators: parseJsonColumn(row.discriminators) || {},
       imageDataUrl: row.image_data_url,
       location: parseJsonColumn(row.location),
-      signature: row.viewport_signature,
-      personGroup: row.person_group_id ? {
-        id: row.person_group_id,
-        identifier: row.person_group_identifier,
-        representativeAnalysisId: row.person_group_representative_id
-      } : null
+      signature: row.viewport_signature
     }));
 
     const countQuery = `

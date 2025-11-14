@@ -1,12 +1,11 @@
 // Photo capture and display logic
 
 import * as dom from './dom.js';
-import { photoSlots, interactionState, selectionState, setIsBackFrozen, setIsSelfieFrozen, analysisState } from './state.js';
+import { photoSlots, interactionState, selectionState, setIsBackFrozen, setIsSelfieFrozen } from './state.js';
 import { cloneSelectionRect } from './utils.js';
 import { hideSelectionOverlay, showSelectionOverlay, updateSelectionStyles, syncSelectionInteractionClasses, resetSelectionRect } from './selection.js';
 import { resetPhotoTransform, clearMovementDebounce } from './zoom.js';
 import { scheduleViewportAnalysis } from './analysis-api.js';
-import { setPersonIdentifierBadge } from './ui.js';
 
 /**
  * Initialize a photo slot to its default state
@@ -87,10 +86,6 @@ export function displayPhotoForSide(side, dataUrl) {
     showSelectionOverlay(slotKey);
     resetSelectionRect(slotKey, { notify: false });
     resetPhotoTransform(slotKey);
-    if (analysisState[side]) {
-        analysisState[side].personGroup = null;
-    }
-    setPersonIdentifierBadge(side, null);
     const state = interactionState[slotKey];
     if (state) {
         state.lastTap = null;
