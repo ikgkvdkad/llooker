@@ -3,12 +3,13 @@
 import { analysisState, historyState } from './state.js';
 import * as dom from './dom.js';
 import { appendDiagnosticMessage } from './analysis-api.js';
+import { showWarning } from './ui.js';
 
 const RATIONALE_DEFAULT_PLACEHOLDER = 'No similarity rationale yet. Capture both photos to compare.';
-const RATIONALE_DEFAULT_HINT = 'Capture both photos to unlock the AI’s explanation.';
-const RATIONALE_READY_HINT = 'AI explanation ready for the latest comparison.';
 const RATIONALE_BUTTON_LOADING_LABEL = 'Requesting comparison...';
-const RATIONALE_MISSING_PAIR_HINT = 'Capture or select both photos to request a comparison.';
+const RATIONALE_MISSING_PAIR_MESSAGE = 'Capture or select both photos to request a comparison.';
+const RATIONALE_SIGNATURE_ERROR_MESSAGE = 'Unable to identify the current photo pair. Capture both sides again.';
+const RATIONALE_FAILURE_MESSAGE = 'Similarity match failed. Check diagnostics and try again.';
 
 let rationalePlaceholderMessage = RATIONALE_DEFAULT_PLACEHOLDER;
 let rationaleButtonDefaultLabel = null;
@@ -20,29 +21,6 @@ function normalizeRationaleText(text) {
         return '';
     }
     return text.trim();
-}
-
-function showRationaleHint(message) {
-    if (!dom.similarityRationaleHint) {
-        return;
-    }
-    dom.similarityRationaleHint.hidden = false;
-    dom.similarityRationaleHint.textContent = message;
-}
-
-function updateRationaleHint(hasRationale) {
-    if (!dom.similarityRationaleHint) {
-        return;
-    }
-    if (hasRationale) {
-        showRationaleHint(RATIONALE_READY_HINT);
-        return;
-    }
-    dom.similarityRationaleHint.hidden = true;
-}
-
-function hasRationaleText() {
-    return Boolean(normalizeRationaleText(analysisState.similarityRationaleText).length);
 }
 
 function getRationaleButtonDefaultLabel() {
@@ -145,34 +123,249 @@ function normalizeComparisonData(side, overrideData) {
     return getLiveSideData(side);
 }
 
-function buildRationaleList(text) {
+function formatEvidenceList(items) {
+    if (!Array.isArray(items) || !items.length) {
+        return '';
+    }
+    if (items.length === 1) {
+        return items[0];
+    }
+    if (items.length === 2) {
+        return `${items[0]} and ${items[1]}`;
+    }
+    const head = items.slice(0, -1).join(', ');
+    const tail = items[items.length - 1];
+    return `${head}, and ${tail}`;
+}
+
+function chunkSentences(sentences, perParagraph = 2) {
+    if (!Array.isArray(sentences) || !sentences.length) {
+        return [];
+    }
+    const chunks = [];
+    for (let i = 0; i < sentences.length; i += perParagraph) {
+        chunks.push(sentences.slice(i, i + perParagraph).join(' '));
+    }
+    return chunks;
+}
+
+function buildExplanationParagraphs(text) {
     const lines = text
         .split('\n')
         .map(line => line.trim())
         .filter(Boolean);
 
     if (!lines.length) {
+        return [];
+    }
+
+    const evidence = {
+        positive: [],
+        negative: [],
+        neutral: []
+    };
+
+    for (const rawLine of lines) {
+        if (rawLine.startsWith('+')) {
+            const cleaned = rawLine.slice(1).trim() || rawLine;
+            evidence.positive.push(cleaned);
+        } else if (rawLine.startsWith('-')) {
+            const cleaned = rawLine.slice(1).trim() || rawLine;
+            evidence.negative.push(cleaned);
+        } else {
+            evidence.neutral.push(rawLine);
+        }
+    }
+
+    const sentences = [];
+    if (evidence.positive.length) {
+        sentences.push(`Supporting cues (${evidence.positive.length}) include ${formatEvidenceList(evidence.positive)}.`);
+    }
+    if (evidence.negative.length) {
+        sentences.push(`Conflicts (${evidence.negative.length}) include ${formatEvidenceList(evidence.negative)}.`);
+    }
+    if (evidence.neutral.length) {
+        sentences.push(`Additional context noted: ${formatEvidenceList(evidence.neutral)}.`);
+    }
+
+    return chunkSentences(sentences, 2);
+}
+
+function createSection(title, paragraphs) {
+    if (!Array.isArray(paragraphs) || !paragraphs.length) {
+        return null;
+    }
+    const section = document.createElement('section');
+    section.className = 'similarity-rationale-section';
+    const heading = document.createElement('h3');
+    heading.textContent = title;
+    section.appendChild(heading);
+    for (const text of paragraphs) {
+        if (!text) {
+            continue;
+        }
+        const paragraph = document.createElement('p');
+        paragraph.className = 'similarity-rationale-paragraph';
+        paragraph.textContent = text;
+        section.appendChild(paragraph);
+    }
+    return section;
+}
+
+function formatHairSummary(hair) {
+    if (!hair || typeof hair !== 'object') {
+        return null;
+    }
+    const parts = [hair.length, hair.style, hair.color]
+        .map(value => (typeof value === 'string' ? value.trim() : ''))
+        .filter(Boolean);
+    return parts.length ? parts.join(' ') : null;
+}
+
+function normalizeAttributeValue(value) {
+    if (value === null || value === undefined) {
+        return null;
+    }
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        return trimmed.length ? trimmed : null;
+    }
+    if (Array.isArray(value)) {
+        const normalized = value
+            .map(entry => normalizeAttributeValue(entry))
+            .filter(Boolean);
+        return normalized.length ? normalized.join(', ') : null;
+    }
+    if (typeof value === 'object') {
+        const normalized = Object.values(value)
+            .map(entry => normalizeAttributeValue(entry))
+            .filter(Boolean);
+        return normalized.length ? normalized.join(' ') : null;
+    }
+    return String(value);
+}
+
+function compareAttributeSentence(label, youValueRaw, meValueRaw) {
+    const youValue = normalizeAttributeValue(youValueRaw);
+    const meValue = normalizeAttributeValue(meValueRaw);
+    if (!youValue && !meValue) {
+        return null;
+    }
+    if (youValue && meValue && youValue.toLowerCase && meValue.toLowerCase) {
+        if (youValue.toLowerCase() === meValue.toLowerCase()) {
+            return `${label} aligns (${youValue}).`;
+        }
+    }
+    if (!youValue || !meValue) {
+        return `${label} data is incomplete (You: ${youValue || 'unknown'}, Me: ${meValue || 'unknown'}).`;
+    }
+    return `${label} differs — You: ${youValue}; Me: ${meValue}.`;
+}
+
+function buildFacialComparisonSection() {
+    const youSubject = analysisState.you.analysis?.subject || null;
+    const meSubject = analysisState.me.analysis?.subject || null;
+    if (!youSubject && !meSubject) {
         return null;
     }
 
-    const list = document.createElement('ul');
-    list.className = 'similarity-rationale-list';
+    const sentences = [
+        compareAttributeSentence('Gender presentation', youSubject?.gender, meSubject?.gender),
+        compareAttributeSentence('Age range', youSubject?.ageRange || youSubject?.ageBucket, meSubject?.ageRange || meSubject?.ageBucket),
+        compareAttributeSentence('Skin tone', youSubject?.skinTone, meSubject?.skinTone),
+        compareAttributeSentence('Hair style', formatHairSummary(youSubject?.hair), formatHairSummary(meSubject?.hair)),
+        compareAttributeSentence('Facial hair', youSubject?.facialHair, meSubject?.facialHair),
+        compareAttributeSentence('Eyewear', youSubject?.eyewear, meSubject?.eyewear),
+        compareAttributeSentence('Headwear', youSubject?.headwear, meSubject?.headwear)
+    ].filter(Boolean);
 
-    for (const rawLine of lines) {
-        const item = document.createElement('li');
-        let line = rawLine;
-        if (line.startsWith('+')) {
-            item.classList.add('positive');
-            line = line.slice(1).trim();
-        } else if (line.startsWith('-')) {
-            item.classList.add('negative');
-            line = line.slice(1).trim();
-        }
-        item.textContent = line.length ? line : rawLine;
-        list.appendChild(item);
+    if (!sentences.length) {
+        return createSection('Facial comparison', ['No facial attributes available from the latest analyses.']);
     }
 
-    return list;
+    const paragraphs = chunkSentences(sentences, 3);
+    return createSection('Facial comparison', paragraphs);
+}
+
+function formatTimestamp(value) {
+    if (!value) {
+        return null;
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return null;
+    }
+    return date.toLocaleString();
+}
+
+function formatCaptureInfo(label, sideState) {
+    if (!sideState) {
+        return null;
+    }
+    const timestamp = formatTimestamp(sideState.capturedAt);
+    if (timestamp) {
+        return `${label} photo captured ${timestamp}.`;
+    }
+    return `${label} capture time unknown.`;
+}
+
+function formatDiscriminatorSummary(label, discriminators) {
+    if (!discriminators || typeof discriminators !== 'object') {
+        return `${label} discriminators unavailable.`;
+    }
+    const entries = Object.entries(discriminators)
+        .filter(([, value]) => value !== null && value !== undefined && `${value}`.length > 0)
+        .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : value}`);
+    if (!entries.length) {
+        return `${label} discriminators unavailable.`;
+    }
+    return `${label} discriminators considered: ${entries.join(' | ')}.`;
+}
+
+function buildRecognitionSection() {
+    const result = analysisState.lastSimilarityResult;
+    if (!result) {
+        return null;
+    }
+
+    const paragraphs = [];
+    const fatalText = result.fatal_mismatch
+        ? `Fatal mismatch flagged (${result.fatal_mismatch}).`
+        : 'No fatal mismatch detected.';
+    const timeGap = typeof result.timeDiffMinutes === 'number'
+        ? `Photos captured approximately ${Math.round(result.timeDiffMinutes)} minutes apart.`
+        : 'Time gap between captures is unknown.';
+    paragraphs.push(`Model confidence reported as ${result.confidence || 'unknown'} for the ${result.similarity}% similarity score. ${fatalText} ${timeGap}`);
+
+    const captureDetails = [
+        formatCaptureInfo('You', analysisState.you),
+        formatCaptureInfo('Me', analysisState.me)
+    ].filter(Boolean);
+    if (captureDetails.length) {
+        paragraphs.push(captureDetails.join(' '));
+    }
+
+    const discriminatorDetails = [
+        formatDiscriminatorSummary('You', analysisState.you.discriminators),
+        formatDiscriminatorSummary('Me', analysisState.me.discriminators)
+    ].filter(Boolean);
+    if (discriminatorDetails.length) {
+        paragraphs.push(discriminatorDetails.join(' '));
+    }
+
+    return createSection('Recognition info', paragraphs);
+}
+
+function buildExplanationSection(text) {
+    const normalized = typeof text === 'string' ? text.trim() : '';
+    if (!normalized.length) {
+        return null;
+    }
+    const paragraphs = buildExplanationParagraphs(normalized);
+    if (!paragraphs.length) {
+        return createSection('AI rationale', [normalized]);
+    }
+    return createSection('AI rationale', paragraphs);
 }
 
 function renderSimilarityRationaleBody() {
@@ -196,30 +389,53 @@ function renderSimilarityRationaleBody() {
     if (analysisState.lastSimilarityResult) {
         const summary = document.createElement('p');
         summary.className = 'similarity-rationale-summary';
-        const { similarity, confidence, fatal_mismatch: fatalMismatch } = analysisState.lastSimilarityResult;
-        const confidenceLabel = confidence ? confidence : 'unknown';
-        const fatalLabel = fatalMismatch ? ` • Fatal mismatch: ${fatalMismatch}` : '';
-        summary.textContent = `Similarity ${similarity}% • Confidence ${confidenceLabel}${fatalLabel}`;
+        const {
+            similarity,
+            confidence,
+            fatal_mismatch: fatalMismatch,
+            timeDiffMinutes
+        } = analysisState.lastSimilarityResult;
+        const confidenceLabel = confidence || 'unknown';
+        const fatalLabel = fatalMismatch ? `Fatal mismatch: ${fatalMismatch}` : 'No fatal mismatch detected';
+        const timeDiffLabel = typeof timeDiffMinutes === 'number'
+            ? `Time gap ${Math.round(timeDiffMinutes)} min`
+            : 'Time gap unknown';
+        summary.textContent = `Similarity ${similarity}% • Confidence ${confidenceLabel} • ${fatalLabel} • ${timeDiffLabel}`;
         dom.similarityRationaleBody.appendChild(summary);
     }
 
-    const list = buildRationaleList(text);
-    if (list) {
-        dom.similarityRationaleBody.appendChild(list);
-        return;
+    let appendedContent = false;
+
+    const explanationSection = buildExplanationSection(text);
+    if (explanationSection) {
+        dom.similarityRationaleBody.appendChild(explanationSection);
+        appendedContent = true;
     }
 
-    const fallback = document.createElement('p');
-    fallback.className = 'similarity-rationale-empty';
-    fallback.textContent = 'Rationale text unavailable. Re-run the comparison.';
-    dom.similarityRationaleBody.appendChild(fallback);
+    const facialSection = buildFacialComparisonSection();
+    if (facialSection) {
+        dom.similarityRationaleBody.appendChild(facialSection);
+        appendedContent = true;
+    }
+
+    const recognitionSection = buildRecognitionSection();
+    if (recognitionSection) {
+        dom.similarityRationaleBody.appendChild(recognitionSection);
+        appendedContent = true;
+    }
+
+    if (!appendedContent) {
+        const fallback = document.createElement('p');
+        fallback.className = 'similarity-rationale-empty';
+        fallback.textContent = 'Rationale text unavailable. Re-run the comparison.';
+        dom.similarityRationaleBody.appendChild(fallback);
+    }
 }
 
 function setSimilarityRationale(text, placeholderMessage = RATIONALE_DEFAULT_PLACEHOLDER) {
     const normalized = normalizeRationaleText(text);
     analysisState.similarityRationaleText = normalized;
     rationalePlaceholderMessage = placeholderMessage || RATIONALE_DEFAULT_PLACEHOLDER;
-    updateRationaleHint(Boolean(normalized));
     renderSimilarityRationaleBody();
 }
 
@@ -348,6 +564,7 @@ export async function updateSimilarityBar(options = {}) {
             confidence: result.confidence,
             reasoning: result.reasoning,
             fatal_mismatch: result.fatal_mismatch,
+            timeDiffMinutes: typeof result.timeDiffMinutes === 'number' ? result.timeDiffMinutes : null,
             timestamp: new Date().toISOString(),
             signature: comparisonSignature || null,
             context: {
@@ -394,13 +611,13 @@ export async function handleSimilarityRationaleRequest(options = {}) {
     const meActive = getActiveSideData('me');
 
     if (!youActive?.imageDataUrl || !meActive?.imageDataUrl) {
-        showRationaleHint(RATIONALE_MISSING_PAIR_HINT);
+        showWarning(RATIONALE_MISSING_PAIR_MESSAGE, { sides: ['you', 'me'] });
         return;
     }
 
     const signature = buildComparisonSignature(youActive, meActive);
     if (!signature) {
-        showRationaleHint('Unable to identify the current photo pair. Capture both sides again.');
+        showWarning(RATIONALE_SIGNATURE_ERROR_MESSAGE, { sides: ['you', 'me'] });
         return;
     }
 
@@ -435,7 +652,6 @@ export async function handleSimilarityRationaleRequest(options = {}) {
     try {
         pendingComparisonSignature = signature;
         setRationaleButtonLoading(true);
-        showRationaleHint('Requesting a fresh comparison...');
 
         pendingComparisonPromise = updateSimilarityBar({
             youData: youActive,
@@ -448,7 +664,7 @@ export async function handleSimilarityRationaleRequest(options = {}) {
         await pendingComparisonPromise;
     } catch (error) {
         console.error('Manual similarity comparison failed:', error);
-        showRationaleHint('Similarity match failed. Check diagnostics and try again.');
+        showWarning(RATIONALE_FAILURE_MESSAGE, { sides: ['you', 'me'] });
         return;
     } finally {
         setRationaleButtonLoading(false);
@@ -459,7 +675,7 @@ export async function handleSimilarityRationaleRequest(options = {}) {
     if (analysisState.lastSimilarityResult?.signature === signature) {
         onRationaleReady?.();
     } else {
-        showRationaleHint('Similarity match failed. Check diagnostics and try again.');
+        showWarning(RATIONALE_FAILURE_MESSAGE, { sides: ['you', 'me'] });
     }
 }
 

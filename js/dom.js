@@ -67,7 +67,6 @@ export const similarityBarFill = document.getElementById('similarityBarFill');
 export const similarityPercentage = document.getElementById('similarityPercentage');
 export const similarityColumn = document.getElementById('similarityColumn');
 export const similarityRationaleButton = document.getElementById('similarityRationaleButton');
-export const similarityRationaleHint = document.getElementById('similarityRationaleHint');
 export const similarityRationaleModal = document.getElementById('similarityRationaleModal');
 export const similarityRationaleOverlay = document.getElementById('similarityRationaleOverlay');
 export const similarityRationaleCloseButton = document.getElementById('similarityRationaleCloseButton');
