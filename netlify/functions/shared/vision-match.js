@@ -75,7 +75,7 @@ export function summariseClothing(clothing = {}, accessories = {}, carriedItems 
   ].join('\n');
 }
 
-export function buildComparisonPrompt(candidate, reference) {
+  export function buildComparisonPrompt(candidate, reference) {
   const time = formatTimeContext(candidate, reference);
   const subjectSummary1 = summariseSubject(candidate.analysis?.subject || {});
   const subjectSummary2 = summariseSubject(reference.analysis?.subject || {});
@@ -109,8 +109,8 @@ Photo 2 outfit:
 ${outfitSummary2}
 Photo 2 discriminators: ${JSON.stringify(discriminators2)}
 
-TASK:
-Determine the probability (0-100%) that these are photos of the SAME PERSON.
+  TASK:
+  Determine the probability (0-100%) that these are photos of the SAME PERSON.
 
 CRITICAL RULES:
   1. Gender mismatch = 0% (fatal).
@@ -129,17 +129,17 @@ COMPARISON PRIORITIES (in order):
 6. Age range
 
 Return ONLY valid JSON with this exact structure:
-{
-  "similarity": <integer 0-100>,
-  "confidence": <"high" | "medium" | "low">,
-  "reasoning": "<brief explanation of match/mismatch>",
-  "fatal_mismatch": <"gender" | "outfit" | "age" | "hair" | "accessories" | null>
-}
+  {
+    "similarity": <integer 0-100>,
+    "confidence": <"high" | "medium" | "low">,
+    "reasoning": "Why the score is high OR low, mentioning every major factor that influenced it. Format as sentences separated by \\n, each prefixed with '+' for supporting evidence or '-' for conflicting evidence. Example: \"+ Matching navy blazer and glasses\" or \"- Different footwear and backpack\".",
+    "fatal_mismatch": <"gender" | "outfit" | "age" | "hair" | "accessories" | null>
+  }
 
 Examples:
-- Identical person: {"similarity": 95, "confidence": "high", "reasoning": "Same gender, matching navy suit, identical shoes and glasses", "fatal_mismatch": null}
-- Same build but outfit mismatch: {"similarity": 20, "confidence": "high", "reasoning": "Sweater vs bright red jacket and different shoes", "fatal_mismatch": "outfit"}
-- Gender mismatch: {"similarity": 0, "confidence": "high", "reasoning": "Female vs male presentation", "fatal_mismatch": "gender"}`;
+  - Identical person: {"similarity": 95, "confidence": "high", "reasoning": "+ Same gender\n+ Matching navy suit and glasses\n+ Identical shoes", "fatal_mismatch": null}
+  - Same build but outfit mismatch: {"similarity": 20, "confidence": "high", "reasoning": "+ Similar build\n- Sweater vs bright red jacket\n- Different shoes", "fatal_mismatch": "outfit"}
+  - Gender mismatch: {"similarity": 0, "confidence": "high", "reasoning": "- Female vs male presentation\n- Hair length mismatch", "fatal_mismatch": "gender"}`;
 
   return {
     prompt,
@@ -194,11 +194,11 @@ export async function performVisionMatch(openai, candidate, reference, options =
     throw new Error('AI response missing similarity value.');
   }
 
-  return {
-    similarity: Math.max(0, Math.min(100, Math.round(payload.similarity))),
-    confidence: typeof payload.confidence === 'string' ? payload.confidence : 'medium',
-    reasoning: typeof payload.reasoning === 'string' ? payload.reasoning : 'No reasoning provided',
-    fatalMismatch: payload.fatal_mismatch ?? null,
-    timeDiffMinutes: timeDiffMinutes !== null ? Math.round(timeDiffMinutes) : null
-  };
+    return {
+      similarity: Math.max(0, Math.min(100, Math.round(payload.similarity))),
+      confidence: typeof payload.confidence === 'string' ? payload.confidence : 'medium',
+      reasoning: typeof payload.reasoning === 'string' ? payload.reasoning : 'No reasoning provided',
+      fatal_mismatch: typeof payload.fatal_mismatch === 'string' ? payload.fatal_mismatch : null,
+      timeDiffMinutes: timeDiffMinutes !== null ? Math.round(timeDiffMinutes) : null
+    };
 }

@@ -79,6 +79,58 @@ function init() {
     
     // Initialize history navigation
     initHistoryNavigation();
+
+    initSimilarityRationaleModal();
+}
+
+let lastFocusedElementBeforeRationale = null;
+
+function handleRationaleKeydown(event) {
+    if (event.key === 'Escape') {
+        event.preventDefault();
+        closeSimilarityRationaleModal();
+    }
+}
+
+function openSimilarityRationaleModal() {
+    if (!dom.similarityRationaleModal) {
+        return;
+    }
+    dom.similarityRationaleModal.classList.add('is-open');
+    dom.similarityRationaleModal.setAttribute('aria-hidden', 'false');
+    lastFocusedElementBeforeRationale = document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    if (dom.similarityRationaleCloseButton) {
+        dom.similarityRationaleCloseButton.focus();
+    }
+    document.addEventListener('keydown', handleRationaleKeydown);
+}
+
+function closeSimilarityRationaleModal() {
+    if (!dom.similarityRationaleModal) {
+        return;
+    }
+    dom.similarityRationaleModal.classList.remove('is-open');
+    dom.similarityRationaleModal.setAttribute('aria-hidden', 'true');
+    document.removeEventListener('keydown', handleRationaleKeydown);
+    if (lastFocusedElementBeforeRationale && typeof lastFocusedElementBeforeRationale.focus === 'function') {
+        lastFocusedElementBeforeRationale.focus();
+    }
+    lastFocusedElementBeforeRationale = null;
+}
+
+function initSimilarityRationaleModal() {
+    if (!dom.similarityRationaleButton || !dom.similarityRationaleModal) {
+        return;
+    }
+    dom.similarityRationaleButton.addEventListener('click', () => openSimilarityRationaleModal());
+    if (dom.similarityRationaleOverlay) {
+        dom.similarityRationaleOverlay.addEventListener('click', () => closeSimilarityRationaleModal());
+    }
+    if (dom.similarityRationaleCloseButton) {
+        dom.similarityRationaleCloseButton.addEventListener('click', () => closeSimilarityRationaleModal());
+    }
 }
 
 // Initialize when DOM is ready

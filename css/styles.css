@@ -118,11 +118,20 @@ body {
     overflow: hidden;
 }
 
-.similarity-bar-container {
-    width: 40px;
-    min-width: 40px;
-    max-width: 40px;
+.similarity-column {
+    width: 120px;
+    min-width: 110px;
+    max-width: 140px;
     flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 10px 18px;
+}
+
+.similarity-bar-container {
+    width: 100%;
     position: relative;
     display: flex;
     flex-direction: column;
@@ -134,6 +143,7 @@ body {
     border-left-width: 1.5px;
     border-right-width: 1.5px;
     padding: 16px 0;
+    min-height: 220px;
 }
 
 .similarity-bar-fill {
@@ -164,6 +174,178 @@ body {
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
     margin-top: auto;
     margin-bottom: 8px;
+}
+
+.similarity-rationale-button {
+    width: 100%;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 10px 12px;
+    border-radius: 999px;
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.9);
+    transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.similarity-rationale-button:hover,
+.similarity-rationale-button:focus-visible {
+    background: rgba(255, 255, 255, 0.18);
+    border-color: rgba(255, 255, 255, 0.85);
+    outline: none;
+}
+
+.similarity-rationale-button:active {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+.similarity-rationale-hint {
+    font-size: 11px;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.65);
+    line-height: 1.4;
+    margin: 0;
+}
+
+.similarity-rationale-modal {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 999;
+}
+
+.similarity-rationale-modal.is-open {
+    display: flex;
+}
+
+.similarity-rationale-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(2px);
+}
+
+.similarity-rationale-panel {
+    position: relative;
+    width: min(480px, calc(100% - 32px));
+    max-height: calc(100% - 80px);
+    background: #0b0b0f;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 16px;
+    padding: 24px;
+    color: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 20px 45px rgba(0, 0, 0, 0.65);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.similarity-rationale-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.similarity-rationale-header h2 {
+    font-size: 20px;
+    margin: 0;
+    letter-spacing: 0.02em;
+}
+
+.similarity-rationale-close {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 26px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 8px;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.similarity-rationale-close:hover,
+.similarity-rationale-close:focus-visible {
+    background: rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.95);
+    outline: none;
+}
+
+.similarity-rationale-body {
+    overflow-y: auto;
+    padding-right: 6px;
+}
+
+.similarity-rationale-summary {
+    margin: 0 0 12px;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.75);
+}
+
+.similarity-rationale-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.similarity-rationale-list li {
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.04);
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.similarity-rationale-list li.positive {
+    border-color: rgba(34, 197, 94, 0.45);
+    background: rgba(34, 197, 94, 0.08);
+}
+
+.similarity-rationale-list li.negative {
+    border-color: rgba(220, 38, 38, 0.45);
+    background: rgba(220, 38, 38, 0.08);
+}
+
+.similarity-rationale-empty {
+    margin: 0;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.7);
+    line-height: 1.5;
+}
+
+@media (max-width: 900px) {
+    .similarity-column {
+        width: 100%;
+        max-width: none;
+        flex-direction: row;
+        align-items: stretch;
+        gap: 16px;
+    }
+
+    .similarity-bar-container {
+        flex: 1 1 auto;
+        min-height: 180px;
+    }
+
+    .similarity-rationale-button {
+        flex: 0 0 160px;
+    }
+
+    .similarity-rationale-hint {
+        flex: 1 1 auto;
+        text-align: left;
+        align-self: center;
+    }
 }
 
 .analysis-half.left {
