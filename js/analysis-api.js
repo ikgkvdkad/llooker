@@ -16,8 +16,8 @@ import {
 } from './state.js';
 import { getPhotoSlotByAnalysisSide, clampRectToBounds, loadImageElement } from './utils.js';
 import { snapshotViewportState, clearMovementDebounce } from './zoom.js';
-import { showWarning, setPersonIdentifierBadge } from './ui.js';
-import { addToHistory, updateHistoryPersonGroup } from './history.js';
+import { showWarning } from './ui.js';
+import { addToHistory } from './history.js';
 import { storePhotoData } from './similarity.js';
 import { extractGpsLocationFromDataUrl } from './exif.js';
 
@@ -69,7 +69,6 @@ function runWithTiming(label, fn) {
     }
 }
 
-const personGroupAssignmentInFlight = new Map();
 const MAX_DIAGNOSTIC_ENTRIES = 12;
 
 function truncateText(value, maxLength) {
@@ -235,100 +234,6 @@ export function appendDiagnosticMessage(side, message, options = {}) {
     refreshAnalysisContent(side);
 }
 
-async function assignPersonGroupForRecord(side, recordId) {
-    if (!Number.isFinite(recordId)) {
-        console.warn('Skipping person group assignment: invalid recordId', recordId);
-        return null;
-    }
-
-    const label = side === 'you' ? 'You' : 'Me';
-
-    if (personGroupAssignmentInFlight.has(side)) {
-        return personGroupAssignmentInFlight.get(side);
-    }
-
-    const assignmentPromise = (async () => {
-        try {
-            const response = await fetch('/.netlify/functions/assign-person-group', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ recordId })
-            });
-
-            if (!response.ok) {
-                let errorMessage = `HTTP ${response.status}`;
-                try {
-                    const errorPayload = await response.json();
-                    if (errorPayload?.error) {
-                        errorMessage = errorPayload.error;
-                    }
-                } catch {
-                    // ignore json parse errors
-                }
-                throw new Error(errorMessage);
-            }
-
-            const result = await response.json();
-            const personGroup = result?.personGroup || null;
-
-            analysisState[side].personGroup = personGroup;
-            updateHistoryPersonGroup(side, recordId, personGroup);
-
-            if (personGroup?.identifier) {
-                console.log(`[${label}] assigned to person group ${personGroup.identifier}`);
-            } else {
-                console.log(`[${label}] person group assignment completed (no identifier returned).`);
-            }
-
-            setPersonIdentifierBadge(side, personGroup?.identifier || null, {
-                highlightNew: Boolean(result?.created)
-            });
-
-            const sideState = analysisState[side];
-            if (sideState?.statusEl) {
-                const currentLines = sideState.statusEl.textContent
-                    ? sideState.statusEl.textContent.split('\n')
-                    : [];
-                const filteredLines = currentLines.filter(
-                    line => !line.trim().toLowerCase().startsWith('identifier:')
-                );
-                if (personGroup?.identifier) {
-                    filteredLines.push(`Identifier: ${personGroup.identifier}`);
-                }
-                sideState.statusEl.textContent = filteredLines.join('\n');
-            }
-
-            return personGroup;
-        } catch (error) {
-            console.error(`[${label}] person grouping failed:`, error);
-            showWarning(`${label} identifier unavailable: ${error?.message || 'Unable to group this photo.'}`, {
-                side,
-                detail: error?.stack || error?.message || null
-            });
-            setPersonIdentifierBadge(side, null);
-
-            const sideState = analysisState[side];
-            if (sideState?.statusEl) {
-                const currentLines = sideState.statusEl.textContent
-                    ? sideState.statusEl.textContent.split('\n')
-                    : [];
-                const filteredLines = currentLines.filter(
-                    line => !line.trim().toLowerCase().startsWith('identifier:')
-                );
-                sideState.statusEl.textContent = filteredLines.join('\n');
-            }
-            return null;
-        } finally {
-            personGroupAssignmentInFlight.delete(side);
-        }
-    })();
-
-    personGroupAssignmentInFlight.set(side, assignmentPromise);
-    return assignmentPromise;
-}
-
 /**
  * Reset analysis state for a side
  */
@@ -346,8 +251,6 @@ export function resetAnalysisState(side) {
     state.imageDataUrl = null;
     state.discriminators = null;
     state.capturedAt = null;
-    state.personGroup = null;
-    setPersonIdentifierBadge(side, null);
 }
 
 /**
@@ -943,8 +846,6 @@ async function requestAnalysis(side, photoDataUrl, viewportSnapshot, options = {
             console.log('Analysis:', payload.analysis);
             console.log('Discriminators:', payload.discriminators || {});
 
-            analysisState[side].personGroup = null;
-            setPersonIdentifierBadge(side, null);
             storePhotoData(side, renderedViewportDataUrl, payload.analysis || null, capturedAt, payload.discriminators || null);
 
             addToHistory(side, {
@@ -956,13 +857,8 @@ async function requestAnalysis(side, photoDataUrl, viewportSnapshot, options = {
                 capturedAt,
                 createdAt: new Date().toISOString(),
                 imageDataUrl: renderedViewportDataUrl,
-                location: locationPayload,
-                personGroup: null
+                location: locationPayload
             });
-
-            if (payload.recordId) {
-                assignPersonGroupForRecord(side, payload.recordId);
-            }
 
             return;
         }
