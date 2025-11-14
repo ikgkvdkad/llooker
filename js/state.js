@@ -132,7 +132,8 @@ export const analysisState = {
         analysisText: ''
     },
     lastSimilarityResult: null,
-    lastSimilarityError: null
+    lastSimilarityError: null,
+    similarityRationaleText: ''
 };
 
 // Analysis queue

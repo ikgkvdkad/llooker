@@ -4,6 +4,106 @@ import { analysisState } from './state.js';
 import * as dom from './dom.js';
 import { appendDiagnosticMessage } from './analysis-api.js';
 
+const RATIONALE_DEFAULT_PLACEHOLDER = 'No similarity rationale yet. Capture both photos to compare.';
+const RATIONALE_DEFAULT_HINT = 'Capture both photos to unlock the AI’s explanation.';
+const RATIONALE_READY_HINT = 'AI explanation ready for the latest comparison.';
+
+let rationalePlaceholderMessage = RATIONALE_DEFAULT_PLACEHOLDER;
+
+function normalizeRationaleText(text) {
+    if (typeof text !== 'string') {
+        return '';
+    }
+    return text.trim();
+}
+
+function updateRationaleHint(hasRationale) {
+    if (!dom.similarityRationaleHint) {
+        return;
+    }
+    dom.similarityRationaleHint.textContent = hasRationale ? RATIONALE_READY_HINT : rationalePlaceholderMessage;
+}
+
+function buildRationaleList(text) {
+    const lines = text
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean);
+
+    if (!lines.length) {
+        return null;
+    }
+
+    const list = document.createElement('ul');
+    list.className = 'similarity-rationale-list';
+
+    for (const rawLine of lines) {
+        const item = document.createElement('li');
+        let line = rawLine;
+        if (line.startsWith('+')) {
+            item.classList.add('positive');
+            line = line.slice(1).trim();
+        } else if (line.startsWith('-')) {
+            item.classList.add('negative');
+            line = line.slice(1).trim();
+        }
+        item.textContent = line.length ? line : rawLine;
+        list.appendChild(item);
+    }
+
+    return list;
+}
+
+function renderSimilarityRationaleBody() {
+    if (!dom.similarityRationaleBody) {
+        return;
+    }
+
+    dom.similarityRationaleBody.innerHTML = '';
+
+    const text = analysisState.similarityRationaleText;
+    const hasText = Boolean(text && text.length);
+
+    if (!hasText) {
+        const empty = document.createElement('p');
+        empty.className = 'similarity-rationale-empty';
+        empty.textContent = rationalePlaceholderMessage;
+        dom.similarityRationaleBody.appendChild(empty);
+        return;
+    }
+
+    if (analysisState.lastSimilarityResult) {
+        const summary = document.createElement('p');
+        summary.className = 'similarity-rationale-summary';
+        const { similarity, confidence, fatal_mismatch: fatalMismatch } = analysisState.lastSimilarityResult;
+        const confidenceLabel = confidence ? confidence : 'unknown';
+        const fatalLabel = fatalMismatch ? ` • Fatal mismatch: ${fatalMismatch}` : '';
+        summary.textContent = `Similarity ${similarity}% • Confidence ${confidenceLabel}${fatalLabel}`;
+        dom.similarityRationaleBody.appendChild(summary);
+    }
+
+    const list = buildRationaleList(text);
+    if (list) {
+        dom.similarityRationaleBody.appendChild(list);
+        return;
+    }
+
+    const fallback = document.createElement('p');
+    fallback.className = 'similarity-rationale-empty';
+    fallback.textContent = 'Rationale text unavailable. Re-run the comparison.';
+    dom.similarityRationaleBody.appendChild(fallback);
+}
+
+function setSimilarityRationale(text, placeholderMessage = RATIONALE_DEFAULT_PLACEHOLDER) {
+    const normalized = normalizeRationaleText(text);
+    analysisState.similarityRationaleText = normalized;
+    rationalePlaceholderMessage = placeholderMessage || RATIONALE_DEFAULT_PLACEHOLDER;
+    updateRationaleHint(Boolean(normalized));
+    renderSimilarityRationaleBody();
+}
+
+setSimilarityRationale('', RATIONALE_DEFAULT_PLACEHOLDER);
+
 /**
  * Store photo data for a side and trigger similarity check
  */
@@ -51,6 +151,7 @@ export async function updateSimilarityBar() {
         if (dom.similarityPercentage) {
             dom.similarityPercentage.textContent = '-';
         }
+        setSimilarityRationale('', RATIONALE_DEFAULT_PLACEHOLDER);
         return;
     }
 
@@ -127,6 +228,7 @@ export async function updateSimilarityBar() {
             fatal_mismatch: result.fatal_mismatch,
             timestamp: new Date().toISOString()
         };
+        setSimilarityRationale(result.reasoning);
 
     } catch (error) {
         console.error('AI vision matching failed:', error);
@@ -141,6 +243,7 @@ export async function updateSimilarityBar() {
             message: error.message,
             timestamp: new Date().toISOString()
         };
+        setSimilarityRationale('', 'Similarity match failed. Check diagnostics and try again.');
 
         const diagnosticMessage = `Similarity match failed: ${error?.message || 'Unknown error.'}`;
         const diagnosticDetail = error?.stack || error?.message || null;
@@ -177,6 +280,7 @@ export function clearAllPhotoData() {
     analysisState.me.capturedAt = null;
     analysisState.lastSimilarityResult = null;
     analysisState.lastSimilarityError = null;
+    setSimilarityRationale('', RATIONALE_DEFAULT_PLACEHOLDER);
     
     updateSimilarityBar();
 }
