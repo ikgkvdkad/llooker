@@ -889,7 +889,37 @@ async function requestAnalysis(side, photoDataUrl, viewportSnapshot, options = {
                 `${label.toLowerCase()}-analysis-error-body`,
                 () => response.text().catch(() => '')
             );
-            throw new Error(errorText || `HTTP ${response.status}`);
+            let errorPayload = null;
+            if (errorText) {
+                try {
+                    errorPayload = JSON.parse(errorText);
+                } catch {
+                    // leave payload null when not JSON
+                }
+            }
+            if (errorPayload && typeof errorPayload === 'object' && !Array.isArray(errorPayload)) {
+                const errorMessage = typeof errorPayload.error === 'string' ? errorPayload.error : null;
+                const normalizedMessage = errorMessage ? errorMessage.trim().toLowerCase() : '';
+                if (normalizedMessage.includes('truncated')) {
+                    const truncatedError = new Error('AI response truncated before completion');
+                    truncatedError.name = 'TruncatedAIResponseError';
+                    truncatedError.payload = errorPayload;
+                    truncatedError.status = response.status;
+                    truncatedError.rawBody = errorText;
+                    throw truncatedError;
+                }
+                const structuredError = new Error(errorMessage || `HTTP ${response.status}`);
+                structuredError.name = 'AnalysisApiError';
+                structuredError.payload = errorPayload;
+                structuredError.status = response.status;
+                structuredError.rawBody = errorText;
+                throw structuredError;
+            }
+            const genericError = new Error(errorText || `HTTP ${response.status}`);
+            genericError.name = 'AnalysisApiError';
+            genericError.status = response.status;
+            genericError.rawBody = errorText;
+            throw genericError;
         }
 
         const payload = await runWithTiming(
@@ -953,13 +983,32 @@ async function requestAnalysis(side, photoDataUrl, viewportSnapshot, options = {
         throw new Error('API response did not include a usable analysis.');
     } catch (error) {
         if (error?.name !== 'ViewportRenderingError') {
-            const message = error?.name === 'AbortError'
-                ? `${label} analysis request timed out after ${Math.round(ANALYSIS_API_TIMEOUT_MS / 1000)}s.`
-                : `${label} analysis failed: ${error?.message || 'Unknown error.'}`;
+            let message;
+            let diagnosticDetail = error?.stack || error?.message || null;
+            if (error?.name === 'AbortError') {
+                message = `${label} analysis request timed out after ${Math.round(ANALYSIS_API_TIMEOUT_MS / 1000)}s.`;
+            } else if (error?.name === 'TruncatedAIResponseError') {
+                message = `${label} analysis failed: AI response was incomplete. Retry in a moment or adjust the framing, then try again.`;
+                diagnosticDetail = {
+                    finishReason: error?.payload?.finishReason ?? null,
+                    cleanupReason: error?.payload?.cleanupReason ?? null,
+                    statusCode: error?.status ?? null,
+                    rawBody: error?.rawBody ?? null
+                };
+            } else {
+                message = `${label} analysis failed: ${error?.message || 'Unknown error.'}`;
+                if (error?.payload) {
+                    diagnosticDetail = {
+                        ...error.payload,
+                        statusCode: error?.status ?? null,
+                        rawBody: error?.rawBody ?? null
+                    };
+                }
+            }
             setAnalysisState(side, 'error', message);
             appendDiagnosticMessage(side, message, {
                 level: 'error',
-                detail: error?.stack || error?.message || null
+                detail: diagnosticDetail
             });
         }
         totalOutcome = 'error';

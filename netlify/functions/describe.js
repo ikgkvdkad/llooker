@@ -697,7 +697,7 @@ exports.handler = async (event) => {
 
   requestMeta.promptVersion = 'v2-compact';
   requestMeta.imageDetail = 'low';
-  requestMeta.maxTokens = 550;
+  requestMeta.maxTokens = 900;
 
   try {
     const databasePool = getDatabasePool();
@@ -763,7 +763,7 @@ exports.handler = async (event) => {
             ]
           }
         ],
-        max_tokens: 550,
+        max_tokens: 900,
         response_format: { type: 'json_object' },
         temperature: 0.1
       })
@@ -819,93 +819,167 @@ exports.handler = async (event) => {
       };
       }
 
-    const data = await response.json();
-    const firstChoice = data.choices?.[0] ?? null;
-    const message = firstChoice?.message ?? null;
-    const finishReason = firstChoice?.finish_reason ?? null;
-    let parsed = null;
-    let normalizedContent = null;
+      const data = await response.json();
+      const firstChoice = data.choices?.[0] ?? null;
+      const message = firstChoice?.message ?? null;
+      const finishReason = firstChoice?.finish_reason ?? null;
+      const finishReasonNormalized = typeof finishReason === 'string'
+        ? finishReason.trim().toLowerCase()
+        : null;
+      let parsed = null;
+      let normalizedContent = null;
 
-    if (message && typeof message.parsed === 'object' && message.parsed !== null && !Array.isArray(message.parsed)) {
-      parsed = message.parsed;
-      console.log('AI response provided parsed JSON payload.', {
-        requestId: openAiRequestId,
-        keys: Object.keys(parsed),
-        finishReason,
-        requestMeta
-      });
-    } else {
-      const messageContent = message?.content;
-      normalizedContent = extractJsonContent(messageContent);
-
-      if (normalizedContent == null) {
-        console.error('AI response missing JSON content.', {
-          rawMessageContent: messageContent,
-          finishReason,
-          requestMeta
-        });
-        return {
-          statusCode: 500,
-          body: JSON.stringify({
-            error: 'AI response missing JSON payload',
-            finishReason
-          })
-        };
-      }
-
-      if (normalizedContent && typeof normalizedContent === 'object') {
-        console.log('AI response provided structured JSON payload after normalization.', {
+      if (
+        message
+        && typeof message.parsed === 'object'
+        && message.parsed !== null
+        && !Array.isArray(message.parsed)
+      ) {
+        parsed = message.parsed;
+        console.log('AI response provided parsed JSON payload.', {
           requestId: openAiRequestId,
-          keys: Object.keys(normalizedContent),
-          finishReason,
+          keys: Object.keys(parsed),
+          finishReason: finishReasonNormalized,
           requestMeta
         });
-      }
-
-      if (typeof normalizedContent === 'string') {
-        const parseOutcome = parseJsonStringWithFallback(normalizedContent);
-        parsed = parseOutcome.parsed;
-        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-          console.error('Failed to parse AI response as JSON.', {
-            parseError: 'Parsed content is not a JSON object',
-            cleanupReason: parseOutcome.cleanup,
-            rawContentSnippet: normalizedContent.slice(0, 500),
-            finishReason,
+        if (finishReasonNormalized === 'length') {
+          console.error('AI response truncated before delivering full JSON payload.', {
+            requestId: openAiRequestId,
+            finishReason: finishReasonNormalized,
+            partialKeys: Object.keys(parsed),
             requestMeta
           });
           return {
             statusCode: 500,
             body: JSON.stringify({
-              error: 'AI response JSON parse failed',
-              cleanupReason: parseOutcome.cleanup,
-              finishReason
+              error: 'AI response truncated before completion',
+              finishReason: finishReasonNormalized
             })
           };
         }
-        if (parseOutcome.cleanup) {
-          console.warn('AI response JSON required cleanup before parsing.', {
-            cleanupReason: parseOutcome.cleanup,
-            finishReason,
+      } else {
+        const messageContent = message?.content;
+        normalizedContent = extractJsonContent(messageContent);
+
+        if (normalizedContent == null) {
+          console.error('AI response missing JSON content.', {
+            rawMessageContent: messageContent,
+            finishReason: finishReasonNormalized,
             requestMeta
           });
+          return {
+            statusCode: 500,
+            body: JSON.stringify({
+              error: finishReasonNormalized === 'length'
+                ? 'AI response truncated before completion'
+                : 'AI response missing JSON payload',
+              finishReason: finishReasonNormalized
+            })
+          };
         }
-      } else if (normalizedContent && typeof normalizedContent === 'object' && !Array.isArray(normalizedContent)) {
-        parsed = normalizedContent;
-      } else {
-        console.error('AI response contained unusable JSON payload.', {
-          rawMessageContent: messageContent,
-          finishReason,
-          requestMeta
-        });
-        return {
-          statusCode: 500,
-          body: JSON.stringify({
-            error: 'AI response format invalid',
-            finishReason
-          })
-        };
+
+        if (normalizedContent && typeof normalizedContent === 'object') {
+          console.log('AI response provided structured JSON payload after normalization.', {
+            requestId: openAiRequestId,
+            keys: Object.keys(normalizedContent),
+            finishReason: finishReasonNormalized,
+            requestMeta
+          });
+          if (finishReasonNormalized === 'length') {
+            console.error('AI response truncated before delivering full JSON payload.', {
+              requestId: openAiRequestId,
+              finishReason: finishReasonNormalized,
+              partialKeys: Object.keys(normalizedContent),
+              requestMeta
+            });
+            return {
+              statusCode: 500,
+              body: JSON.stringify({
+                error: 'AI response truncated before completion',
+                finishReason: finishReasonNormalized
+              })
+            };
+          }
+        }
+
+        if (typeof normalizedContent === 'string') {
+          const parseOutcome = parseJsonStringWithFallback(normalizedContent);
+          parsed = parseOutcome.parsed;
+          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            console.error('Failed to parse AI response as JSON.', {
+              parseError: 'Parsed content is not a JSON object',
+              cleanupReason: parseOutcome.cleanup,
+              rawContentSnippet: normalizedContent.slice(0, 500),
+              finishReason: finishReasonNormalized,
+              requestMeta
+            });
+            return {
+              statusCode: 500,
+              body: JSON.stringify({
+                error: finishReasonNormalized === 'length'
+                  ? 'AI response truncated before completion'
+                  : 'AI response JSON parse failed',
+                cleanupReason: parseOutcome.cleanup,
+                finishReason: finishReasonNormalized
+              })
+            };
+          }
+          if (parseOutcome.cleanup) {
+            console.warn('AI response JSON required cleanup before parsing.', {
+              cleanupReason: parseOutcome.cleanup,
+              finishReason: finishReasonNormalized,
+              requestMeta
+            });
+          }
+          if (finishReasonNormalized === 'length') {
+            console.error('AI response truncated before delivering full JSON payload.', {
+              requestId: openAiRequestId,
+              finishReason: finishReasonNormalized,
+              partialKeys: Object.keys(parsed),
+              requestMeta
+            });
+            return {
+              statusCode: 500,
+              body: JSON.stringify({
+                error: 'AI response truncated before completion',
+                finishReason: finishReasonNormalized
+              })
+            };
+          }
+        } else if (normalizedContent && typeof normalizedContent === 'object' && !Array.isArray(normalizedContent)) {
+          parsed = normalizedContent;
+          if (finishReasonNormalized === 'length') {
+            console.error('AI response truncated before delivering full JSON payload.', {
+              requestId: openAiRequestId,
+              finishReason: finishReasonNormalized,
+              partialKeys: Object.keys(parsed),
+              requestMeta
+            });
+            return {
+              statusCode: 500,
+              body: JSON.stringify({
+                error: 'AI response truncated before completion',
+                finishReason: finishReasonNormalized
+              })
+            };
+          }
+        } else {
+          console.error('AI response contained unusable JSON payload.', {
+            rawMessageContent: messageContent,
+            finishReason: finishReasonNormalized,
+            requestMeta
+          });
+          return {
+            statusCode: 500,
+            body: JSON.stringify({
+              error: finishReasonNormalized === 'length'
+                ? 'AI response truncated before completion'
+                : 'AI response format invalid',
+              finishReason: finishReasonNormalized
+            })
+          };
+        }
       }
-    }
 
     const status = typeof parsed?.status === 'string' ? parsed.status.trim().toLowerCase() : null;
     const analysisDoc = sanitizeAnalysisDoc(parsed?.analysis);
