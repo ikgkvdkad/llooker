@@ -336,13 +336,6 @@ body {
 }
 
 @media (max-width: 900px) {
-    .similarity-column {
-        width: 100%;
-        max-width: none;
-        flex-direction: column;
-        align-items: stretch;
-    }
-
     .similarity-bar-container {
         min-height: 180px;
     }
@@ -841,12 +834,35 @@ body {
         padding: 12px 10px;
         gap: 8px;
     }
+
+    .similarity-column {
+        width: 56px;
+        min-width: 56px;
+        max-width: 56px;
+        padding: 10px 0 16px;
+        align-items: center;
+        gap: 10px;
+    }
     
     .similarity-bar-container {
-        width: 32px;
-        min-width: 32px;
-        max-width: 32px;
+        width: 56px;
+        min-width: 56px;
+        max-width: 56px;
         padding: 12px 0;
+    }
+    
+    .similarity-rationale-button {
+        width: 56px;
+        height: 56px;
+        padding: 4px;
+        border-radius: 14px;
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+        transform: rotate(180deg);
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        line-height: 1.15;
+        justify-content: center;
     }
     
     .similarity-percentage {

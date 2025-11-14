@@ -22,11 +22,23 @@ function normalizeRationaleText(text) {
     return text.trim();
 }
 
+function showRationaleHint(message) {
+    if (!dom.similarityRationaleHint) {
+        return;
+    }
+    dom.similarityRationaleHint.hidden = false;
+    dom.similarityRationaleHint.textContent = message;
+}
+
 function updateRationaleHint(hasRationale) {
     if (!dom.similarityRationaleHint) {
         return;
     }
-    dom.similarityRationaleHint.textContent = hasRationale ? RATIONALE_READY_HINT : rationalePlaceholderMessage;
+    if (hasRationale) {
+        showRationaleHint(RATIONALE_READY_HINT);
+        return;
+    }
+    dom.similarityRationaleHint.hidden = true;
 }
 
 function hasRationaleText() {
@@ -382,17 +394,13 @@ export async function handleSimilarityRationaleRequest(options = {}) {
     const meActive = getActiveSideData('me');
 
     if (!youActive?.imageDataUrl || !meActive?.imageDataUrl) {
-        if (dom.similarityRationaleHint) {
-            dom.similarityRationaleHint.textContent = RATIONALE_MISSING_PAIR_HINT;
-        }
+        showRationaleHint(RATIONALE_MISSING_PAIR_HINT);
         return;
     }
 
     const signature = buildComparisonSignature(youActive, meActive);
     if (!signature) {
-        if (dom.similarityRationaleHint) {
-            dom.similarityRationaleHint.textContent = 'Unable to identify the current photo pair. Capture both sides again.';
-        }
+        showRationaleHint('Unable to identify the current photo pair. Capture both sides again.');
         return;
     }
 
@@ -427,9 +435,7 @@ export async function handleSimilarityRationaleRequest(options = {}) {
     try {
         pendingComparisonSignature = signature;
         setRationaleButtonLoading(true);
-        if (dom.similarityRationaleHint) {
-            dom.similarityRationaleHint.textContent = 'Requesting a fresh comparison...';
-        }
+        showRationaleHint('Requesting a fresh comparison...');
 
         pendingComparisonPromise = updateSimilarityBar({
             youData: youActive,
@@ -442,9 +448,7 @@ export async function handleSimilarityRationaleRequest(options = {}) {
         await pendingComparisonPromise;
     } catch (error) {
         console.error('Manual similarity comparison failed:', error);
-        if (dom.similarityRationaleHint) {
-            dom.similarityRationaleHint.textContent = 'Similarity match failed. Check diagnostics and try again.';
-        }
+        showRationaleHint('Similarity match failed. Check diagnostics and try again.');
         return;
     } finally {
         setRationaleButtonLoading(false);
@@ -454,8 +458,8 @@ export async function handleSimilarityRationaleRequest(options = {}) {
 
     if (analysisState.lastSimilarityResult?.signature === signature) {
         onRationaleReady?.();
-    } else if (dom.similarityRationaleHint) {
-        dom.similarityRationaleHint.textContent = 'Similarity match failed. Check diagnostics and try again.';
+    } else {
+        showRationaleHint('Similarity match failed. Check diagnostics and try again.');
     }
 }
 
