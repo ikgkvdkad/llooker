@@ -283,44 +283,22 @@ body {
 .similarity-rationale-body {
     overflow-y: auto;
     padding-right: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
 }
 
 .similarity-rationale-summary {
-    margin: 0 0 12px;
+    margin: 0;
     font-size: 14px;
     color: rgba(255, 255, 255, 0.75);
 }
 
-.similarity-rationale-section {
-    margin: 0 0 16px;
-    padding: 12px 14px;
-    border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    background: rgba(255, 255, 255, 0.03);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
-}
-
-.similarity-rationale-section:last-child {
-    margin-bottom: 0;
-}
-
-.similarity-rationale-section h3 {
-    margin: 0 0 8px;
-    font-size: 15px;
-    font-weight: 600;
-    letter-spacing: 0.01em;
-    color: rgba(255, 255, 255, 0.92);
-}
-
 .similarity-rationale-paragraph {
-    margin: 0 0 8px;
+    margin: 0;
     font-size: 14px;
-    line-height: 1.6;
+    line-height: 1.7;
     color: rgba(255, 255, 255, 0.82);
-}
-
-.similarity-rationale-paragraph:last-child {
-    margin-bottom: 0;
 }
 
 .similarity-rationale-empty {
