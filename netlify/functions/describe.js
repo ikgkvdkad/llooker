@@ -820,29 +820,47 @@ exports.handler = async (event) => {
       }
 
     const data = await response.json();
-    const messageContent = data.choices?.[0]?.message?.content;
-    const normalizedContent = extractJsonContent(messageContent);
+    const firstChoice = data.choices?.[0] ?? null;
+    const message = firstChoice?.message ?? null;
+    const finishReason = firstChoice?.finish_reason ?? null;
+    let parsed = null;
+    let normalizedContent = null;
 
-    if (normalizedContent == null) {
-      console.error('AI response missing JSON content.', {
-        rawMessageContent: messageContent,
-        requestMeta
-      });
-      return {
-        statusCode: 500,
-        body: JSON.stringify({ error: 'AI response missing JSON payload' })
-      };
-    }
-
-    if (normalizedContent && typeof normalizedContent === 'object') {
-      console.log('AI response provided structured JSON payload.', {
+    if (message && typeof message.parsed === 'object' && message.parsed !== null && !Array.isArray(message.parsed)) {
+      parsed = message.parsed;
+      console.log('AI response provided parsed JSON payload.', {
         requestId: openAiRequestId,
-        keys: Object.keys(normalizedContent),
+        keys: Object.keys(parsed),
+        finishReason,
         requestMeta
       });
-    }
+    } else {
+      const messageContent = message?.content;
+      normalizedContent = extractJsonContent(messageContent);
 
-    let parsed;
+      if (normalizedContent == null) {
+        console.error('AI response missing JSON content.', {
+          rawMessageContent: messageContent,
+          finishReason,
+          requestMeta
+        });
+        return {
+          statusCode: 500,
+          body: JSON.stringify({
+            error: 'AI response missing JSON payload',
+            finishReason
+          })
+        };
+      }
+
+      if (normalizedContent && typeof normalizedContent === 'object') {
+        console.log('AI response provided structured JSON payload after normalization.', {
+          requestId: openAiRequestId,
+          keys: Object.keys(normalizedContent),
+          finishReason,
+          requestMeta
+        });
+      }
 
       if (typeof normalizedContent === 'string') {
         const parseOutcome = parseJsonStringWithFallback(normalizedContent);
@@ -852,16 +870,22 @@ exports.handler = async (event) => {
             parseError: 'Parsed content is not a JSON object',
             cleanupReason: parseOutcome.cleanup,
             rawContentSnippet: normalizedContent.slice(0, 500),
+            finishReason,
             requestMeta
           });
           return {
             statusCode: 500,
-            body: JSON.stringify({ error: 'AI response format invalid' })
+            body: JSON.stringify({
+              error: 'AI response JSON parse failed',
+              cleanupReason: parseOutcome.cleanup,
+              finishReason
+            })
           };
         }
         if (parseOutcome.cleanup) {
           console.warn('AI response JSON required cleanup before parsing.', {
             cleanupReason: parseOutcome.cleanup,
+            finishReason,
             requestMeta
           });
         }
@@ -870,13 +894,18 @@ exports.handler = async (event) => {
       } else {
         console.error('AI response contained unusable JSON payload.', {
           rawMessageContent: messageContent,
+          finishReason,
           requestMeta
         });
         return {
           statusCode: 500,
-          body: JSON.stringify({ error: 'AI response format invalid' })
+          body: JSON.stringify({
+            error: 'AI response format invalid',
+            finishReason
+          })
         };
       }
+    }
 
     const status = typeof parsed?.status === 'string' ? parsed.status.trim().toLowerCase() : null;
     const analysisDoc = sanitizeAnalysisDoc(parsed?.analysis);
