@@ -10,6 +10,7 @@ import { resetAnalysisState } from './analysis-api.js';
 import { attachUploadHandler, attachReanalyzeHandlers } from './upload.js';
 import { handlePointerDownOnHalf, handlePointerMoveOnHalf, handlePointerUpOnHalf, handlePointerCancelOnHalf } from './interactions.js';
 import { initHistoryNavigation } from './history.js';
+import { handleSimilarityRationaleRequest } from './similarity.js';
 
 /**
  * Initialize the application
@@ -124,7 +125,11 @@ function initSimilarityRationaleModal() {
     if (!dom.similarityRationaleButton || !dom.similarityRationaleModal) {
         return;
     }
-    dom.similarityRationaleButton.addEventListener('click', () => openSimilarityRationaleModal());
+    dom.similarityRationaleButton.addEventListener('click', () => {
+        void handleSimilarityRationaleRequest({
+            onRationaleReady: () => openSimilarityRationaleModal()
+        });
+    });
     if (dom.similarityRationaleOverlay) {
         dom.similarityRationaleOverlay.addEventListener('click', () => closeSimilarityRationaleModal());
     }

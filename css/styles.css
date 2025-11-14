@@ -125,9 +125,9 @@ body {
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 14px;
-    padding: 12px 10px 18px;
+    align-items: stretch;
+    gap: 12px;
+    padding: 12px 10px 16px;
 }
 
 .similarity-bar-container {
@@ -142,8 +142,8 @@ body {
     border-top-width: 1.5px;
     border-left-width: 1.5px;
     border-right-width: 1.5px;
-    padding: 16px 0;
-    min-height: 220px;
+    padding: 12px 0;
+    min-height: 190px;
 }
 
 .similarity-bar-fill {
@@ -178,16 +178,27 @@ body {
 
 .similarity-rationale-button {
     width: 100%;
+    aspect-ratio: 1 / 1;
     font-size: 13px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    padding: 10px 12px;
-    border-radius: 999px;
+    padding: 0 12px;
+    border-radius: 18px;
     border: 2px solid rgba(255, 255, 255, 0.5);
     background: rgba(255, 255, 255, 0.08);
     color: rgba(255, 255, 255, 0.9);
-    transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+    transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    line-height: 1.2;
+}
+
+.similarity-rationale-button.is-loading {
+    opacity: 0.6;
+    cursor: progress;
 }
 
 .similarity-rationale-button:hover,
@@ -207,6 +218,7 @@ body {
     color: rgba(255, 255, 255, 0.65);
     line-height: 1.4;
     margin: 0;
+    min-height: 30px;
 }
 
 .similarity-rationale-modal {
@@ -327,24 +339,16 @@ body {
     .similarity-column {
         width: 100%;
         max-width: none;
-        flex-direction: row;
+        flex-direction: column;
         align-items: stretch;
-        gap: 16px;
     }
 
     .similarity-bar-container {
-        flex: 1 1 auto;
         min-height: 180px;
     }
 
-    .similarity-rationale-button {
-        flex: 0 0 160px;
-    }
-
     .similarity-rationale-hint {
-        flex: 1 1 auto;
-        text-align: left;
-        align-self: center;
+        text-align: center;
     }
 }
 
