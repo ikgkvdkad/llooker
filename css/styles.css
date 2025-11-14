@@ -236,6 +236,7 @@ body {
     position: relative;
     width: min(480px, calc(100% - 32px));
     max-height: calc(100% - 80px);
+    min-height: 0;
     background: #0b0b0f;
     border: 2px solid rgba(255, 255, 255, 0.2);
     border-radius: 16px;
@@ -286,6 +287,8 @@ body {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    flex: 1 1 auto;
+    min-height: 0;
 }
 
 .similarity-rationale-summary {
