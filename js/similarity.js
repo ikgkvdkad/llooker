@@ -149,14 +149,14 @@ function chunkSentences(sentences, perParagraph = 2) {
     return chunks;
 }
 
-function buildExplanationParagraphs(text) {
+function buildExplanationNarrative(text) {
     const lines = text
         .split('\n')
         .map(line => line.trim())
         .filter(Boolean);
 
     if (!lines.length) {
-        return [];
+        return text;
     }
 
     const evidence = {
@@ -179,37 +179,92 @@ function buildExplanationParagraphs(text) {
 
     const sentences = [];
     if (evidence.positive.length) {
-        sentences.push(`Supporting cues (${evidence.positive.length}) include ${formatEvidenceList(evidence.positive)}.`);
+        const label = evidence.positive.length === 1 ? 'one supporting cue' : `${evidence.positive.length} supporting cues`;
+        sentences.push(`The model identified ${label}, including ${formatEvidenceList(evidence.positive)}.`);
     }
     if (evidence.negative.length) {
-        sentences.push(`Conflicts (${evidence.negative.length}) include ${formatEvidenceList(evidence.negative)}.`);
+        const label = evidence.negative.length === 1 ? 'one conflict' : `${evidence.negative.length} conflicts`;
+        sentences.push(`It also recorded ${label}, such as ${formatEvidenceList(evidence.negative)}.`);
     }
     if (evidence.neutral.length) {
-        sentences.push(`Additional context noted: ${formatEvidenceList(evidence.neutral)}.`);
+        sentences.push(`Additional context noted by the model: ${formatEvidenceList(evidence.neutral)}.`);
     }
 
-    return chunkSentences(sentences, 2);
+    if (!sentences.length) {
+        return text;
+    }
+
+    return sentences.join(' ');
 }
 
-function createSection(title, paragraphs) {
-    if (!Array.isArray(paragraphs) || !paragraphs.length) {
-        return null;
+function buildFacialComparisonParagraphs() {
+    const youSubject = analysisState.you.analysis?.subject || null;
+    const meSubject = analysisState.me.analysis?.subject || null;
+    if (!youSubject && !meSubject) {
+        return [];
     }
-    const section = document.createElement('section');
-    section.className = 'similarity-rationale-section';
-    const heading = document.createElement('h3');
-    heading.textContent = title;
-    section.appendChild(heading);
-    for (const text of paragraphs) {
-        if (!text) {
-            continue;
-        }
-        const paragraph = document.createElement('p');
-        paragraph.className = 'similarity-rationale-paragraph';
-        paragraph.textContent = text;
-        section.appendChild(paragraph);
+
+    const sentences = [
+        compareAttributeSentence('Gender presentation', youSubject?.gender, meSubject?.gender),
+        compareAttributeSentence('Age range', youSubject?.ageRange || youSubject?.ageBucket, meSubject?.ageRange || meSubject?.ageBucket),
+        compareAttributeSentence('Skin tone', youSubject?.skinTone, meSubject?.skinTone),
+        compareAttributeSentence('Hair style', formatHairSummary(youSubject?.hair), formatHairSummary(meSubject?.hair)),
+        compareAttributeSentence('Facial hair', youSubject?.facialHair, meSubject?.facialHair),
+        compareAttributeSentence('Eyewear', youSubject?.eyewear, meSubject?.eyewear),
+        compareAttributeSentence('Headwear', youSubject?.headwear, meSubject?.headwear)
+    ].filter(Boolean);
+
+    if (!sentences.length) {
+        return ['No facial attributes were available from the latest analyses, so the comparison relies solely on other cues.'];
     }
-    return section;
+
+    return chunkSentences(sentences, 3);
+}
+
+function buildRecognitionParagraphs() {
+    const result = analysisState.lastSimilarityResult;
+    if (!result) {
+        return [];
+    }
+
+    const paragraphs = [];
+    const confidenceLabel = result.confidence || 'unknown';
+    const fatalText = result.fatal_mismatch
+        ? `A fatal mismatch flag (${result.fatal_mismatch}) means the model detected a critical inconsistency despite the score.`
+        : 'No fatal mismatch was detected, so the similarity score stands without a safety override.';
+    const timeDiffText = typeof result.timeDiffMinutes === 'number'
+        ? `The captures appear to be about ${Math.round(result.timeDiffMinutes)} minute${Math.round(result.timeDiffMinutes) === 1 ? '' : 's'} apart, which informs the temporal consistency check.`
+        : 'Capture timestamps were unavailable, so temporal consistency could not be evaluated.';
+    paragraphs.push(`The recognition model reported a ${result.similarity}% similarity score with ${confidenceLabel} confidence. ${fatalText} ${timeDiffText}`);
+
+    const captureDetails = [
+        formatCaptureInfo('You', analysisState.you),
+        formatCaptureInfo('Me', analysisState.me)
+    ].filter(Boolean);
+    if (captureDetails.length) {
+        paragraphs.push(captureDetails.join(' '));
+    }
+
+    const discriminatorDetails = [
+        formatDiscriminatorSummary('You', analysisState.you.discriminators),
+        formatDiscriminatorSummary('Me', analysisState.me.discriminators)
+    ].filter(Boolean);
+    if (discriminatorDetails.length) {
+        paragraphs.push(discriminatorDetails.join(' '));
+    }
+
+    return paragraphs;
+}
+
+function generateRationaleParagraphs() {
+    const paragraphs = [];
+    const explanationNarrative = buildExplanationNarrative(analysisState.similarityRationaleText || '');
+    if (explanationNarrative) {
+        paragraphs.push(explanationNarrative);
+    }
+    paragraphs.push(...buildFacialComparisonParagraphs());
+    paragraphs.push(...buildRecognitionParagraphs());
+    return paragraphs;
 }
 
 function formatHairSummary(hair) {
@@ -262,31 +317,6 @@ function compareAttributeSentence(label, youValueRaw, meValueRaw) {
     return `${label} differs — You: ${youValue}; Me: ${meValue}.`;
 }
 
-function buildFacialComparisonSection() {
-    const youSubject = analysisState.you.analysis?.subject || null;
-    const meSubject = analysisState.me.analysis?.subject || null;
-    if (!youSubject && !meSubject) {
-        return null;
-    }
-
-    const sentences = [
-        compareAttributeSentence('Gender presentation', youSubject?.gender, meSubject?.gender),
-        compareAttributeSentence('Age range', youSubject?.ageRange || youSubject?.ageBucket, meSubject?.ageRange || meSubject?.ageBucket),
-        compareAttributeSentence('Skin tone', youSubject?.skinTone, meSubject?.skinTone),
-        compareAttributeSentence('Hair style', formatHairSummary(youSubject?.hair), formatHairSummary(meSubject?.hair)),
-        compareAttributeSentence('Facial hair', youSubject?.facialHair, meSubject?.facialHair),
-        compareAttributeSentence('Eyewear', youSubject?.eyewear, meSubject?.eyewear),
-        compareAttributeSentence('Headwear', youSubject?.headwear, meSubject?.headwear)
-    ].filter(Boolean);
-
-    if (!sentences.length) {
-        return createSection('Facial comparison', ['No facial attributes available from the latest analyses.']);
-    }
-
-    const paragraphs = chunkSentences(sentences, 3);
-    return createSection('Facial comparison', paragraphs);
-}
-
 function formatTimestamp(value) {
     if (!value) {
         return null;
@@ -320,52 +350,6 @@ function formatDiscriminatorSummary(label, discriminators) {
         return `${label} discriminators unavailable.`;
     }
     return `${label} discriminators considered: ${entries.join(' | ')}.`;
-}
-
-function buildRecognitionSection() {
-    const result = analysisState.lastSimilarityResult;
-    if (!result) {
-        return null;
-    }
-
-    const paragraphs = [];
-    const fatalText = result.fatal_mismatch
-        ? `Fatal mismatch flagged (${result.fatal_mismatch}).`
-        : 'No fatal mismatch detected.';
-    const timeGap = typeof result.timeDiffMinutes === 'number'
-        ? `Photos captured approximately ${Math.round(result.timeDiffMinutes)} minutes apart.`
-        : 'Time gap between captures is unknown.';
-    paragraphs.push(`Model confidence reported as ${result.confidence || 'unknown'} for the ${result.similarity}% similarity score. ${fatalText} ${timeGap}`);
-
-    const captureDetails = [
-        formatCaptureInfo('You', analysisState.you),
-        formatCaptureInfo('Me', analysisState.me)
-    ].filter(Boolean);
-    if (captureDetails.length) {
-        paragraphs.push(captureDetails.join(' '));
-    }
-
-    const discriminatorDetails = [
-        formatDiscriminatorSummary('You', analysisState.you.discriminators),
-        formatDiscriminatorSummary('Me', analysisState.me.discriminators)
-    ].filter(Boolean);
-    if (discriminatorDetails.length) {
-        paragraphs.push(discriminatorDetails.join(' '));
-    }
-
-    return createSection('Recognition info', paragraphs);
-}
-
-function buildExplanationSection(text) {
-    const normalized = typeof text === 'string' ? text.trim() : '';
-    if (!normalized.length) {
-        return null;
-    }
-    const paragraphs = buildExplanationParagraphs(normalized);
-    if (!paragraphs.length) {
-        return createSection('AI rationale', [normalized]);
-    }
-    return createSection('AI rationale', paragraphs);
 }
 
 function renderSimilarityRationaleBody() {
@@ -404,31 +388,23 @@ function renderSimilarityRationaleBody() {
         dom.similarityRationaleBody.appendChild(summary);
     }
 
-    let appendedContent = false;
-
-    const explanationSection = buildExplanationSection(text);
-    if (explanationSection) {
-        dom.similarityRationaleBody.appendChild(explanationSection);
-        appendedContent = true;
-    }
-
-    const facialSection = buildFacialComparisonSection();
-    if (facialSection) {
-        dom.similarityRationaleBody.appendChild(facialSection);
-        appendedContent = true;
-    }
-
-    const recognitionSection = buildRecognitionSection();
-    if (recognitionSection) {
-        dom.similarityRationaleBody.appendChild(recognitionSection);
-        appendedContent = true;
-    }
-
-    if (!appendedContent) {
+    const paragraphs = generateRationaleParagraphs();
+    if (!paragraphs.length) {
         const fallback = document.createElement('p');
         fallback.className = 'similarity-rationale-empty';
         fallback.textContent = 'Rationale text unavailable. Re-run the comparison.';
         dom.similarityRationaleBody.appendChild(fallback);
+        return;
+    }
+
+    for (const paragraphText of paragraphs) {
+        if (!paragraphText) {
+            continue;
+        }
+        const paragraph = document.createElement('p');
+        paragraph.className = 'similarity-rationale-paragraph';
+        paragraph.textContent = paragraphText;
+        dom.similarityRationaleBody.appendChild(paragraph);
     }
 }
 
