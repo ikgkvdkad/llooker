@@ -103,34 +103,32 @@
             </div>
         </div>
 
-        <div class="analysis-row">
-            <div class="analysis-half left" id="youAnalysisPanel">
-                <div class="analysis-title-row">
-                    <button type="button" class="analysis-title-button" id="youReanalyzeButton">You</button>
+            <div class="analysis-row">
+                <div class="analysis-half left" id="youAnalysisPanel">
+                    <div class="analysis-title-row">
+                        <button type="button" class="analysis-title-button" id="youReanalyzeButton">You</button>
+                    </div>
+                    <div class="analysis-status" id="youAnalysisStatus"></div>
+                    <div class="analysis-content" id="youAnalysisContent"></div>
                 </div>
-                <div class="analysis-status" id="youAnalysisStatus"></div>
-                <div class="analysis-content" id="youAnalysisContent"></div>
-            </div>
-              <div class="similarity-column" id="similarityColumn">
-                  <button type="button" class="similarity-rationale-button" id="similarityRationaleButton">
-                      View similarity rationale
-                  </button>
-                  <div class="similarity-bar-container" id="similarityBarContainer">
-                      <div class="similarity-bar-fill" id="similarityBarFill"></div>
-                      <div class="similarity-percentage" id="similarityPercentage">-</div>
-                  </div>
-                  <p class="similarity-rationale-hint" id="similarityRationaleHint">
-                      Capture both photos to unlock the AI’s explanation.
-                  </p>
-              </div>
-            <div class="analysis-half right" id="meAnalysisPanel">
-                <div class="analysis-title-row">
-                    <button type="button" class="analysis-title-button" id="meReanalyzeButton">Me</button>
+                <div class="similarity-column" id="similarityColumn">
+                    <button type="button" class="similarity-rationale-button" id="similarityRationaleButton">
+                        View similarity rationale
+                    </button>
+                    <div class="similarity-bar-container" id="similarityBarContainer">
+                        <div class="similarity-bar-fill" id="similarityBarFill"></div>
+                        <div class="similarity-percentage" id="similarityPercentage">-</div>
+                    </div>
+                    <p class="similarity-rationale-hint" id="similarityRationaleHint" hidden></p>
                 </div>
-                <div class="analysis-status" id="meAnalysisStatus"></div>
-                <div class="analysis-content" id="meAnalysisContent"></div>
+                <div class="analysis-half right" id="meAnalysisPanel">
+                    <div class="analysis-title-row">
+                        <button type="button" class="analysis-title-button" id="meReanalyzeButton">Me</button>
+                    </div>
+                    <div class="analysis-status" id="meAnalysisStatus"></div>
+                    <div class="analysis-content" id="meAnalysisContent"></div>
+                </div>
             </div>
-        </div>
 
         <div id="versionDisplay" class="version-badge" aria-live="polite"></div>
         <div id="toastStack" class="toast-stack" aria-live="polite" aria-atomic="false"></div>
