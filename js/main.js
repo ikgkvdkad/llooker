@@ -143,14 +143,27 @@ function initSimilarityRationaleModal() {
         });
     }
     // Prevent pointer events on the modal from propagating to camera elements
+    // But allow touch scrolling in the scrollable body
     if (dom.similarityRationaleModal) {
         dom.similarityRationaleModal.addEventListener('pointerdown', (event) => {
+            // Allow touch events to propagate for scrolling in the body
+            if (dom.similarityRationaleBody && dom.similarityRationaleBody.contains(event.target)) {
+                return;
+            }
             event.stopPropagation();
         });
         dom.similarityRationaleModal.addEventListener('pointermove', (event) => {
+            // Allow touch events to propagate for scrolling in the body
+            if (dom.similarityRationaleBody && dom.similarityRationaleBody.contains(event.target)) {
+                return;
+            }
             event.stopPropagation();
         });
         dom.similarityRationaleModal.addEventListener('pointerup', (event) => {
+            // Allow touch events to propagate for scrolling in the body
+            if (dom.similarityRationaleBody && dom.similarityRationaleBody.contains(event.target)) {
+                return;
+            }
             event.stopPropagation();
         });
     }

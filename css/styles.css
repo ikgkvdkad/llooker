@@ -849,6 +849,19 @@ body {
     .similarity-percentage {
         font-size: 12px;
     }
+    
+    .similarity-rationale-panel {
+        width: calc(100% - 16px);
+        max-height: calc(100dvh - 16px);
+        padding: 16px;
+        border-radius: 12px;
+    }
+    
+    .similarity-rationale-body {
+        -webkit-overflow-scrolling: touch;
+        touch-action: pan-y;
+        overscroll-behavior-y: contain;
+    }
 }
 
 .toast-close {
