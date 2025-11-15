@@ -313,6 +313,24 @@ function openSingleCameraModal() {
     }
     modal.classList.add('is-open');
     modal.setAttribute('aria-hidden', 'false');
+
+    const fullscreenTarget = modal.querySelector('.camera-container') || modal;
+    if (fullscreenTarget && typeof fullscreenTarget.requestFullscreen === 'function') {
+        fullscreenTarget.requestFullscreen().catch((error) => {
+            console.warn('Fullscreen camera request failed:', error);
+        });
+    } else {
+        console.warn('Fullscreen API not available for single camera modal.');
+    }
+
+    // Try to start the back camera immediately so the first tap captures
+    openBackCamera().catch(error => {
+        console.error('Failed to open back camera (single page):', error);
+        showError('Failed to open back camera. Check camera permissions and try again.', {
+            diagnostics: false,
+            detail: error?.message || null
+        });
+    });
 }
 
 function closeSingleCameraModal() {
@@ -345,20 +363,18 @@ function attachCameraModalHandlers() {
             return false;
         }
 
-        if (!isActive) {
-            // First tap: start camera stream
-            openBackCamera().catch(error => console.error('Failed to open back camera (single page):', error));
+        // When the camera modal is open we treat any tap as capture:
+        // camera should already be active from openSingleCameraModal.
+        if (isActive) {
+            captureBackPhoto();
+            window.setTimeout(() => {
+                void saveCurrentSelection();
+                closeSingleCameraModal();
+            }, 0);
             return true;
         }
 
-        // Camera active: capture, save, and close
-        captureBackPhoto();
-        window.setTimeout(() => {
-            void saveCurrentSelection();
-            closeSingleCameraModal();
-        }, 0);
-
-        return true;
+        return false;
     });
 }
 
