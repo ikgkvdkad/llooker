@@ -145,9 +145,11 @@ export function stopAllCameras() {
         stopStream(backStream);
         setBackStream(null);
     }
-    dom.backVideoElement.srcObject = null;
-    dom.backVideoElement.classList.remove('active');
-    dom.backCameraHalf.classList.remove('initializing');
+    if (dom.backVideoElement) {
+        dom.backVideoElement.srcObject = null;
+        dom.backVideoElement.classList.remove('active');
+    }
+    dom.backCameraHalf?.classList.remove('initializing');
     setIsBackActive(false);
     resetPointerTracking('back');
     const backState = interactionState.back;
@@ -170,8 +172,10 @@ export function stopAllCameras() {
         stopStream(selfieStream);
         setSelfieStream(null);
     }
-    dom.selfieVideoElement.srcObject = null;
-    dom.selfieVideoElement.classList.remove('active');
+    if (dom.selfieVideoElement) {
+        dom.selfieVideoElement.srcObject = null;
+        dom.selfieVideoElement.classList.remove('active');
+    }
     setIsSelfieActive(false);
     resetPointerTracking('selfie');
     const selfieState = interactionState.selfie;
@@ -454,6 +458,13 @@ async function activateBackStream(stream) {
  * Activate selfie camera stream
  */
 async function activateSelfieStream(stream) {
+    const selfieVideoElement = dom.selfieVideoElement;
+    if (!selfieVideoElement) {
+        console.warn('Selfie video element missing; skipping selfie camera activation.');
+        stopStream(stream);
+        return false;
+    }
+
     const zoomResult = await applyZoomSetting(stream, SELFIE_ZOOM_MODE);
     if (!zoomResult.success) {
         stopStream(stream);
@@ -471,7 +482,7 @@ async function activateSelfieStream(stream) {
     initializeZoomStateFromTrack('selfie', selfieTrack);
 
     setSelfieStream(stream);
-    dom.selfieVideoElement.srcObject = stream;
+    selfieVideoElement.srcObject = stream;
 
     try {
         const shouldVerifyZoom = typeof zoomResult.appliedZoom === 'number';
@@ -485,13 +496,13 @@ async function activateSelfieStream(stream) {
 
         const [zoomSettled] = await Promise.all([
             zoomVerificationPromise,
-            waitForVideoMetadata(dom.selfieVideoElement)
+            waitForVideoMetadata(selfieVideoElement)
         ]);
 
         if (shouldVerifyZoom && !zoomSettled.success) {
             stopStream(stream);
             setSelfieStream(null);
-            dom.selfieVideoElement.srcObject = null;
+            selfieVideoElement.srcObject = null;
             showError('Me camera (requires 2x zoom): ' + zoomSettled.reason, {
                 side: 'me',
                 detail: {
@@ -510,7 +521,7 @@ async function activateSelfieStream(stream) {
             if (typeof verifiedZoom === 'number' && Math.abs(verifiedZoom - expectedZoom) > 0.05) {
                 stopStream(stream);
                 setSelfieStream(null);
-                dom.selfieVideoElement.srcObject = null;
+                selfieVideoElement.srcObject = null;
                 showError('Me camera (requires 2x zoom): Device reported ' + verifiedZoom.toFixed(2) + 'x zoom.', {
                     side: 'me',
                     detail: {
@@ -532,8 +543,8 @@ async function activateSelfieStream(stream) {
             }
         }
 
-        const videoWidth = dom.selfieVideoElement.videoWidth;
-        const videoHeight = dom.selfieVideoElement.videoHeight;
+        const videoWidth = selfieVideoElement.videoWidth;
+        const videoHeight = selfieVideoElement.videoHeight;
         if (videoWidth && videoHeight) {
             updateCameraHalfAspect('selfie', videoWidth / videoHeight);
         } else {
@@ -543,7 +554,7 @@ async function activateSelfieStream(stream) {
         console.error('Me camera stream failed to become ready:', error);
         stopStream(stream);
         setSelfieStream(null);
-        dom.selfieVideoElement.srcObject = null;
+        selfieVideoElement.srcObject = null;
         showError('Me camera (requires 2x zoom): Unable to load camera stream.', {
             side: 'me',
             detail: error?.stack || error?.message || null
@@ -560,7 +571,7 @@ async function activateSelfieStream(stream) {
         hideError();
     }
     prepareSlotForLiveView('selfie');
-    dom.selfieVideoElement.classList.add('active');
+    selfieVideoElement.classList.add('active');
     const selfieState = interactionState.selfie;
     if (selfieState) {
         selfieState.lastTap = null;
@@ -568,7 +579,7 @@ async function activateSelfieStream(stream) {
         clearMovementDebounce('selfie');
     }
     setIsSelfieActive(true);
-    dom.selfiePlaceholder.classList.add('hidden');
+    dom.selfiePlaceholder?.classList.add('hidden');
 
     // Notify button state change
     if (dom.meCameraButton) {
@@ -784,11 +795,12 @@ export function captureBackPhoto() {
 export function captureSelfiePhoto() {
     const selfieStream = getSelfieStream();
     const isSelfieActive = getIsSelfieActive();
+    const selfieVideoElement = dom.selfieVideoElement;
     
-    if (!selfieStream || !isSelfieActive) return;
+    if (!selfieStream || !isSelfieActive || !selfieVideoElement) return;
 
-    const videoWidth = dom.selfieVideoElement.videoWidth;
-    const videoHeight = dom.selfieVideoElement.videoHeight;
+    const videoWidth = selfieVideoElement.videoWidth;
+    const videoHeight = selfieVideoElement.videoHeight;
     if (!videoWidth || !videoHeight) {
         console.warn('Selfie camera metadata unavailable; capture skipped.');
         return;
@@ -803,7 +815,7 @@ export function captureSelfiePhoto() {
     const ctx = canvas.getContext('2d');
 
     ctx.drawImage(
-        dom.selfieVideoElement,
+        selfieVideoElement,
         0, 0, videoWidth, videoHeight,
         0, 0, canvas.width, canvas.height
     );
