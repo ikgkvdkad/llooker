@@ -65,11 +65,13 @@
                     Refresh
                 </button>
             </div>
-            <div class="gallery-content">
+                <div class="gallery-content">
                 <div class="gallery-state" id="galleryLoadingState">Loading selections…</div>
                 <div class="gallery-state" id="galleryEmptyState">No selections saved yet.</div>
                 <div class="gallery-state gallery-error" id="galleryErrorState" role="alert"></div>
-                <ul class="gallery-list" id="galleryList" aria-live="polite"></ul>
+                    <div class="gallery-scroll" role="presentation">
+                        <ul class="gallery-list" id="galleryList" aria-live="polite"></ul>
+                    </div>
             </div>
         </section>
     </main>

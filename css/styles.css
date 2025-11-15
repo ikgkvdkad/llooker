@@ -1072,22 +1072,45 @@ body.landing-body {
     background: rgba(4, 6, 14, 0.9);
 }
 
+.gallery-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0 12px 8px;
+    scroll-snap-type: x proximity;
+    scrollbar-width: thin;
+}
+
+.gallery-scroll::-webkit-scrollbar {
+    height: 8px;
+}
+
+.gallery-scroll::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.gallery-scroll::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.18);
+    border-radius: 999px;
+}
+
 .gallery-list {
     list-style: none;
     margin: 0;
-    padding: 0 16px 16px;
+    padding: 0;
     flex: 0 0 auto;
     display: flex;
-    flex-direction: column;
-    gap: 10px;
+    flex-direction: row;
+    gap: 12px;
 }
 
 .gallery-row {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 16px;
-    padding: 10px 6px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    gap: 8px;
+    padding: 6px 4px 10px;
+    min-width: 120px;
+    scroll-snap-align: start;
 }
 
 .gallery-thumbnail {
@@ -1103,9 +1126,10 @@ body.landing-body {
 .gallery-row-meta {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
     color: rgba(255, 255, 255, 0.85);
-    font-size: 14px;
+    font-size: 13px;
+    text-align: center;
 }
 
 .gallery-row-meta strong {
@@ -1171,10 +1195,6 @@ body.landing-body {
 }
 
 @media (max-width: 900px) {
-    .gallery-row {
-        align-items: flex-start;
-    }
-
     .gallery-thumbnail {
         width: 88px;
         height: 88px;
