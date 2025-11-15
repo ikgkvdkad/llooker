@@ -55,6 +55,10 @@ export const meUploadButton = document.getElementById('meUploadButton');
 export const youUploadInput = document.getElementById('youUploadInput');
 export const meUploadInput = document.getElementById('meUploadInput');
 
+// Save buttons
+export const youSaveSelectionButton = document.getElementById('youSaveSelectionButton');
+export const meSaveSelectionButton = document.getElementById('meSaveSelectionButton');
+
 // History navigation buttons
 export const youPrevButton = document.getElementById('youPrevButton');
 export const youNextButton = document.getElementById('youNextButton');
@@ -71,4 +75,11 @@ export const similarityRationaleModal = document.getElementById('similarityRatio
 export const similarityRationaleOverlay = document.getElementById('similarityRationaleOverlay');
 export const similarityRationaleCloseButton = document.getElementById('similarityRationaleCloseButton');
 export const similarityRationaleBody = document.getElementById('similarityRationaleBody');
+
+// Gallery elements (home page)
+export const galleryList = document.getElementById('galleryList');
+export const galleryLoadingState = document.getElementById('galleryLoadingState');
+export const galleryEmptyState = document.getElementById('galleryEmptyState');
+export const galleryErrorState = document.getElementById('galleryErrorState');
+export const refreshSelectionsButton = document.getElementById('refreshSelectionsButton');
 

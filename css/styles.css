@@ -954,3 +954,192 @@ body.landing-body {
     outline-offset: 4px;
 }
 
+/* Home layout */
+.home-body {
+    background: #05050c;
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.home-shell {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.home-top {
+    flex: 0 0 50%;
+    max-height: 50%;
+}
+
+.home-top .camera-container {
+    height: 100%;
+}
+
+.gallery-section {
+    flex: 1;
+    background: rgba(7, 9, 18, 0.98);
+    border-top: 2px solid rgba(255, 255, 255, 0.12);
+    padding: 18px 22px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.gallery-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.gallery-header h2 {
+    font-size: 18px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin: 0;
+}
+
+.gallery-refresh-button {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1.5px solid rgba(255, 255, 255, 0.3);
+    border-radius: 999px;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 13px;
+    letter-spacing: 0.05em;
+    padding: 6px 16px;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.gallery-refresh-button:hover,
+.gallery-refresh-button:focus-visible {
+    background: rgba(255, 255, 255, 0.18);
+    border-color: rgba(255, 255, 255, 0.55);
+    outline: none;
+}
+
+.gallery-content {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 12px 0;
+    background: rgba(4, 6, 14, 0.9);
+}
+
+.gallery-list {
+    list-style: none;
+    margin: 0;
+    padding: 0 16px 16px;
+    overflow-y: auto;
+    max-height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.gallery-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.gallery-thumbnail {
+    width: 110px;
+    height: 110px;
+    border-radius: 12px;
+    object-fit: cover;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.45);
+}
+
+.gallery-row-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 14px;
+}
+
+.gallery-row-meta strong {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.75);
+}
+
+.gallery-row-time {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.gallery-state {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    letter-spacing: 0.03em;
+    color: rgba(255, 255, 255, 0.7);
+    text-align: center;
+    padding: 16px;
+}
+
+.gallery-state.is-visible {
+    display: flex;
+}
+
+.gallery-state.gallery-error {
+    color: rgba(255, 140, 140, 0.95);
+}
+
+.save-selection-button {
+    position: absolute;
+    bottom: 16px;
+    right: 16px;
+    background: rgba(10, 12, 24, 0.8);
+    border: 1.5px solid rgba(255, 255, 255, 0.35);
+    color: rgba(255, 255, 255, 0.92);
+    border-radius: 999px;
+    padding: 8px 18px;
+    font-size: 13px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease;
+    z-index: 900;
+}
+
+.save-selection-button:hover,
+.save-selection-button:focus-visible {
+    background: rgba(255, 255, 255, 0.18);
+    border-color: rgba(255, 255, 255, 0.7);
+    outline: none;
+}
+
+.save-selection-button.is-busy {
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+@media (max-width: 900px) {
+    .gallery-row {
+        align-items: flex-start;
+    }
+
+    .gallery-thumbnail {
+        width: 88px;
+        height: 88px;
+    }
+}
+
