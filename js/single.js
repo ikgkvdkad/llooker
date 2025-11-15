@@ -45,10 +45,16 @@ function renderSelectionRow(selection) {
 
     const row = document.createElement('div');
     row.className = 'single-selection-row';
+    if (selection.id) {
+        row.dataset.selectionId = String(selection.id);
+    }
     row.dataset.description = selection.description || '';
 
     const wrapper = document.createElement('div');
     wrapper.className = 'single-selection-thumb-wrapper';
+    if (selection.description && selection.description.length > 0) {
+        wrapper.classList.add('has-description');
+    }
 
     const img = document.createElement('img');
     img.className = 'single-selection-thumb';
@@ -69,8 +75,7 @@ function renderSelectionRow(selection) {
     row.appendChild(wrapper);
     container.appendChild(row);
 
-    const openDescription = () => {
-        const description = row.dataset.description || '';
+    const openDescription = async () => {
         const modal = document.getElementById('singleDescriptionModal');
         const textEl = document.getElementById('singleDescriptionText');
 
@@ -79,6 +84,45 @@ function renderSelectionRow(selection) {
                 diagnostics: false
             });
             return;
+        }
+
+        let description = row.dataset.description || '';
+        const selectionId = row.dataset.selectionId ? Number(row.dataset.selectionId) : null;
+
+        const needsRefresh = !description || description.length < 400;
+
+        if (needsRefresh && selectionId) {
+            try {
+                const response = await fetch('/.netlify/functions/update-single-description', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ id: selectionId })
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text().catch(() => '');
+                    throw new Error(errorText || `HTTP ${response.status}`);
+                }
+
+                const payload = await response.json().catch(() => ({}));
+                if (payload && typeof payload.description === 'string' && payload.description.trim().length) {
+                    description = payload.description.trim();
+                    row.dataset.description = description;
+                    wrapper.classList.add('has-description');
+                } else {
+                    showWarning('Description generation did not return usable text. Try capturing a new photo.', {
+                        diagnostics: false
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to refresh description for this photo:', error);
+                showError('Failed to refresh description for this photo. Check diagnostics and try again.', {
+                    diagnostics: false,
+                    detail: error?.message || null
+                });
+            }
         }
 
         if (!description) {
@@ -92,11 +136,12 @@ function renderSelectionRow(selection) {
         modal.classList.add('is-open');
         modal.setAttribute('aria-hidden', 'false');
     };
-
-    row.addEventListener('click', openDescription);
+    row.addEventListener('click', () => {
+        void openDescription();
+    });
     row.addEventListener('touchstart', (event) => {
         event.preventDefault();
-        openDescription();
+        void openDescription();
     }, { passive: false });
 }
 

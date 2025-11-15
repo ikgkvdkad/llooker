@@ -319,6 +319,10 @@ html {
     margin: 0 auto;
 }
 
+.single-selection-thumb-wrapper.has-description {
+    border-color: rgba(22, 163, 74, 0.9);
+}
+
 .single-selection-thumb {
     display: block;
     width: 100%;
