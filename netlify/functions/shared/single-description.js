@@ -125,7 +125,8 @@ async function evaluateDescriptionGrouping(newDescription, groups) {
               'You are given a new description and a list of existing group descriptions.',
               'Use ONLY stable appearance traits (gender presentation, age range, build, height impression, skin tone, hair details, eyewear/headwear, distinctive clothing/accessories, visible tattoos or scars).',
               'Ignore differences that can change within a few hours (pose, facial expression, background, lighting, camera angle, small grooming or clothing adjustments).',
-              'Be conservative: only consider someone the same person when appearance is very strongly aligned. Prefer false negatives over false positives.'
+              'Be conservative: only consider someone the same person when appearance is very strongly aligned. Prefer false negatives over false positives.',
+              'You must return ONLY a JSON object with two keys: "best_group_id" (the numeric id of the most likely matching group, or null if there is no suitable match) and "best_group_probability" (an integer 0-100 giving the probability that the new description belongs to that group).'
             ].join(' ')
           },
           {
