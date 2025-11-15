@@ -426,6 +426,12 @@ body.single-body * {
     display: none !important;
 }
 
+/* Ensure similarity rationale modal can scroll on mobile despite global touch handlers */
+.similarity-rationale-modal,
+.similarity-rationale-modal * {
+    touch-action: pan-y;
+}
+
 .similarity-rationale-header {
     display: flex;
     align-items: center;
