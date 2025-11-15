@@ -123,9 +123,21 @@ async function saveCurrentSelection() {
         return;
     }
 
+    // For the single page we treat the zoomed view as the selection:
+    // always use the full viewport, no visible selection box.
+    const viewportForSave = {
+        ...viewport,
+        selection: {
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1
+        }
+    };
+
     let croppedDataUrl;
     try {
-        croppedDataUrl = await createViewportDataUrl(slot.lastPhotoDataUrl, viewport);
+        croppedDataUrl = await createViewportDataUrl(slot.lastPhotoDataUrl, viewportForSave);
     } catch (error) {
         console.error('Failed to render viewport for single selection:', error);
         showError('Failed to render the selected area for saving.', {
@@ -135,12 +147,12 @@ async function saveCurrentSelection() {
         return;
     }
 
-    const signature = buildViewportSignature(slot.lastPhotoDataUrl, viewport);
+    const signature = buildViewportSignature(slot.lastPhotoDataUrl, viewportForSave);
     const capturedAtIso = new Date().toISOString();
 
     const payload = {
         imageDataUrl: croppedDataUrl,
-        viewport,
+        viewport: viewportForSave,
         signature,
         capturedAt: capturedAtIso,
         mode: 'single'

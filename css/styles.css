@@ -368,6 +368,10 @@ body {
     background: rgba(0, 0, 0, 0.7);
 }
 
+.single-camera-modal .selection-overlay {
+    display: none !important;
+}
+
 .similarity-rationale-header {
     display: flex;
     align-items: center;
