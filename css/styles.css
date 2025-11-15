@@ -401,6 +401,19 @@ body {
     object-fit: cover;
 }
 
+.single-camera-modal #backPlaceholder {
+    display: none !important;
+}
+
+.single-camera-active .single-page {
+    display: none !important;
+}
+
+.single-camera-active #versionDisplay,
+.single-camera-active #toastStack {
+    display: none !important;
+}
+
 .similarity-rationale-header {
     display: flex;
     align-items: center;

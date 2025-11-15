@@ -311,6 +311,9 @@ function openSingleCameraModal() {
         showError('Single camera modal missing in DOM.', { diagnostics: false });
         return;
     }
+
+    document.body.classList.add('single-camera-active');
+
     modal.classList.add('is-open');
     modal.setAttribute('aria-hidden', 'false');
 
@@ -340,6 +343,14 @@ function closeSingleCameraModal() {
     }
     modal.classList.remove('is-open');
     modal.setAttribute('aria-hidden', 'true');
+
+    document.body.classList.remove('single-camera-active');
+
+    if (document.fullscreenElement && typeof document.exitFullscreen === 'function') {
+        document.exitFullscreen().catch((error) => {
+            console.warn('Exiting fullscreen failed:', error);
+        });
+    }
     // Reset camera slot after closing
     initializePhotoSlot('back');
     stopAllCameras();
