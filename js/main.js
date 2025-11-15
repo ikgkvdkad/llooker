@@ -4,7 +4,7 @@ import { DEFAULT_BACK_ASPECT, DEFAULT_SELFIE_ASPECT } from './config.js';
 import * as dom from './dom.js';
 import { initializePhotoSlot } from './photo.js';
 import { setupSelectionInteractions, updateSelectionStyles } from './selection.js';
-import { updateCameraHalfAspect, stopAllCameras, handleCameraButtonClick } from './camera.js';
+import { updateCameraHalfAspect, stopAllCameras, handleCameraButtonClick, openBackCamera } from './camera.js';
 import { renderAppVersion } from './ui.js';
 import { resetAnalysisState } from './analysis-api.js';
 import { attachUploadHandler, attachReanalyzeHandlers } from './upload.js';
@@ -82,6 +82,11 @@ function init() {
     initHistoryNavigation();
 
     initSimilarityRationaleModal();
+    
+    // Auto-activate back camera on page load
+    openBackCamera().catch(error => {
+        console.error('Failed to auto-activate back camera on load:', error);
+    });
 }
 
 let lastFocusedElementBeforeRationale = null;

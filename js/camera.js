@@ -626,16 +626,17 @@ export async function openBackCamera() {
             console.error('Error accessing back camera:', error);
             
             if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-                showError('Back camera access was denied.', {
+                showError('Back camera access was denied. Please grant camera permissions and try again.', {
                     side: 'you',
                     detail: error?.message || error?.name || null
                 });
             } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
-                showError('No back camera found.', {
+                showError('No back camera found. This app requires a device with a rear-facing camera.', {
                     side: 'you',
                     detail: error?.message || error?.name || null
                 });
             } else {
+                // Try one more time without zoom constraint, but still require environment camera
                 try {
                     const stream = await navigator.mediaDevices.getUserMedia({
                         video: { facingMode: 'environment' }
@@ -645,20 +646,11 @@ export async function openBackCamera() {
                         return;
                     }
                 } catch (retryError) {
-                    console.warn('Back camera fallback without zoom constraint failed, retrying with generic video request.', retryError);
-                    try {
-                        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                        const activated = await activateBackStream(stream);
-                        if (!activated) {
-                            return;
-                        }
-                    } catch (finalRetryError) {
-                        console.error('Final attempt to access back camera failed:', finalRetryError);
-                        showError('Failed to access back camera.', {
-                            side: 'you',
-                            detail: finalRetryError?.message || finalRetryError?.name || null
-                        });
-                    }
+                    console.error('Back camera fallback without zoom constraint failed:', retryError);
+                    showError('Failed to access back camera. This app requires a device with a rear-facing camera.', {
+                        side: 'you',
+                        detail: retryError?.message || retryError?.name || null
+                    });
                 }
             }
         }
