@@ -341,7 +341,8 @@ html {
 
 /* Allow vertical scrolling on the single page, even on touch devices */
 body.single-body,
-.single-page {
+.single-page,
+body.single-body * {
     touch-action: pan-y;
 }
 
