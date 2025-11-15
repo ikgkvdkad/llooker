@@ -1,10 +1,10 @@
 // Single-camera page initialization and selection storage
 
-import { DEFAULT_BACK_ASPECT, SINGLE_SELECTIONS_STORE_URL, SINGLE_SELECTIONS_LIST_URL } from './config.js';
+import { DEFAULT_BACK_ASPECT, SINGLE_SELECTIONS_STORE_URL, SINGLE_SELECTIONS_LIST_URL, SINGLE_SELECTIONS_CLEAR_URL } from './config.js';
 import * as dom from './dom.js';
 import { initializePhotoSlot, displayPhotoForSide } from './photo.js';
 import { setupSelectionInteractions, updateSelectionStyles } from './selection.js';
-import { updateCameraHalfAspect, stopAllCameras, handleCameraButtonClick } from './camera.js';
+import { updateCameraHalfAspect, stopAllCameras, handleCameraButtonClick, isCameraActive } from './camera.js';
 import { renderAppVersion, showError, showWarning } from './ui.js';
 import { snapshotViewportState } from './zoom.js';
 import { photoSlots } from './state.js';
@@ -177,6 +177,38 @@ async function saveCurrentSelection() {
     }
 }
 
+async function clearAllSelections() {
+    assertConfigured(
+        SINGLE_SELECTIONS_CLEAR_URL,
+        'Single selections API (clear) is not configured.'
+    );
+
+    try {
+        const response = await fetch(SINGLE_SELECTIONS_CLEAR_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text().catch(() => '');
+            throw new Error(errorText || `HTTP ${response.status}`);
+        }
+
+        const container = getSingleSelectionContainer();
+        if (container) {
+            container.innerHTML = '';
+        }
+    } catch (error) {
+        console.error('Failed to clear single-camera selections:', error);
+        showError('Failed to clear selections. Check diagnostics and try again.', {
+            diagnostics: false,
+            detail: error?.message || null
+        });
+    }
+}
+
 async function handleSingleUpload(fileInput) {
     const file = fileInput.files && fileInput.files[0];
     if (!file) {
@@ -260,11 +292,61 @@ function attachSingleUploadHandler(button, input) {
     });
 }
 
+function openSingleCameraModal() {
+    const modal = document.getElementById('singleCameraModal');
+    if (!modal) {
+        showError('Single camera modal missing in DOM.', { diagnostics: false });
+        return;
+    }
+    modal.classList.add('is-open');
+    modal.setAttribute('aria-hidden', 'false');
+}
+
+function closeSingleCameraModal() {
+    const modal = document.getElementById('singleCameraModal');
+    if (!modal) {
+        return;
+    }
+    modal.classList.remove('is-open');
+    modal.setAttribute('aria-hidden', 'true');
+    // Reset camera slot after closing
+    initializePhotoSlot('back');
+    stopAllCameras();
+}
+
+function attachCameraModalHandlers() {
+    const modal = document.getElementById('singleCameraModal');
+    const overlay = document.getElementById('singleCameraOverlay');
+
+    if (overlay && modal) {
+        overlay.addEventListener('click', () => {
+            closeSingleCameraModal();
+        });
+    }
+
+    const cameraButton = dom.youCameraButton;
+    if (cameraButton) {
+        cameraButton.addEventListener('click', async () => {
+            const wasActive = isCameraActive('back');
+            handleCameraButtonClick('you');
+
+            // If camera was already active, this click captured a frame.
+            if (wasActive) {
+                // Allow capture pipeline to update photoSlots, then save and close.
+                window.setTimeout(async () => {
+                    await saveCurrentSelection();
+                    closeSingleCameraModal();
+                }, 0);
+            }
+        });
+    }
+}
+
 function initSinglePage() {
     // Set default aspect ratio for back camera
     updateCameraHalfAspect('back', DEFAULT_BACK_ASPECT);
 
-    // Pointer interactions for zoom/pan
+    // Pointer interactions for zoom/pan (within modal)
     if (dom.backCameraHalf) {
         dom.backCameraHalf.addEventListener('pointerdown', (event) => handlePointerDownOnHalf('back', event));
         dom.backCameraHalf.addEventListener('pointermove', (event) => handlePointerMoveOnHalf('back', event));
@@ -283,13 +365,16 @@ function initSinglePage() {
     updateSelectionStyles('back');
     initializePhotoSlot('back');
 
-    // Camera button behavior: reuse existing back camera lifecycle
-    if (dom.youCameraButton) {
-        dom.youCameraButton.addEventListener('click', () => handleCameraButtonClick('you'));
-        dom.youCameraButton.addEventListener('touchstart', (event) => {
-            event.preventDefault();
-            handleCameraButtonClick('you');
-        }, { passive: false });
+    // Camera modal handlers
+    attachCameraModalHandlers();
+
+    // Toolbar camera open button
+    const openCameraButton = document.getElementById('singleOpenCameraButton');
+    if (openCameraButton) {
+        openCameraButton.addEventListener('click', () => {
+            openSingleCameraModal();
+            // First click on modal camera button will start camera
+        });
     }
 
     // Upload button behavior (single page variant)
@@ -297,11 +382,11 @@ function initSinglePage() {
     const uploadInput = document.getElementById('youUploadInput');
     attachSingleUploadHandler(uploadButton, uploadInput);
 
-    // Save selection button
-    const saveButton = document.getElementById('singleSaveButton');
-    if (saveButton) {
-        saveButton.addEventListener('click', () => {
-            void saveCurrentSelection();
+    // Clear-all button
+    const clearButton = document.getElementById('singleClearButton');
+    if (clearButton) {
+        clearButton.addEventListener('click', () => {
+            void clearAllSelections();
         });
     }
 
