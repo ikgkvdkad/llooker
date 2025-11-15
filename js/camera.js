@@ -689,10 +689,10 @@ export async function openSelfieCamera() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: {
-                    facingMode: 'environment',
+                    facingMode: 'user',
                     width: { ideal: 1920 },
                     height: { ideal: 1080 },
-                    advanced: [{ zoom: BACK_TARGET_ZOOM }]
+                    advanced: [{ zoom: SELFIE_ZOOM_MODE }]
                 }
             });
             const activated = await activateSelfieStream(stream);
@@ -715,7 +715,7 @@ export async function openSelfieCamera() {
             } else {
                 try {
                     const stream = await navigator.mediaDevices.getUserMedia({
-                        video: { facingMode: 'environment' }
+                        video: { facingMode: 'user' }
                     });
                     const activated = await activateSelfieStream(stream);
                     if (!activated) {
