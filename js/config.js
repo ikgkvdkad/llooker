@@ -1,6 +1,6 @@
 // Application configuration and constants
 
-export const APP_VERSION = 21.0;
+export const APP_VERSION = 22.0;
 
 export const DEFAULT_BACK_ASPECT = 16 / 9;
 export const DEFAULT_SELFIE_ASPECT = 16 / 9;
@@ -41,4 +41,5 @@ export const CAMERA_SELECTIONS_LIST_URL = '/.netlify/functions/get-selections';
 // Single-camera selections (separate collection)
 export const SINGLE_SELECTIONS_STORE_URL = '/.netlify/functions/store-single-selection';
 export const SINGLE_SELECTIONS_LIST_URL = '/.netlify/functions/get-single-selections';
+export const SINGLE_SELECTIONS_CLEAR_URL = '/.netlify/functions/clear-single-selections';
 
