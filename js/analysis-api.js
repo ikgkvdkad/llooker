@@ -22,6 +22,11 @@ import { storePhotoData } from './similarity.js';
 import { extractGpsLocationFromDataUrl } from './exif.js';
 
 const missingGpsWarningShown = new Set();
+let analysisEnabled = true;
+
+export function setAnalysisEnabled(enabled) {
+    analysisEnabled = Boolean(enabled);
+}
 
 const DEBUG_METADATA_TIMING = Boolean(
     typeof window !== 'undefined' && window.__DEBUG_METADATA_TIMING__
@@ -204,6 +209,9 @@ function refreshAnalysisContent(side) {
 }
 
 export function appendDiagnosticMessage(side, message, options = {}) {
+    if (!analysisEnabled) {
+        return;
+    }
     const state = analysisState[side];
     if (!state) {
         return;
@@ -238,6 +246,9 @@ export function appendDiagnosticMessage(side, message, options = {}) {
  * Reset analysis state for a side
  */
 export function resetAnalysisState(side) {
+    if (!analysisEnabled) {
+        return;
+    }
     const state = analysisState[side];
     if (!state) return;
     state.panel.classList.remove('loading', 'error', 'success');
@@ -257,6 +268,9 @@ export function resetAnalysisState(side) {
  * Set analysis state for a side
  */
 export function setAnalysisState(side, status, message, analysisText = '') {
+    if (!analysisEnabled) {
+        return;
+    }
     const state = analysisState[side];
     if (!state) return;
     state.panel.classList.remove('loading', 'error', 'success');
@@ -309,6 +323,9 @@ export function buildViewportSignature(photoDataUrl, viewportSnapshot) {
  * Submit viewport analysis
  */
 export function submitViewportAnalysis(slotKey, { force = false, reason = 'interaction' } = {}) {
+    if (!analysisEnabled) {
+        return;
+    }
     const slot = photoSlots[slotKey];
     const state = interactionState[slotKey];
     if (!slot || !state) {
@@ -345,6 +362,9 @@ export function submitViewportAnalysis(slotKey, { force = false, reason = 'inter
  * Schedule viewport analysis
  */
 export function scheduleViewportAnalysis(slotKey, options = {}) {
+    if (!analysisEnabled) {
+        return;
+    }
     const state = interactionState[slotKey];
     if (!state) {
         return;
@@ -364,6 +384,9 @@ export function scheduleViewportAnalysis(slotKey, options = {}) {
  * Handle re-analyze request
  */
 export function handleReanalyze(side) {
+    if (!analysisEnabled) {
+        return;
+    }
     const slot = getPhotoSlotByAnalysisSide(side);
     const label = side === 'you' ? 'You' : 'Me';
 
@@ -408,7 +431,7 @@ export function handleReanalyze(side) {
 /**
  * Create viewport data URL
  */
-async function createViewportDataUrl(photoDataUrl, viewportSnapshot) {
+export async function createViewportDataUrl(photoDataUrl, viewportSnapshot) {
     if (typeof photoDataUrl !== 'string' || photoDataUrl.length === 0) {
         throw new Error('Photo data unavailable.');
     }
@@ -650,6 +673,9 @@ export function renderAnalysisSummary(analysis, discriminators) {
  * Enqueue analysis request
  */
 function enqueueAnalysis(side, photoDataUrl, viewportSnapshot = null, options = {}) {
+    if (!analysisEnabled) {
+        return;
+    }
     const slot = getPhotoSlotByAnalysisSide(side);
     if (slot && typeof photoDataUrl === 'string' && photoDataUrl.length > 0) {
         slot.lastPhotoDataUrl = photoDataUrl;
@@ -662,6 +688,9 @@ function enqueueAnalysis(side, photoDataUrl, viewportSnapshot = null, options = 
  * Process analysis queue
  */
 function processAnalysisQueue() {
+    if (!analysisEnabled) {
+        return;
+    }
     if (getAnalysisInFlight()) {
         return;
     }
@@ -686,6 +715,9 @@ function processAnalysisQueue() {
  * Request analysis from API
  */
 async function requestAnalysis(side, photoDataUrl, viewportSnapshot, options = {}) {
+    if (!analysisEnabled) {
+        return;
+    }
     const totalStart = now();
     let totalOutcome = 'ok';
     const state = analysisState[side];

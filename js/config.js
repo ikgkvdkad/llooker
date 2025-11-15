@@ -35,3 +35,6 @@ export const CAMERA_RELEASE_TIMEOUT_MS = 500;
 // Configure the API endpoint for Netlify Function
 export const ANALYSIS_API_URL = '/.netlify/functions/describe';
 
+export const CAMERA_SELECTIONS_STORE_URL = '/.netlify/functions/store-selection';
+export const CAMERA_SELECTIONS_LIST_URL = '/.netlify/functions/get-selections';
+
