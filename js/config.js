@@ -1,6 +1,6 @@
 // Application configuration and constants
 
-export const APP_VERSION = 24.0;
+export const APP_VERSION = 25.0;
 
 export const DEFAULT_BACK_ASPECT = 16 / 9;
 export const DEFAULT_SELFIE_ASPECT = 16 / 9;
