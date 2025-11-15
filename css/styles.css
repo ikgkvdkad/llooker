@@ -1063,6 +1063,8 @@ body.landing-body {
     position: relative;
     flex: 1;
     min-height: 0;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 16px;
@@ -1074,8 +1076,9 @@ body.landing-body {
     list-style: none;
     margin: 0;
     padding: 0 16px 16px;
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
-    max-height: 100%;
     display: flex;
     flex-direction: column;
     gap: 10px;
