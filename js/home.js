@@ -241,14 +241,10 @@ function renderGalleryList(items) {
         const meta = document.createElement('div');
         meta.className = 'gallery-row-meta';
 
-        const label = document.createElement('strong');
-        label.textContent = `${(item.role || 'unknown').toUpperCase()} selection`;
-
         const timestamp = document.createElement('span');
         timestamp.className = 'gallery-row-time';
         timestamp.textContent = formatTimestamp(item.createdAt || item.capturedAt);
 
-        meta.appendChild(label);
         meta.appendChild(timestamp);
         listItem.appendChild(thumbnail);
         listItem.appendChild(meta);
