@@ -82,11 +82,6 @@ function init() {
     initHistoryNavigation();
 
     initSimilarityRationaleModal();
-    
-    // Auto-activate back camera on page load
-    openBackCamera().catch(error => {
-        console.error('Failed to auto-activate back camera on load:', error);
-    });
 }
 
 let lastFocusedElementBeforeRationale = null;
