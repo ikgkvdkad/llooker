@@ -38,3 +38,7 @@ export const ANALYSIS_API_URL = '/.netlify/functions/describe';
 export const CAMERA_SELECTIONS_STORE_URL = '/.netlify/functions/store-selection';
 export const CAMERA_SELECTIONS_LIST_URL = '/.netlify/functions/get-selections';
 
+// Single-camera selections (separate collection)
+export const SINGLE_SELECTIONS_STORE_URL = '/.netlify/functions/store-single-selection';
+export const SINGLE_SELECTIONS_LIST_URL = '/.netlify/functions/get-single-selections';
+

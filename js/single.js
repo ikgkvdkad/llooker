@@ -1,0 +1,232 @@
+// Single-camera page initialization and selection storage
+
+import { DEFAULT_BACK_ASPECT, SINGLE_SELECTIONS_STORE_URL, SINGLE_SELECTIONS_LIST_URL } from './config.js';
+import * as dom from './dom.js';
+import { initializePhotoSlot } from './photo.js';
+import { setupSelectionInteractions, updateSelectionStyles } from './selection.js';
+import { updateCameraHalfAspect, stopAllCameras, handleCameraButtonClick } from './camera.js';
+import { renderAppVersion, showError, showWarning } from './ui.js';
+import { snapshotViewportState } from './zoom.js';
+import { photoSlots } from './state.js';
+import { createViewportDataUrl, buildViewportSignature } from './analysis-api.js';
+import {
+    handlePointerDownOnHalf,
+    handlePointerMoveOnHalf,
+    handlePointerUpOnHalf,
+    handlePointerCancelOnHalf
+} from './interactions.js';
+
+function assertConfigured(value, message) {
+    if (!value) {
+        showError(message, { diagnostics: false });
+        throw new Error(message);
+    }
+}
+
+function getSingleSelectionContainer() {
+    if (!dom.galleryList) {
+        // Single page has its own container
+        const el = document.getElementById('singleSelectionList');
+        if (!el) {
+            console.warn('Single selection list container missing.');
+        }
+        return el;
+    }
+    return document.getElementById('singleSelectionList');
+}
+
+function renderSelectionRow(selection) {
+    const container = getSingleSelectionContainer();
+    if (!container || !selection?.imageDataUrl) {
+        return;
+    }
+
+    const row = document.createElement('div');
+    row.className = 'single-selection-row';
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'single-selection-thumb-wrapper';
+
+    const img = document.createElement('img');
+    img.className = 'single-selection-thumb';
+    img.src = selection.imageDataUrl;
+    img.alt = 'Saved selection';
+    img.loading = 'lazy';
+
+    wrapper.appendChild(img);
+
+    if (selection.capturedAt || selection.createdAt) {
+        const meta = document.createElement('div');
+        meta.className = 'single-selection-meta';
+        const timestamp = selection.capturedAt || selection.createdAt;
+        meta.textContent = timestamp ? new Date(timestamp).toLocaleString() : '';
+        wrapper.appendChild(meta);
+    }
+
+    row.appendChild(wrapper);
+    container.appendChild(row);
+}
+
+async function loadExistingSelections() {
+    if (!SINGLE_SELECTIONS_LIST_URL) {
+        // Missing configuration should be explicit, no silent fallbacks
+        showWarning('Single selections API (list) is not configured. Saved thumbnails will not load.', {
+            diagnostics: false
+        });
+        return;
+    }
+
+    try {
+        const response = await fetch(`${SINGLE_SELECTIONS_LIST_URL}?limit=200&offset=0`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        const payload = await response.json();
+        const selections = Array.isArray(payload?.selections) ? payload.selections : [];
+
+        const container = getSingleSelectionContainer();
+        if (!container) {
+            return;
+        }
+        container.innerHTML = '';
+
+        selections.forEach((selection) => {
+            renderSelectionRow(selection);
+        });
+    } catch (error) {
+        console.error('Failed to load single-camera selections:', error);
+        showWarning('Unable to load previously saved selections.', {
+            diagnostics: false,
+            detail: error?.message || null
+        });
+    }
+}
+
+async function saveCurrentSelection() {
+    assertConfigured(
+        SINGLE_SELECTIONS_STORE_URL,
+        'Single selections API (store) is not configured.'
+    );
+
+    const slot = photoSlots.back;
+    if (!slot || typeof slot.lastPhotoDataUrl !== 'string' || !slot.lastPhotoDataUrl.length) {
+        showWarning('Capture a photo before saving a selection.', { diagnostics: false });
+        return;
+    }
+
+    const viewport = snapshotViewportState('back');
+    if (!viewport) {
+        showWarning('Viewing area is still stabilizing. Adjust the frame and try saving again.', {
+            diagnostics: false
+        });
+        return;
+    }
+
+    let croppedDataUrl;
+    try {
+        croppedDataUrl = await createViewportDataUrl(slot.lastPhotoDataUrl, viewport);
+    } catch (error) {
+        console.error('Failed to render viewport for single selection:', error);
+        showError('Failed to render the selected area for saving.', {
+            diagnostics: false,
+            detail: error?.message || null
+        });
+        return;
+    }
+
+    const signature = buildViewportSignature(slot.lastPhotoDataUrl, viewport);
+    const capturedAtIso = new Date().toISOString();
+
+    const payload = {
+        imageDataUrl: croppedDataUrl,
+        viewport,
+        signature,
+        capturedAt: capturedAtIso,
+        mode: 'single'
+    };
+
+    try {
+        const response = await fetch(SINGLE_SELECTIONS_STORE_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text().catch(() => '');
+            throw new Error(errorText || `HTTP ${response.status}`);
+        }
+
+        const result = await response.json().catch(() => ({}));
+        const selectionMeta = result?.selection || {};
+
+        renderSelectionRow({
+            imageDataUrl: croppedDataUrl,
+            createdAt: selectionMeta.createdAt || null,
+            capturedAt: selectionMeta.capturedAt || capturedAtIso
+        });
+    } catch (error) {
+        console.error('Failed to store single-camera selection:', error);
+        showError('Failed to save selection. Check diagnostics and try again.', {
+            diagnostics: false,
+            detail: error?.message || null
+        });
+    }
+}
+
+function initSinglePage() {
+    // Set default aspect ratio for back camera
+    updateCameraHalfAspect('back', DEFAULT_BACK_ASPECT);
+
+    // Pointer interactions for zoom/pan
+    if (dom.backCameraHalf) {
+        dom.backCameraHalf.addEventListener('pointerdown', (event) => handlePointerDownOnHalf('back', event));
+        dom.backCameraHalf.addEventListener('pointermove', (event) => handlePointerMoveOnHalf('back', event));
+        dom.backCameraHalf.addEventListener('pointerup', (event) => handlePointerUpOnHalf('back', event));
+        dom.backCameraHalf.addEventListener('pointercancel', (event) => handlePointerCancelOnHalf('back', event));
+        dom.backCameraHalf.addEventListener('pointerleave', (event) => handlePointerCancelOnHalf('back', event));
+    }
+
+    // Cleanup cameras on unload
+    window.addEventListener('beforeunload', () => {
+        stopAllCameras();
+    });
+
+    // Selection interactions for the single slot
+    setupSelectionInteractions('back');
+    updateSelectionStyles('back');
+    initializePhotoSlot('back');
+
+    // Camera button behavior: reuse existing back camera lifecycle
+    if (dom.youCameraButton) {
+        dom.youCameraButton.addEventListener('click', () => handleCameraButtonClick('you'));
+        dom.youCameraButton.addEventListener('touchstart', (event) => {
+            event.preventDefault();
+            handleCameraButtonClick('you');
+        }, { passive: false });
+    }
+
+    // Save selection button
+    const saveButton = document.getElementById('singleSaveButton');
+    if (saveButton) {
+        saveButton.addEventListener('click', () => {
+            void saveCurrentSelection();
+        });
+    }
+
+    // Render version badge
+    renderAppVersion();
+
+    // Load existing selections for this collection
+    void loadExistingSelections();
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initSinglePage);
+} else {
+    initSinglePage();
+}
+
+

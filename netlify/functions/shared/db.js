@@ -2,6 +2,8 @@ const { Pool } = require('pg');
 
 const DEFAULT_SELECTIONS_TABLE = 'camera_selections';
 const SELECTIONS_TABLE_ENV_KEY = 'CAMERA_SELECTIONS_TABLE';
+const DEFAULT_SINGLE_SELECTIONS_TABLE = 'single_camera_selections';
+const SINGLE_SELECTIONS_TABLE_ENV_KEY = 'SINGLE_CAMERA_SELECTIONS_TABLE';
 
 function resolveSelectionsTableName() {
   const configured = process.env[SELECTIONS_TABLE_ENV_KEY];
@@ -13,7 +15,18 @@ function resolveSelectionsTableName() {
   return isValid ? sanitized : DEFAULT_SELECTIONS_TABLE;
 }
 
+function resolveSingleSelectionsTableName() {
+  const configured = process.env[SINGLE_SELECTIONS_TABLE_ENV_KEY];
+  if (!configured) {
+    return DEFAULT_SINGLE_SELECTIONS_TABLE;
+  }
+  const sanitized = configured.trim();
+  const isValid = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(sanitized);
+  return isValid ? sanitized : DEFAULT_SINGLE_SELECTIONS_TABLE;
+}
+
 const CAMERA_SELECTIONS_TABLE_NAME = resolveSelectionsTableName();
+const SINGLE_CAMERA_SELECTIONS_TABLE_NAME = resolveSingleSelectionsTableName();
 let poolInstance = null;
 let ensureSelectionsPromise = null;
 
@@ -73,9 +86,43 @@ function ensureCameraSelectionsTable(pool) {
   return ensureSelectionsPromise;
 }
 
+let ensureSingleSelectionsPromise = null;
+
+function ensureSingleCameraSelectionsTable(pool) {
+  if (!pool) {
+    return Promise.reject(new Error('Database pool not initialized.'));
+  }
+  if (ensureSingleSelectionsPromise) {
+    return ensureSingleSelectionsPromise;
+  }
+
+  const createTableSql = `
+    CREATE TABLE IF NOT EXISTS ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME} (
+      id BIGSERIAL PRIMARY KEY,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      captured_at TIMESTAMPTZ,
+      role TEXT,
+      image_data_url TEXT NOT NULL,
+      viewport JSONB,
+      signature TEXT,
+      location JSONB
+    );
+  `;
+
+  ensureSingleSelectionsPromise = pool.query(createTableSql).catch((error) => {
+    ensureSingleSelectionsPromise = null;
+    throw error;
+  });
+
+  return ensureSingleSelectionsPromise;
+}
+
 module.exports = {
   getDatabasePool,
   ensureCameraSelectionsTable,
+  ensureSingleCameraSelectionsTable,
   CAMERA_SELECTIONS_TABLE_NAME,
-  resolveSelectionsTableName
+  SINGLE_CAMERA_SELECTIONS_TABLE_NAME,
+  resolveSelectionsTableName,
+  resolveSingleSelectionsTableName
 };
