@@ -98,13 +98,13 @@ export function displayPhotoForSide(side, dataUrl) {
     }
 
     if (slotKey === 'back') {
-        dom.backVideoElement.classList.remove('active');
-        dom.backPlaceholder.classList.add('hidden');
-        dom.backCameraHalf.classList.remove('initializing');
+        dom.backVideoElement?.classList.remove('active');
+        dom.backPlaceholder?.classList.add('hidden');
+        dom.backCameraHalf?.classList.remove('initializing');
         setIsBackFrozen(true);
     } else if (slotKey === 'selfie') {
-        dom.selfieVideoElement.classList.remove('active');
-        dom.selfiePlaceholder.classList.add('hidden');
+        dom.selfieVideoElement?.classList.remove('active');
+        dom.selfiePlaceholder?.classList.add('hidden');
         setIsSelfieFrozen(true);
     }
     

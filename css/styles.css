@@ -978,6 +978,43 @@ body.landing-body {
     height: 100%;
 }
 
+.camera-container--single {
+    height: 100%;
+}
+
+.camera-container--single .camera-row {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+}
+
+.camera-container--single .camera-half {
+    width: 100%;
+    border-left-width: 0;
+    border-right-width: 0;
+}
+
+.camera-container--single .controls-row {
+    flex: 0 0 auto;
+    height: auto;
+    padding: 12px 0;
+    border-top-width: 0;
+    border-bottom-width: 0;
+}
+
+.camera-container--single .controls-row .controls-half {
+    width: 100%;
+    border: none;
+    justify-content: center;
+    gap: 8px;
+    padding: 0 20px;
+}
+
+.camera-container--single .controls-row .controls-half.single-controls {
+    max-width: 520px;
+    margin: 0 auto;
+}
+
 .gallery-section {
     flex: 1;
     background: rgba(7, 9, 18, 0.98);
