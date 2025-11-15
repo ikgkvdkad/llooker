@@ -1070,6 +1070,8 @@ body.landing-body {
     border-radius: 16px;
     padding: 12px 0;
     background: rgba(4, 6, 14, 0.9);
+    touch-action: pan-y;
+    overscroll-behavior: contain;
 }
 
 .gallery-list {
@@ -1082,6 +1084,9 @@ body.landing-body {
     display: flex;
     flex-direction: column;
     gap: 10px;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
 }
 
 .gallery-row {
