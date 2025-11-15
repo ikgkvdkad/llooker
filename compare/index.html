@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Camera</title>
+    <link rel="stylesheet" href="../css/styles.css">
+</head>
+<body>
+        <div class="camera-container">
+        <div class="camera-row">
+            <div class="camera-half left" id="backCameraHalf">
+                <div class="placeholder-text" id="backPlaceholder">
+                    <img src="../img/human-placeholder.svg" alt="" class="placeholder-icon" aria-hidden="true">
+                    <span class="placeholder-label">You</span>
+                </div>
+                <video id="backVideoElement" class="video-element" autoplay playsinline></video>
+                <img id="backCapturedPhoto" class="captured-photo" alt="Back camera photo">
+                <div class="selection-overlay" id="backSelectionOverlay" aria-hidden="true">
+                    <div class="selection-box" id="backSelectionBox" role="presentation" aria-hidden="true">
+                        <div class="corner-handle top-left" data-handle="top-left" aria-hidden="true"></div>
+                        <div class="corner-handle top-right" data-handle="top-right" aria-hidden="true"></div>
+                        <div class="corner-handle bottom-left" data-handle="bottom-left" aria-hidden="true"></div>
+                        <div class="corner-handle bottom-right" data-handle="bottom-right" aria-hidden="true"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="camera-half right" id="selfieCameraHalf">
+                <div class="placeholder-text" id="selfiePlaceholder">
+                    <img src="../img/human-placeholder.svg" alt="" class="placeholder-icon" aria-hidden="true">
+                    <span class="placeholder-label">Me</span>
+                </div>
+                <video id="selfieVideoElement" class="video-element" autoplay playsinline></video>
+                <img id="selfieCapturedPhoto" class="captured-photo" alt="Selfie photo">
+                <div class="selection-overlay" id="selfieSelectionOverlay" aria-hidden="true">
+                    <div class="selection-box" id="selfieSelectionBox" role="presentation" aria-hidden="true">
+                        <div class="corner-handle top-left" data-handle="top-left" aria-hidden="true"></div>
+                        <div class="corner-handle top-right" data-handle="top-right" aria-hidden="true"></div>
+                        <div class="corner-handle bottom-left" data-handle="bottom-left" aria-hidden="true"></div>
+                        <div class="corner-handle bottom-right" data-handle="bottom-right" aria-hidden="true"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="controls-row">
+            <div class="controls-half left">
+                <button type="button" class="history-nav-button" id="youPrevButton" aria-label="Previous You photo" disabled>
+                    <span class="button-icon" aria-hidden="true">&lt;</span>
+                </button>
+                <button type="button" class="camera-control-button" id="youCameraButton" aria-label="Camera">
+                    <span class="button-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M7 7.5L8.8 5.5H15.2L17 7.5H20C21.1 7.5 22 8.4 22 9.5V18.5C22 19.6 21.1 20.5 20 20.5H4C2.9 20.5 2 19.6 2 18.5V9.5C2 8.4 2.9 7.5 4 7.5H7Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M12 16.5C13.933 16.5 15.5 14.933 15.5 13C15.5 11.067 13.933 9.5 12 9.5C10.067 9.5 8.5 11.067 8.5 13C8.5 14.933 10.067 16.5 12 16.5Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </span>
+                    <span class="sr-only camera-button-label">Camera</span>
+                </button>
+                <button type="button" class="camera-control-button" id="youUploadButton" aria-label="Upload">
+                    <span class="button-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M21 15V19C21 20.1 20.1 21 19 21H5C3.9 21 3 20.1 3 19V15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M12 14V4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M8 8L12 4L16 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </span>
+                    <span class="sr-only upload-button-label">Upload</span>
+                </button>
+                <button type="button" class="history-nav-button" id="youNextButton" aria-label="Next You photo" disabled>
+                    <span class="button-icon" aria-hidden="true">&gt;</span>
+                </button>
+                <input type="file" accept="image/*" id="youUploadInput" class="analysis-upload-input" aria-label="Upload photo for You">
+            </div>
+            <div class="controls-half right">
+                <button type="button" class="history-nav-button" id="mePrevButton" aria-label="Previous Me photo" disabled>
+                    <span class="button-icon" aria-hidden="true">&lt;</span>
+                </button>
+                <button type="button" class="camera-control-button" id="meCameraButton" aria-label="Camera">
+                    <span class="button-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M7 7.5L8.8 5.5H15.2L17 7.5H20C21.1 7.5 22 8.4 22 9.5V18.5C22 19.6 21.1 20.5 20 20.5H4C2.9 20.5 2 19.6 2 18.5V9.5C2 8.4 2.9 7.5 4 7.5H7Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M12 16.5C13.933 16.5 15.5 14.933 15.5 13C15.5 11.067 13.933 9.5 12 9.5C10.067 9.5 8.5 11.067 8.5 13C8.5 14.933 10.067 16.5 12 16.5Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </span>
+                    <span class="sr-only camera-button-label">Camera</span>
+                </button>
+                <button type="button" class="camera-control-button" id="meUploadButton" aria-label="Upload">
+                    <span class="button-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M21 15V19C21 20.1 20.1 21 19 21H5C3.9 21 3 20.1 3 19V15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M12 14V4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M8 8L12 4L16 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </span>
+                    <span class="sr-only upload-button-label">Upload</span>
+                </button>
+                <button type="button" class="history-nav-button" id="meNextButton" aria-label="Next Me photo" disabled>
+                    <span class="button-icon" aria-hidden="true">&gt;</span>
+                </button>
+                <input type="file" accept="image/*" id="meUploadInput" class="analysis-upload-input" aria-label="Upload photo for Me">
+            </div>
+        </div>
+
+            <div class="analysis-row">
+                <div class="analysis-half left" id="youAnalysisPanel">
+                    <div class="analysis-title-row">
+                        <button type="button" class="analysis-title-button" id="youReanalyzeButton">You</button>
+                    </div>
+                    <div class="analysis-status" id="youAnalysisStatus"></div>
+                    <div class="analysis-content" id="youAnalysisContent"></div>
+                </div>
+                <div class="similarity-column" id="similarityColumn">
+                    <button type="button" class="similarity-rationale-button" id="similarityRationaleButton" aria-label="View similarity rationale">
+                        <strong>?</strong>
+                    </button>
+                    <div class="similarity-bar-container" id="similarityBarContainer">
+                        <div class="similarity-bar-fill" id="similarityBarFill"></div>
+                        <div class="similarity-percentage" id="similarityPercentage">-</div>
+                    </div>
+                </div>
+                <div class="analysis-half right" id="meAnalysisPanel">
+                    <div class="analysis-title-row">
+                        <button type="button" class="analysis-title-button" id="meReanalyzeButton">Me</button>
+                    </div>
+                    <div class="analysis-status" id="meAnalysisStatus"></div>
+                    <div class="analysis-content" id="meAnalysisContent"></div>
+                </div>
+            </div>
+
+        <div id="versionDisplay" class="version-badge" aria-live="polite"></div>
+        <div id="toastStack" class="toast-stack" aria-live="polite" aria-atomic="false"></div>
+
+        <div class="similarity-rationale-modal" id="similarityRationaleModal" aria-hidden="true">
+            <div class="similarity-rationale-overlay" id="similarityRationaleOverlay"></div>
+            <div class="similarity-rationale-panel" role="dialog" aria-modal="true" aria-labelledby="similarityRationaleTitle">
+                <div class="similarity-rationale-header">
+                    <h2 id="similarityRationaleTitle">Similarity rationale</h2>
+                    <button type="button" class="similarity-rationale-close" id="similarityRationaleCloseButton" aria-label="Close rationale view">
+                        &times;
+                    </button>
+                </div>
+                <div class="similarity-rationale-body" id="similarityRationaleBody">
+                    <p class="similarity-rationale-empty">No similarity rationale yet. Capture both photos to compare.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="../js/main.js"></script>
+</body>
+</html>
+
