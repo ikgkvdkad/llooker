@@ -131,10 +131,28 @@ function initSimilarityRationaleModal() {
         });
     });
     if (dom.similarityRationaleOverlay) {
-        dom.similarityRationaleOverlay.addEventListener('click', () => closeSimilarityRationaleModal());
+        dom.similarityRationaleOverlay.addEventListener('click', (event) => {
+            event.stopPropagation();
+            closeSimilarityRationaleModal();
+        });
     }
     if (dom.similarityRationaleCloseButton) {
-        dom.similarityRationaleCloseButton.addEventListener('click', () => closeSimilarityRationaleModal());
+        dom.similarityRationaleCloseButton.addEventListener('click', (event) => {
+            event.stopPropagation();
+            closeSimilarityRationaleModal();
+        });
+    }
+    // Prevent pointer events on the modal from propagating to camera elements
+    if (dom.similarityRationaleModal) {
+        dom.similarityRationaleModal.addEventListener('pointerdown', (event) => {
+            event.stopPropagation();
+        });
+        dom.similarityRationaleModal.addEventListener('pointermove', (event) => {
+            event.stopPropagation();
+        });
+        dom.similarityRationaleModal.addEventListener('pointerup', (event) => {
+            event.stopPropagation();
+        });
     }
 }
 
