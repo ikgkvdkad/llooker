@@ -36,7 +36,7 @@ exports.handler = async (event) => {
   try {
     const listQuery = {
       text: `
-        SELECT id, created_at, captured_at, role, image_data_url, description
+        SELECT id, created_at, captured_at, role, image_data_url, description, person_group_id
         FROM ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME}
         ORDER BY created_at DESC
         LIMIT $1 OFFSET $2
@@ -54,7 +54,8 @@ exports.handler = async (event) => {
       capturedAt: row.captured_at,
       role: row.role,
       imageDataUrl: row.image_data_url,
-      description: row.description || null
+      description: row.description || null,
+      personGroupId: row.person_group_id || null
     }));
 
     return {

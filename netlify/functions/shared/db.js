@@ -106,13 +106,17 @@ function ensureSingleCameraSelectionsTable(pool) {
       viewport JSONB,
       signature TEXT,
       location JSONB,
-      description TEXT
+      description TEXT,
+      person_group_id BIGINT
     );
   `;
 
   const alterTableSql = `
     ALTER TABLE ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME}
     ADD COLUMN IF NOT EXISTS description TEXT;
+
+    ALTER TABLE ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME}
+    ADD COLUMN IF NOT EXISTS person_group_id BIGINT;
   `;
 
   ensureSingleSelectionsPromise = pool.query(createTableSql)

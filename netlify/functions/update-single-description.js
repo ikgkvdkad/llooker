@@ -3,7 +3,10 @@ const {
   ensureSingleCameraSelectionsTable,
   SINGLE_CAMERA_SELECTIONS_TABLE_NAME
 } = require('./shared/db.js');
-const { generateStablePersonDescription } = require('./shared/single-description.js');
+const {
+  generateStablePersonDescription,
+  evaluateDescriptionGrouping
+} = require('./shared/single-description.js');
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -53,7 +56,7 @@ exports.handler = async (event) => {
   try {
     const result = await pool.query(
       `
-      SELECT id, image_data_url, description
+      SELECT id, image_data_url, description, person_group_id
       FROM ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME}
       WHERE id = $1
       `,
@@ -108,14 +111,58 @@ exports.handler = async (event) => {
     };
   }
 
+  let personGroupId = row.person_group_id || null;
+
+  try {
+    // Only assign a group if one has not been set yet.
+    if (!personGroupId) {
+      const groupsResult = await pool.query(
+        `
+        SELECT person_group_id, description
+        FROM ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME}
+        WHERE description IS NOT NULL
+          AND person_group_id IS NOT NULL
+          AND id <> $1
+        `,
+        [id]
+      );
+
+      const groupMap = new Map();
+      for (const groupRow of groupsResult.rows || []) {
+        const groupId = groupRow.person_group_id;
+        const desc = typeof groupRow.description === 'string' ? groupRow.description : '';
+        if (!groupId || !desc) continue;
+        const existing = groupMap.get(groupId);
+        if (!existing || desc.length > existing.description.length) {
+          groupMap.set(groupId, { id: groupId, description: desc });
+        }
+      }
+
+      const groups = Array.from(groupMap.values());
+
+      const { bestGroupId, bestGroupProbability } = await evaluateDescriptionGrouping(description || '', groups);
+
+      if (bestGroupId && bestGroupProbability >= 90) {
+        personGroupId = bestGroupId;
+      }
+    }
+  } catch (groupError) {
+    console.error('Failed to evaluate grouping for updated single selection:', {
+      id,
+      message: groupError?.message,
+      stack: groupError?.stack
+    });
+  }
+
   try {
     await pool.query(
       `
       UPDATE ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME}
-      SET description = $1
-      WHERE id = $2
+      SET description = $1,
+          person_group_id = COALESCE(person_group_id, $2)
+      WHERE id = $3
       `,
-      [description, id]
+      [description, personGroupId || null, id]
     );
   } catch (error) {
     console.error('Failed to store updated description for single selection:', {

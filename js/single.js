@@ -37,24 +37,35 @@ function getSingleSelectionContainer() {
     return document.getElementById('singleSelectionList');
 }
 
+const singleGroupRows = new Map();
+
 function renderSelectionRow(selection) {
     const container = getSingleSelectionContainer();
     if (!container || !selection?.imageDataUrl) {
         return;
     }
 
-    const row = document.createElement('div');
-    row.className = 'single-selection-row';
-    if (selection.id) {
-        row.dataset.selectionId = String(selection.id);
+    const groupId = selection.personGroupId || selection.id || null;
+    const groupKey = groupId ? String(groupId) : `selection-${selection.id || Math.random()}`;
+
+    let row = singleGroupRows.get(groupKey);
+    if (!row) {
+        row = document.createElement('div');
+        row.className = 'single-selection-row';
+        row.dataset.groupKey = groupKey;
+        singleGroupRows.set(groupKey, row);
+        container.appendChild(row);
     }
-    row.dataset.description = selection.description || '';
 
     const wrapper = document.createElement('div');
     wrapper.className = 'single-selection-thumb-wrapper';
     if (selection.description && selection.description.length > 0) {
         wrapper.classList.add('has-description');
     }
+    if (selection.id) {
+        wrapper.dataset.selectionId = String(selection.id);
+    }
+    wrapper.dataset.description = selection.description || '';
 
     const img = document.createElement('img');
     img.className = 'single-selection-thumb';
@@ -73,7 +84,6 @@ function renderSelectionRow(selection) {
     }
 
     row.appendChild(wrapper);
-    container.appendChild(row);
 
     const openDescription = async () => {
         const modal = document.getElementById('singleDescriptionModal');
@@ -86,8 +96,8 @@ function renderSelectionRow(selection) {
             return;
         }
 
-        let description = row.dataset.description || '';
-        const selectionId = row.dataset.selectionId ? Number(row.dataset.selectionId) : null;
+        let description = wrapper.dataset.description || '';
+        const selectionId = wrapper.dataset.selectionId ? Number(wrapper.dataset.selectionId) : null;
 
         const needsRefresh = !description || description.length < 400;
 
@@ -106,12 +116,12 @@ function renderSelectionRow(selection) {
                     throw new Error(errorText || `HTTP ${response.status}`);
                 }
 
-                const payload = await response.json().catch(() => ({}));
-                if (payload && typeof payload.description === 'string' && payload.description.trim().length) {
-                    description = payload.description.trim();
-                    row.dataset.description = description;
-                    wrapper.classList.add('has-description');
-                } else {
+                    const payload = await response.json().catch(() => ({}));
+                    if (payload && typeof payload.description === 'string' && payload.description.trim().length) {
+                        description = payload.description.trim();
+                        wrapper.dataset.description = description;
+                        wrapper.classList.add('has-description');
+                    } else {
                     showWarning('Description generation did not return usable text. Try capturing a new photo.', {
                         diagnostics: false
                     });
@@ -136,10 +146,10 @@ function renderSelectionRow(selection) {
         modal.classList.add('is-open');
         modal.setAttribute('aria-hidden', 'false');
     };
-    row.addEventListener('click', () => {
+    wrapper.addEventListener('click', () => {
         void openDescription();
     });
-    row.addEventListener('touchstart', (event) => {
+    wrapper.addEventListener('touchstart', (event) => {
         event.preventDefault();
         void openDescription();
     }, { passive: false });
@@ -167,6 +177,7 @@ async function loadExistingSelections() {
             return;
         }
         container.innerHTML = '';
+        singleGroupRows.clear();
 
         selections.forEach((selection) => {
             renderSelectionRow(selection);
@@ -253,9 +264,12 @@ async function saveCurrentSelection() {
         const selectionMeta = result?.selection || {};
 
         renderSelectionRow({
+            id: selectionMeta.id || null,
+            personGroupId: selectionMeta.personGroupId || null,
             imageDataUrl: croppedDataUrl,
             createdAt: selectionMeta.createdAt || null,
-            capturedAt: selectionMeta.capturedAt || capturedAtIso
+            capturedAt: selectionMeta.capturedAt || capturedAtIso,
+            description: selectionMeta.description || ''
         });
     } catch (error) {
         console.error('Failed to store single-camera selection:', error);
