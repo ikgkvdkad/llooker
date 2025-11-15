@@ -334,6 +334,12 @@ body {
     gap: 12px;
 }
 
+/* Allow vertical scrolling on the single page, even on touch devices */
+body.single-body,
+.single-page {
+    touch-action: pan-y;
+}
+
 .single-toolbar {
     display: flex;
     gap: 8px;
