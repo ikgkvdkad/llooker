@@ -2,13 +2,14 @@
 
 import { DEFAULT_BACK_ASPECT, SINGLE_SELECTIONS_STORE_URL, SINGLE_SELECTIONS_LIST_URL } from './config.js';
 import * as dom from './dom.js';
-import { initializePhotoSlot } from './photo.js';
+import { initializePhotoSlot, displayPhotoForSide } from './photo.js';
 import { setupSelectionInteractions, updateSelectionStyles } from './selection.js';
 import { updateCameraHalfAspect, stopAllCameras, handleCameraButtonClick } from './camera.js';
 import { renderAppVersion, showError, showWarning } from './ui.js';
 import { snapshotViewportState } from './zoom.js';
 import { photoSlots } from './state.js';
 import { createViewportDataUrl, buildViewportSignature } from './analysis-api.js';
+import { readFileAsDataUrl } from './utils.js';
 import {
     handlePointerDownOnHalf,
     handlePointerMoveOnHalf,
@@ -176,6 +177,89 @@ async function saveCurrentSelection() {
     }
 }
 
+async function handleSingleUpload(fileInput) {
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) {
+        return;
+    }
+
+    const label = 'Subject';
+
+    if (file.type && !file.type.startsWith('image/')) {
+        const message = `${label} upload failed: selected file is not an image.`;
+        console.warn(message);
+        showError(message, { diagnostics: false });
+        fileInput.value = '';
+        return;
+    }
+
+    try {
+        const dataUrl = await readFileAsDataUrl(file);
+        if (typeof dataUrl !== 'string' || !dataUrl.length) {
+            throw new Error('Uploaded image data unavailable.');
+        }
+        // Reuse existing display pipeline for the "you"/back slot
+        displayPhotoForSide('you', dataUrl);
+        stopAllCameras();
+    } catch (error) {
+        console.error(`${label} photo upload failed (single page):`, error);
+        const message = `${label} upload failed: ${error?.message || 'Unable to process image.'}`;
+        showError(message, {
+            diagnostics: false,
+            detail: error?.stack || null
+        });
+    } finally {
+        fileInput.value = '';
+    }
+}
+
+function attachSingleUploadHandler(button, input) {
+    if (!button || !input) {
+        showWarning('Upload controls missing on single camera page.', { diagnostics: false });
+        return;
+    }
+
+    const triggerInputSelection = () => {
+        input.click();
+    };
+
+    let suppressNextClick = false;
+    let suppressTimerId = null;
+
+    const clearSuppressTimer = () => {
+        if (suppressTimerId !== null) {
+            window.clearTimeout(suppressTimerId);
+            suppressTimerId = null;
+        }
+    };
+
+    button.addEventListener('click', (event) => {
+        if (suppressNextClick) {
+            suppressNextClick = false;
+            clearSuppressTimer();
+            return;
+        }
+        triggerInputSelection();
+    });
+
+    button.addEventListener('pointerup', (event) => {
+        if (event.pointerType === 'touch') {
+            event.preventDefault();
+            suppressNextClick = true;
+            clearSuppressTimer();
+            suppressTimerId = window.setTimeout(() => {
+                suppressNextClick = false;
+                suppressTimerId = null;
+            }, 300);
+            triggerInputSelection();
+        }
+    });
+
+    input.addEventListener('change', () => {
+        void handleSingleUpload(input);
+    });
+}
+
 function initSinglePage() {
     // Set default aspect ratio for back camera
     updateCameraHalfAspect('back', DEFAULT_BACK_ASPECT);
@@ -207,6 +291,11 @@ function initSinglePage() {
             handleCameraButtonClick('you');
         }, { passive: false });
     }
+
+    // Upload button behavior (single page variant)
+    const uploadButton = document.getElementById('youUploadButton');
+    const uploadInput = document.getElementById('youUploadInput');
+    attachSingleUploadHandler(uploadButton, uploadInput);
 
     // Save selection button
     const saveButton = document.getElementById('singleSaveButton');

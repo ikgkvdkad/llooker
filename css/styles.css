@@ -305,17 +305,18 @@ body {
 
 .single-selection-thumb-wrapper {
     width: 100%;
-    max-width: 480px;
+    max-width: 260px;
     border-radius: 12px;
     overflow: hidden;
-    border: 2px solid rgba(255, 255, 255, 0.25);
+    border: 2px solid rgba(255, 255, 255, 0.18);
     background: radial-gradient(circle at center, rgba(36, 38, 62, 0.65), rgba(5, 5, 12, 0.95));
+    margin: 0 auto;
 }
 
 .single-selection-thumb {
     display: block;
     width: 100%;
-    height: auto;
+    height: 120px;
     object-fit: cover;
 }
 
