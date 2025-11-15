@@ -9,7 +9,7 @@ import { renderAppVersion, showError, showWarning } from './ui.js';
 import { snapshotViewportState } from './zoom.js';
 import { photoSlots } from './state.js';
 import { createViewportDataUrl, buildViewportSignature } from './analysis-api.js';
-import { readFileAsDataUrl } from './utils.js';
+import { readFileAsDataUrl, loadImageElement } from './utils.js';
 import {
     handlePointerDownOnHalf,
     handlePointerMoveOnHalf,
@@ -38,6 +38,40 @@ function getSingleSelectionContainer() {
 }
 
 const singleGroupRows = new Map();
+
+async function buildFullFrameViewportSnapshot(photoDataUrl) {
+    const image = await loadImageElement(photoDataUrl);
+    const naturalWidth = image?.naturalWidth || image?.width || 0;
+    const naturalHeight = image?.naturalHeight || image?.height || 0;
+
+    if (!naturalWidth || !naturalHeight) {
+        throw new Error('Uploaded photo dimensions unavailable.');
+    }
+
+    const devicePixelRatio = window.devicePixelRatio && Number.isFinite(window.devicePixelRatio)
+        ? Math.max(1, window.devicePixelRatio)
+        : 1;
+
+    return {
+        containerWidth: naturalWidth,
+        containerHeight: naturalHeight,
+        naturalWidth,
+        naturalHeight,
+        objectFit: 'contain',
+        transform: {
+            scale: 1,
+            translateX: 0,
+            translateY: 0
+        },
+        devicePixelRatio,
+        selection: {
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1
+        }
+    };
+}
 
 function renderSelectionRow(selection) {
     const container = getSingleSelectionContainer();
@@ -191,7 +225,7 @@ async function loadExistingSelections() {
     }
 }
 
-async function saveCurrentSelection() {
+async function saveCurrentSelection({ viewportOverride = null } = {}) {
     assertConfigured(
         SINGLE_SELECTIONS_STORE_URL,
         'Single selections API (store) is not configured.'
@@ -203,11 +237,12 @@ async function saveCurrentSelection() {
         return;
     }
 
-    const viewport = snapshotViewportState('back');
+    const viewport = viewportOverride || snapshotViewportState('back');
     if (!viewport) {
-        showWarning('Viewing area is still stabilizing. Adjust the frame and try saving again.', {
-            diagnostics: false
-        });
+        const message = viewportOverride
+            ? 'Uploaded photo is still loading. Wait a moment and try again.'
+            : 'Viewing area is still stabilizing. Adjust the frame and try saving again.';
+        showWarning(message, { diagnostics: false });
         return;
     }
 
@@ -336,6 +371,8 @@ async function handleSingleUpload(fileInput) {
         // Reuse existing display pipeline for the "you"/back slot
         displayPhotoForSide('you', dataUrl);
         stopAllCameras();
+        const viewportOverride = await buildFullFrameViewportSnapshot(dataUrl);
+        await saveCurrentSelection({ viewportOverride });
     } catch (error) {
         console.error(`${label} photo upload failed (single page):`, error);
         const message = `${label} upload failed: ${error?.message || 'Unable to process image.'}`;
