@@ -105,14 +105,22 @@ function ensureSingleCameraSelectionsTable(pool) {
       image_data_url TEXT NOT NULL,
       viewport JSONB,
       signature TEXT,
-      location JSONB
+      location JSONB,
+      description TEXT
     );
   `;
 
-  ensureSingleSelectionsPromise = pool.query(createTableSql).catch((error) => {
-    ensureSingleSelectionsPromise = null;
-    throw error;
-  });
+  const alterTableSql = `
+    ALTER TABLE ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME}
+    ADD COLUMN IF NOT EXISTS description TEXT;
+  `;
+
+  ensureSingleSelectionsPromise = pool.query(createTableSql)
+    .then(() => pool.query(alterTableSql))
+    .catch((error) => {
+      ensureSingleSelectionsPromise = null;
+      throw error;
+    });
 
   return ensureSingleSelectionsPromise;
 }

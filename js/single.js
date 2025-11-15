@@ -45,6 +45,7 @@ function renderSelectionRow(selection) {
 
     const row = document.createElement('div');
     row.className = 'single-selection-row';
+    row.dataset.description = selection.description || '';
 
     const wrapper = document.createElement('div');
     wrapper.className = 'single-selection-thumb-wrapper';
@@ -67,6 +68,36 @@ function renderSelectionRow(selection) {
 
     row.appendChild(wrapper);
     container.appendChild(row);
+
+    const openDescription = () => {
+        const description = row.dataset.description || '';
+        const modal = document.getElementById('singleDescriptionModal');
+        const textEl = document.getElementById('singleDescriptionText');
+
+        if (!modal || !textEl) {
+            showWarning('Description viewer unavailable. Reload the page and try again.', {
+                diagnostics: false
+            });
+            return;
+        }
+
+        if (!description) {
+            showWarning('Description not available for this photo. Capture a new photo to generate one.', {
+                diagnostics: false
+            });
+            return;
+        }
+
+        textEl.textContent = description;
+        modal.classList.add('is-open');
+        modal.setAttribute('aria-hidden', 'false');
+    };
+
+    row.addEventListener('click', openDescription);
+    row.addEventListener('touchstart', (event) => {
+        event.preventDefault();
+        openDescription();
+    }, { passive: false });
 }
 
 async function loadExistingSelections() {
@@ -363,6 +394,15 @@ function attachCameraModalHandlers() {
     if (overlay && modal) {
         overlay.addEventListener('click', () => {
             closeSingleCameraModal();
+        });
+    }
+
+    const descriptionModal = document.getElementById('singleDescriptionModal');
+    const descriptionOverlay = document.getElementById('singleDescriptionOverlay');
+    if (descriptionOverlay && descriptionModal) {
+        descriptionOverlay.addEventListener('click', () => {
+            descriptionModal.classList.remove('is-open');
+            descriptionModal.setAttribute('aria-hidden', 'true');
         });
     }
 
