@@ -372,6 +372,10 @@ body {
     display: none !important;
 }
 
+.single-camera-modal .controls-row {
+    display: none !important;
+}
+
 .similarity-rationale-header {
     display: flex;
     align-items: center;

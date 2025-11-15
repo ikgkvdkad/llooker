@@ -4,7 +4,7 @@ import { DEFAULT_BACK_ASPECT, SINGLE_SELECTIONS_STORE_URL, SINGLE_SELECTIONS_LIS
 import * as dom from './dom.js';
 import { initializePhotoSlot, displayPhotoForSide } from './photo.js';
 import { setupSelectionInteractions, updateSelectionStyles } from './selection.js';
-import { updateCameraHalfAspect, stopAllCameras, handleCameraButtonClick, isCameraActive } from './camera.js';
+import { updateCameraHalfAspect, stopAllCameras, openBackCamera, captureBackPhoto } from './camera.js';
 import { renderAppVersion, showError, showWarning } from './ui.js';
 import { snapshotViewportState } from './zoom.js';
 import { photoSlots } from './state.js';
@@ -14,7 +14,8 @@ import {
     handlePointerDownOnHalf,
     handlePointerMoveOnHalf,
     handlePointerUpOnHalf,
-    handlePointerCancelOnHalf
+    handlePointerCancelOnHalf,
+    registerTapHandler
 } from './interactions.js';
 
 function assertConfigured(value, message) {
@@ -336,22 +337,29 @@ function attachCameraModalHandlers() {
         });
     }
 
-    const cameraButton = dom.youCameraButton;
-    if (cameraButton) {
-        cameraButton.addEventListener('click', async () => {
-            const wasActive = isCameraActive('back');
-            handleCameraButtonClick('you');
+    // Use tap gestures on the camera half to start/capture instead of a visible button
+    registerTapHandler('back', ({ isActive }) => {
+        const cameraModal = document.getElementById('singleCameraModal');
+        if (!cameraModal || !cameraModal.classList.contains('is-open')) {
+            // Not in single camera modal context; fall back to default behavior.
+            return false;
+        }
 
-            // If camera was already active, this click captured a frame.
-            if (wasActive) {
-                // Allow capture pipeline to update photoSlots, then save and close.
-                window.setTimeout(async () => {
-                    await saveCurrentSelection();
-                    closeSingleCameraModal();
-                }, 0);
-            }
-        });
-    }
+        if (!isActive) {
+            // First tap: start camera stream
+            openBackCamera().catch(error => console.error('Failed to open back camera (single page):', error));
+            return true;
+        }
+
+        // Camera active: capture, save, and close
+        captureBackPhoto();
+        window.setTimeout(() => {
+            void saveCurrentSelection();
+            closeSingleCameraModal();
+        }, 0);
+
+        return true;
+    });
 }
 
 function initSinglePage() {
@@ -385,7 +393,7 @@ function initSinglePage() {
     if (openCameraButton) {
         openCameraButton.addEventListener('click', () => {
             openSingleCameraModal();
-            // First click on modal camera button will start camera
+            // Camera will start on first tap inside the modal
         });
     }
 

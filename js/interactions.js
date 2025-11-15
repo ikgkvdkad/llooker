@@ -7,6 +7,18 @@ import { isCameraActive, isCameraFrozen, openBackCamera, openSelfieCamera, captu
 import { applyPhotoTransform, scheduleCameraZoomUpdate, clearMovementDebounce } from './zoom.js';
 import { scheduleViewportAnalysis, submitViewportAnalysis } from './analysis-api.js';
 
+const tapHandlers = {
+    back: null,
+    selfie: null
+};
+
+export function registerTapHandler(slotKey, handler) {
+    if (slotKey !== 'back' && slotKey !== 'selfie') {
+        return;
+    }
+    tapHandlers[slotKey] = typeof handler === 'function' ? handler : null;
+}
+
 /**
  * Reset pointer tracking for a slot
  */
@@ -304,9 +316,27 @@ export function handleTapOnHalf(slotKey, event) {
         return;
     }
 
-    const now = performance.now();
     const isFrozen = isCameraFrozen(slotKey);
     const isActive = isCameraActive(slotKey);
+
+    const customHandler = tapHandlers[slotKey];
+    if (typeof customHandler === 'function') {
+        try {
+            const handled = customHandler({
+                slotKey,
+                event,
+                isFrozen,
+                isActive
+            });
+            if (handled === true) {
+                return;
+            }
+        } catch (handlerError) {
+            console.error('Custom tap handler failed:', handlerError);
+        }
+    }
+
+    const now = performance.now();
 
     if (isFrozen) {
         const lastTap = state.lastTap;
