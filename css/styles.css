@@ -1078,6 +1078,9 @@ body.landing-body {
     padding: 0 12px 8px;
     scroll-snap-type: x proximity;
     scrollbar-width: thin;
+    touch-action: pan-x;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
 }
 
 .gallery-scroll::-webkit-scrollbar {
