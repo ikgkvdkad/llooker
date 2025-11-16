@@ -1,4 +1,5 @@
 const OPENAI_MODEL = 'gpt-4o-mini';
+const GROUPING_MATCH_THRESHOLD = 75;
 
 async function generateStablePersonDescription(imageDataUrl) {
   const apiKey = process.env.OPENAI_API_KEY || process.env.OPENAIKEY;
@@ -289,6 +290,7 @@ async function evaluateDescriptionGrouping(newDescription, groups) {
 
 module.exports = {
   generateStablePersonDescription,
-  evaluateDescriptionGrouping
+  evaluateDescriptionGrouping,
+  GROUPING_MATCH_THRESHOLD
 };
 
