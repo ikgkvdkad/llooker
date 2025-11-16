@@ -330,17 +330,16 @@ html {
 .single-selection-row {
     width: 100%;
     max-width: none;
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 10px;
     align-items: flex-start;
     justify-content: flex-start;
-    gap: 8px;
-    flex-wrap: wrap;
     touch-action: pan-y;
 }
 
 .single-selection-thumb-wrapper {
-    width: 220px;
-    max-width: 220px;
+    width: 100%;
     border-radius: 12px;
     overflow: hidden;
     border: 2px solid rgba(255, 255, 255, 0.18);
@@ -348,6 +347,7 @@ html {
     margin: 0;
     display: flex;
     flex-direction: column;
+    aspect-ratio: 3 / 4;
 }
 
 .single-selection-thumb-wrapper.has-description {
@@ -357,14 +357,17 @@ html {
 .single-selection-thumb {
     display: block;
     width: 100%;
-    height: 80px;
+    height: 100%;
+    flex: 1 1 auto;
     object-fit: cover;
+    object-position: center;
 }
 
 .single-selection-meta {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.7);
-    padding: 6px 10px 8px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.68);
+    padding: 4px 8px 6px;
+    text-align: center;
 }
 
 .single-selection-description-panel,
@@ -1203,6 +1206,27 @@ body.single-body * {
         -webkit-overflow-scrolling: touch;
         touch-action: pan-y;
         overscroll-behavior-y: contain;
+    }
+}
+
+@media (max-width: 640px) {
+    .single-selection-row {
+        grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+        gap: 6px;
+    }
+
+    .single-selection-thumb-wrapper {
+        border-radius: 10px;
+        border-width: 1.5px;
+        aspect-ratio: 2 / 3;
+    }
+
+    .single-selection-thumb {
+        border-radius: 6px;
+    }
+
+    .single-selection-meta {
+        display: none;
     }
 }
 
