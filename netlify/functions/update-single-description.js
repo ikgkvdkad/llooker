@@ -112,6 +112,7 @@ exports.handler = async (event) => {
   }
 
   let personGroupId = row.person_group_id || null;
+  let groupingDebugForResponse = null;
 
   try {
     // Only assign a group if one has not been set yet.
@@ -140,11 +141,20 @@ exports.handler = async (event) => {
 
       const groups = Array.from(groupMap.values());
 
-      const { bestGroupId, bestGroupProbability } = await evaluateDescriptionGrouping(description || '', groups);
+      const groupingResult = await evaluateDescriptionGrouping(description || '', groups);
+      const bestGroupId = groupingResult.bestGroupId;
+      const bestGroupProbability = groupingResult.bestGroupProbability;
 
       if (bestGroupId && bestGroupProbability >= 66) {
         personGroupId = bestGroupId;
       }
+
+      groupingDebugForResponse = {
+        newDescription: description || '',
+        groups,
+        bestGroupId,
+        bestGroupProbability
+      };
     }
   } catch (groupError) {
     console.error('Failed to evaluate grouping for updated single selection:', {
@@ -181,7 +191,8 @@ exports.handler = async (event) => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       id,
-      description
+      description,
+      groupingDebug: groupingDebugForResponse
     })
   };
 };

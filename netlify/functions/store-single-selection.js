@@ -96,11 +96,21 @@ exports.handler = async (event) => {
 
     const groups = Array.from(groupMap.values());
 
-    const { bestGroupId, bestGroupProbability } = await evaluateDescriptionGrouping(description || '', groups);
+    const groupingResult = await evaluateDescriptionGrouping(description || '', groups);
+    const bestGroupId = groupingResult.bestGroupId;
+    const bestGroupProbability = groupingResult.bestGroupProbability;
 
     if (bestGroupId && bestGroupProbability >= 66) {
       personGroupIdForInsert = bestGroupId;
     }
+
+    // Keep only lightweight debug data for the client
+    var groupingDebugForResponse = {
+      newDescription: description || '',
+      groups,
+      bestGroupId,
+      bestGroupProbability
+    };
   } catch (groupingError) {
     console.error('Failed to evaluate grouping for single selection:', {
       message: groupingError?.message,
@@ -157,6 +167,7 @@ exports.handler = async (event) => {
       statusCode: 201,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        groupingDebug: typeof groupingDebugForResponse === 'object' ? groupingDebugForResponse : null,
         selection: {
           id: record?.id ?? null,
           createdAt: record?.created_at ?? null,

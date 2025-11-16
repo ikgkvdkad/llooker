@@ -187,7 +187,10 @@ function renderSelectionRow(selection) {
                     throw new Error(errorText || `HTTP ${response.status}`);
                 }
 
-                    const payload = await response.json().catch(() => ({}));
+                const payload = await response.json().catch(() => ({}));
+                if (payload && payload.groupingDebug) {
+                    console.log('single-page grouping (refresh)', payload.groupingDebug);
+                }
                     if (payload && typeof payload.description === 'string' && payload.description.trim().length) {
                         description = payload.description.trim();
                         wrapper.dataset.description = description;
@@ -333,6 +336,9 @@ async function saveCurrentSelection({ viewportOverride = null } = {}) {
         }
 
         const result = await response.json().catch(() => ({}));
+        if (result && result.groupingDebug) {
+            console.log('single-page grouping (save)', result.groupingDebug);
+        }
         const selectionMeta = result?.selection || {};
 
         renderSelectionRow({
