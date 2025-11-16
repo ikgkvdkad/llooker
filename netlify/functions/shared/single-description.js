@@ -119,8 +119,11 @@ async function evaluateDescriptionGrouping(newDescription, groups) {
             'You are given a new description and a list of existing group descriptions.',
             'Use ONLY stable appearance traits (gender presentation, age range, build, height impression, skin tone, hair details, eyewear/headwear, distinctive clothing/accessories, visible tattoos or scars).',
             'Ignore differences that can change within a few hours (pose, facial expression, background, lighting, camera angle, small grooming or clothing adjustments).',
-            'Be conservative: only consider someone the same person when appearance is very strongly aligned. Prefer false negatives over false positives.',
-            'You must return ONLY a JSON object with two keys: "best_group_id" (the numeric id of the most likely matching group, or null if there is no suitable match) and "best_group_probability" (an integer 0-100 giving the probability that the new description belongs to that group).'
+            'For each group, you must internally estimate a similarity score from 0 to 100 based on how likely it is that the new description refers to the same person as that group.',
+            'Set "best_group_id" to the id of the group with the highest similarity score (or null if there are no groups).',
+            'Set "best_group_probability" to that highest similarity score (integer 0-100).',
+            'Include a short human-readable "explanation" string that mentions the chosen group id and the key similarities or differences that led to your choice.',
+            'You must return ONLY a JSON object with exactly three keys: "best_group_id", "best_group_probability", and "explanation".'
           ].join(' ')
         },
         {
@@ -192,15 +195,18 @@ async function evaluateDescriptionGrouping(newDescription, groups) {
     const bestGroupProbability = Number.isFinite(Number(parsed.best_group_probability))
       ? Math.max(0, Math.min(100, Number(parsed.best_group_probability)))
       : 0;
+    const explanation = typeof parsed.explanation === 'string' ? parsed.explanation : '';
 
     console.log('=== single-grouping parsed result ===', {
       bestGroupId,
-      bestGroupProbability
+      bestGroupProbability,
+      explanation
     });
 
     return {
       bestGroupId,
-      bestGroupProbability
+      bestGroupProbability,
+      explanation
     };
   } catch (error) {
     console.error('Error while evaluating single selection grouping:', {
@@ -208,8 +214,9 @@ async function evaluateDescriptionGrouping(newDescription, groups) {
       stack: error?.stack
     });
     return {
-      bestGroupId: null,
-      bestGroupProbability: 0
+    bestGroupId: null,
+    bestGroupProbability: 0,
+    explanation: ''
     };
   }
 }

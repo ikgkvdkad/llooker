@@ -144,6 +144,7 @@ exports.handler = async (event) => {
       const groupingResult = await evaluateDescriptionGrouping(description || '', groups);
       const bestGroupId = groupingResult.bestGroupId;
       const bestGroupProbability = groupingResult.bestGroupProbability;
+      const explanation = groupingResult.explanation || '';
 
       if (bestGroupId && bestGroupProbability >= 66) {
         personGroupId = bestGroupId;
@@ -153,7 +154,8 @@ exports.handler = async (event) => {
         newDescription: description || '',
         groups,
         bestGroupId,
-        bestGroupProbability
+        bestGroupProbability,
+        explanation
       };
     }
   } catch (groupError) {
