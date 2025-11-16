@@ -109,6 +109,17 @@ Photo 2 outfit:
 ${outfitSummary2}
 Photo 2 discriminators: ${JSON.stringify(discriminators2)}
 
+  Step 0 — Fatal-mismatch check (do this first). If ANY fatal mismatch is present, set probability = 0 and return immediately with an explanation naming the fatal mismatch.
+
+  Fatal mismatches (examples):
+  - Different major lower-body garment category (skirt/dress/shorts vs full-length pants/jeans).
+  - Different major outfit class (dress/one-piece vs separate top+bottom).
+  - Clear gender-presentation conflict.
+  - Clear age-band conflict (non-overlapping age estimates).
+  - Opposite footwear state if visible (barefoot vs wearing shoes/heels) when footwear is described.
+
+  Do NOT treat absent mention of a trait as fatal unless the trait is explicitly described differently in both descriptions (e.g., "wearing jeans" vs "wearing a skirt").
+
   TASK:
   Determine the probability (0-100%) that these are photos of the SAME PERSON.
 
