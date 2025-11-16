@@ -165,52 +165,6 @@ function renderSelectionRow(selection) {
         wrapper.appendChild(meta);
     }
 
-      const descriptionPanel = document.createElement('div');
-      descriptionPanel.className = 'single-selection-description-panel';
-
-      const descriptionLabel = document.createElement('div');
-      descriptionLabel.className = 'single-selection-section-label';
-      descriptionLabel.textContent = 'Description';
-      descriptionPanel.appendChild(descriptionLabel);
-
-      const descriptionBody = document.createElement('p');
-      descriptionBody.className = 'single-selection-description';
-      descriptionBody.textContent = (selection.description && selection.description.trim().length > 0)
-          ? selection.description.trim()
-          : 'No description generated yet.';
-      descriptionPanel.appendChild(descriptionBody);
-
-      wrapper.appendChild(descriptionPanel);
-
-    const groupingPanel = document.createElement('div');
-    groupingPanel.className = 'single-selection-grouping-panel';
-
-    const groupingLabel = document.createElement('div');
-    groupingLabel.className = 'single-selection-section-label';
-    groupingLabel.textContent = 'Grouping';
-    groupingPanel.appendChild(groupingLabel);
-
-      if (groupingProbabilityValue !== null || groupingExplanationText) {
-          if (groupingProbabilityValue !== null) {
-              const probabilityEl = document.createElement('div');
-              probabilityEl.className = 'single-selection-grouping-probability';
-              probabilityEl.textContent = `${groupingProbabilityValue}% match likelihood`;
-              groupingPanel.appendChild(probabilityEl);
-          }
-
-          const explanationEl = document.createElement('p');
-          explanationEl.className = 'single-selection-grouping-explanation';
-          explanationEl.textContent = groupingExplanationText || 'Explanation unavailable.';
-          groupingPanel.appendChild(explanationEl);
-      } else {
-          const pendingEl = document.createElement('div');
-          pendingEl.className = 'single-selection-grouping-empty';
-          pendingEl.textContent = 'Grouping pending — capture a description to compare.';
-          groupingPanel.appendChild(pendingEl);
-      }
-
-      wrapper.appendChild(groupingPanel);
-
     row.appendChild(wrapper);
 
     const openDescription = async () => {
