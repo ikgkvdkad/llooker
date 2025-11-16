@@ -96,28 +96,36 @@ function ensureSingleCameraSelectionsTable(pool) {
     return ensureSingleSelectionsPromise;
   }
 
-  const createTableSql = `
-    CREATE TABLE IF NOT EXISTS ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME} (
-      id BIGSERIAL PRIMARY KEY,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      captured_at TIMESTAMPTZ,
-      role TEXT,
-      image_data_url TEXT NOT NULL,
-      viewport JSONB,
-      signature TEXT,
-      location JSONB,
-      description TEXT,
-      person_group_id BIGINT
-    );
-  `;
+    const createTableSql = `
+      CREATE TABLE IF NOT EXISTS ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME} (
+        id BIGSERIAL PRIMARY KEY,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        captured_at TIMESTAMPTZ,
+        role TEXT,
+        image_data_url TEXT NOT NULL,
+        viewport JSONB,
+        signature TEXT,
+        location JSONB,
+        description TEXT,
+        person_group_id BIGINT,
+        grouping_probability INTEGER,
+        grouping_explanation TEXT
+      );
+    `;
 
-  const alterTableSql = `
-    ALTER TABLE ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME}
-    ADD COLUMN IF NOT EXISTS description TEXT;
+    const alterTableSql = `
+      ALTER TABLE ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME}
+      ADD COLUMN IF NOT EXISTS description TEXT;
 
-    ALTER TABLE ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME}
-    ADD COLUMN IF NOT EXISTS person_group_id BIGINT;
-  `;
+      ALTER TABLE ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME}
+      ADD COLUMN IF NOT EXISTS person_group_id BIGINT;
+
+      ALTER TABLE ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME}
+      ADD COLUMN IF NOT EXISTS grouping_probability INTEGER;
+
+      ALTER TABLE ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME}
+      ADD COLUMN IF NOT EXISTS grouping_explanation TEXT;
+    `;
 
   ensureSingleSelectionsPromise = pool.query(createTableSql)
     .then(() => pool.query(alterTableSql))
