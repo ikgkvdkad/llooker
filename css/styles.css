@@ -223,6 +223,32 @@ html {
     background: rgba(255, 255, 255, 0.25);
 }
 
+.similarity-single-link {
+    margin-top: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 16px;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.similarity-single-link:hover,
+.similarity-single-link:focus-visible {
+    background: rgba(255, 255, 255, 0.18);
+    border-color: rgba(255, 255, 255, 0.85);
+    color: rgba(255, 255, 255, 1);
+    outline: none;
+}
+
 .similarity-rationale-modal {
     position: fixed;
     inset: 0;
