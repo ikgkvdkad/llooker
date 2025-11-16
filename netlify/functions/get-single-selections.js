@@ -35,12 +35,20 @@ exports.handler = async (event) => {
 
   try {
     const listQuery = {
-      text: `
-        SELECT id, created_at, captured_at, role, image_data_url, description, person_group_id
-        FROM ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME}
-        ORDER BY created_at DESC
-        LIMIT $1 OFFSET $2
-      `,
+        text: `
+          SELECT id,
+                 created_at,
+                 captured_at,
+                 role,
+                 image_data_url,
+                 description,
+                 person_group_id,
+                 grouping_probability,
+                 grouping_explanation
+          FROM ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME}
+          ORDER BY created_at DESC
+          LIMIT $1 OFFSET $2
+        `,
       values: [limit, offset]
     };
     const result = await pool.query(listQuery);
@@ -48,15 +56,19 @@ exports.handler = async (event) => {
     const countResult = await pool.query(`SELECT COUNT(*) AS total FROM ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME}`);
     const total = parseInt(countResult.rows?.[0]?.total ?? 0, 10);
 
-    const selections = result.rows.map(row => ({
-      id: row.id,
-      createdAt: row.created_at,
-      capturedAt: row.captured_at,
-      role: row.role,
-      imageDataUrl: row.image_data_url,
-      description: row.description || null,
-      personGroupId: row.person_group_id || null
-    }));
+      const selections = result.rows.map(row => ({
+        id: row.id,
+        createdAt: row.created_at,
+        capturedAt: row.captured_at,
+        role: row.role,
+        imageDataUrl: row.image_data_url,
+        description: row.description || null,
+        personGroupId: row.person_group_id || null,
+        groupingProbability: Number.isFinite(Number(row.grouping_probability))
+          ? Number(row.grouping_probability)
+          : null,
+        groupingExplanation: row.grouping_explanation || null
+      }));
 
     return {
       statusCode: 200,

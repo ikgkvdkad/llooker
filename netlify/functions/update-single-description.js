@@ -56,7 +56,7 @@ exports.handler = async (event) => {
   try {
     const result = await pool.query(
       `
-      SELECT id, image_data_url, description, person_group_id
+        SELECT id, image_data_url, description, person_group_id, grouping_probability, grouping_explanation
       FROM ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME}
       WHERE id = $1
       `,
@@ -111,8 +111,10 @@ exports.handler = async (event) => {
     };
   }
 
-  let personGroupId = row.person_group_id || null;
-  let groupingDebugForResponse = null;
+    let personGroupId = row.person_group_id || null;
+    let groupingDebugForResponse = null;
+    let groupingProbabilityForUpdate = null;
+    let groupingExplanationForUpdate = null;
 
   try {
     // Only assign a group if one has not been set yet.
@@ -141,22 +143,31 @@ exports.handler = async (event) => {
 
       const groups = Array.from(groupMap.values());
 
-      const groupingResult = await evaluateDescriptionGrouping(description || '', groups);
-      const bestGroupId = groupingResult.bestGroupId;
-      const bestGroupProbability = groupingResult.bestGroupProbability;
-      const explanation = groupingResult.explanation || '';
+        const groupingResult = await evaluateDescriptionGrouping(description || '', groups);
+        const bestGroupId = Number.isFinite(Number(groupingResult.bestGroupId))
+          ? Number(groupingResult.bestGroupId)
+          : null;
+        const bestGroupProbability = Number.isFinite(Number(groupingResult.bestGroupProbability))
+          ? Math.max(0, Math.min(100, Math.round(Number(groupingResult.bestGroupProbability))))
+          : null;
+        const explanation = groupingResult.explanation && typeof groupingResult.explanation === 'string'
+          ? groupingResult.explanation.trim()
+          : '';
 
-      if (bestGroupId && bestGroupProbability >= 90) {
-        personGroupId = bestGroupId;
-      }
+        if (bestGroupId && bestGroupProbability !== null && bestGroupProbability >= 90) {
+          personGroupId = bestGroupId;
+        }
 
-      groupingDebugForResponse = {
-        newDescription: description || '',
-        groups,
-        bestGroupId,
-        bestGroupProbability,
-        explanation
-      };
+        groupingProbabilityForUpdate = bestGroupProbability;
+        groupingExplanationForUpdate = explanation || null;
+
+        groupingDebugForResponse = {
+          newDescription: description || '',
+          groups,
+          bestGroupId,
+          bestGroupProbability,
+          explanation
+        };
     }
   } catch (groupError) {
     console.error('Failed to evaluate grouping for updated single selection:', {
@@ -166,16 +177,18 @@ exports.handler = async (event) => {
     });
   }
 
-  try {
-    await pool.query(
-      `
-      UPDATE ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME}
-      SET description = $1,
-          person_group_id = COALESCE(person_group_id, $2)
-      WHERE id = $3
-      `,
-      [description, personGroupId || null, id]
-    );
+    try {
+      await pool.query(
+        `
+        UPDATE ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME}
+        SET description = $1,
+            person_group_id = COALESCE(person_group_id, $2),
+            grouping_probability = COALESCE($3, grouping_probability),
+            grouping_explanation = COALESCE($4, grouping_explanation)
+        WHERE id = $5
+        `,
+        [description, personGroupId || null, groupingProbabilityForUpdate, groupingExplanationForUpdate, id]
+      );
   } catch (error) {
     console.error('Failed to store updated description for single selection:', {
       id,
@@ -194,6 +207,8 @@ exports.handler = async (event) => {
     body: JSON.stringify({
       id,
       description,
+        groupingProbability: groupingProbabilityForUpdate ?? row.grouping_probability ?? null,
+        groupingExplanation: groupingExplanationForUpdate ?? row.grouping_explanation ?? null,
       groupingDebug: groupingDebugForResponse
     })
   };

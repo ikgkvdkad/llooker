@@ -71,6 +71,8 @@ exports.handler = async (event) => {
   const description = await generateStablePersonDescription(imageDataUrl);
 
   let personGroupIdForInsert = null;
+  let groupingProbabilityForInsert = null;
+  let groupingExplanationForInsert = null;
 
   try {
     // Build canonical descriptions per existing person group using longest description.
@@ -97,13 +99,22 @@ exports.handler = async (event) => {
     const groups = Array.from(groupMap.values());
 
     const groupingResult = await evaluateDescriptionGrouping(description || '', groups);
-    const bestGroupId = groupingResult.bestGroupId;
-    const bestGroupProbability = groupingResult.bestGroupProbability;
-    const explanation = groupingResult.explanation || '';
+    const bestGroupId = Number.isFinite(Number(groupingResult.bestGroupId))
+      ? Number(groupingResult.bestGroupId)
+      : null;
+    const bestGroupProbability = Number.isFinite(Number(groupingResult.bestGroupProbability))
+      ? Math.max(0, Math.min(100, Math.round(Number(groupingResult.bestGroupProbability))))
+      : null;
+    const explanation = groupingResult.explanation && typeof groupingResult.explanation === 'string'
+      ? groupingResult.explanation.trim()
+      : '';
 
-    if (bestGroupId && bestGroupProbability >= 90) {
+    if (bestGroupId && bestGroupProbability !== null && bestGroupProbability >= 90) {
       personGroupIdForInsert = bestGroupId;
     }
+
+    groupingProbabilityForInsert = bestGroupProbability;
+    groupingExplanationForInsert = explanation || null;
 
     // Keep only lightweight debug data for the client
     var groupingDebugForResponse = {
@@ -123,9 +134,9 @@ exports.handler = async (event) => {
 
   const insertQuery = {
     text: `
-      INSERT INTO ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME} (role, image_data_url, viewport, signature, captured_at, description, person_group_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-      RETURNING id, created_at, captured_at, role, description, person_group_id
+        INSERT INTO ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME} (role, image_data_url, viewport, signature, captured_at, description, person_group_id, grouping_probability, grouping_explanation)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        RETURNING id, created_at, captured_at, role, description, person_group_id, grouping_probability, grouping_explanation
     `,
     values: [
       mode || 'single',
@@ -134,7 +145,9 @@ exports.handler = async (event) => {
       signature,
       capturedAt instanceof Date && !Number.isNaN(capturedAt.getTime()) ? capturedAt.toISOString() : null,
       description,
-      personGroupIdForInsert
+        personGroupIdForInsert,
+        groupingProbabilityForInsert,
+        groupingExplanationForInsert
     ]
   };
 
@@ -176,7 +189,9 @@ exports.handler = async (event) => {
           capturedAt: record?.captured_at ?? null,
           role: record?.role ?? null,
           description: record?.description ?? null,
-          personGroupId: finalGroupId ?? null
+            personGroupId: finalGroupId ?? null,
+            groupingProbability: record?.grouping_probability ?? null,
+            groupingExplanation: record?.grouping_explanation ?? null
         }
       })
     };

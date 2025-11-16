@@ -123,25 +123,22 @@ async function evaluateDescriptionGrouping(newDescription, groups) {
     const requestPayload = {
       model: OPENAI_MODEL,
       response_format: { type: 'json_object' },
-      messages: [
-        {
-          role: 'system',
-          content: [
-            'You compare textual descriptions of people for re-identification.',
-            'You are given a new description and a list of existing group descriptions.',
-            'Use ONLY stable appearance traits (gender presentation, age range, build, height impression, skin tone, hair details, eyewear/headwear, distinctive clothing/accessories, visible tattoos or scars).',
-            'Give extra weight to clearly distinctive and rare visible details that would be unlikely to occur by chance on two different people (for example, a specific logo placement, a unique print or pattern, a rip or stain, a very distinctive piece of jewellery, or an unusual combination of garments).',
-            'Treat the presence of the same rare detail in both descriptions as strong positive evidence for a match, but treat the absence of that detail in one description as only weak evidence against a match.',
-            'When comparing clothing colours, mentally account for plausible lighting differences and focus on whether the colours are broadly consistent rather than requiring exact wording matches.', 
-            'Remember that some clothing items, like trousers/pants, distinctive jackets, and shoes, are less likely to change within a few hours than easily removable items like hats, sunglasses, or scarves; treat consistent descriptions of those more stable items as especially strong evidence for a match.', 
-            'Ignore differences that can change within a few hours (pose, facial expression, background, camera angle, small grooming or clothing adjustments).',
-            'For each group, you must internally estimate a similarity score from 0 to 100 based on how likely it is that the new description refers to the same person as that group.',
-            'Set "best_group_id" to the id of the group with the highest similarity score (or null if there are no groups).',
-            'Set "best_group_probability" to that highest similarity score (integer 0-100).',
-            'Include a short human-readable "explanation" string that mentions the chosen group id and the key similarities or differences that led to your choice.',
-            'You must return ONLY a JSON object with exactly three keys: "best_group_id", "best_group_probability", and "explanation".'
-          ].join(' ')
-        },
+        messages: [
+          {
+            role: 'system',
+            content: [
+              'You compare textual descriptions of people for re-identification. Your task is to decide whether a NEW description refers to the same person as one of the EXISTING group descriptions.',
+              'Follow this comparison logic:',
+              '1. Use only stable appearance traits. Allowed evidence: gender presentation, perceived age range, body build and height impression, skin tone, hair type/length/colour, stable clothing items (tops, trousers/pants, dresses, jackets/coats, shoes), and distinctive accessories (jewellery, tattoos, scars, patterns, logos). Ignore pose, expression, background, camera angle, image quality, vibe, attractiveness, posture, cropping.',
+              '2. Clothing stability rule: Photos are taken within roughly an hour, so stable clothing items should match almost exactly. Accept minor wording differences (e.g., "navy blue jacket" vs "dark blue jacket"). Removable accessories (hats, sunglasses, scarves, bags, light outer layers) may differ and should not strongly penalize a match. Clothing is the primary anchor; accessories are secondary.',
+              '3. Weighting hierarchy: (A) Rare/distinctive elements (unique prints/logos, unusual jewellery, tattoos, scars) are very strong positives when they match; missing a rare element is only weakly negative. (B) Core clothing match on stable pieces is extremely strong evidence; contradictory core clothing usually means different people unless a removable item is involved. (C) Physical traits (gender, age band, build, height, skin tone). (D) Semi-stable traits (hair style, hair accessories, temporary items).',
+              '4. Normalisation rules: treat approximate wording and lighting tolerances as similar (e.g., "20s" vs "mid 20s", "dark blonde" vs "light brown-blonde", "navy" vs "dark blue"). Missing details count as unknown, not negative.',
+              '5. Time-gap logic: With only ~1 hour between photos, clothing remains highly stable; accessories/hair can change slightly.',
+              '6. Scoring rules: Give each group a similarity score from 0-100 reflecting likelihood of same person. 100 = extremely strong match, 0 = clearly different. If groups are close, prefer the one sharing more unique traits.',
+              '7. Output format: Return ONLY JSON { "best_group_id": <id or null>, "best_group_probability": <integer 0-100>, "explanation": "<brief explanation of the key matching traits>" }. "best_group_id" must be the id with the highest score (or null if none). "best_group_probability" must be that score.',
+              'Stay within these rules and never include additional keys.'
+            ].join(' ')
+          },
         {
           role: 'user',
           content: [
