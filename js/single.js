@@ -39,6 +39,31 @@ function getSingleSelectionContainer() {
 
 const singleGroupRows = new Map();
 
+function buildDescriptionGroupKey(description) {
+    if (typeof description !== 'string') {
+        return null;
+    }
+
+    const normalized = description
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\b(?:the|a|an|and|with|wearing|holding|carrying|while)\b/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    if (!normalized) {
+        return null;
+    }
+
+    // Simple deterministic hash so similar descriptions map together.
+    let hash = 0;
+    for (let i = 0; i < normalized.length; i += 1) {
+        hash = (hash * 31 + normalized.charCodeAt(i)) >>> 0;
+    }
+
+    return `desc-${normalized.slice(0, 48)}-${hash.toString(16)}`;
+}
+
 async function buildFullFrameViewportSnapshot(photoDataUrl) {
     const image = await loadImageElement(photoDataUrl);
     const naturalWidth = image?.naturalWidth || image?.width || 0;
@@ -79,14 +104,26 @@ function renderSelectionRow(selection) {
         return;
     }
 
-    const groupId = selection.personGroupId || selection.id || null;
-    const groupKey = groupId ? String(groupId) : `selection-${selection.id || Math.random()}`;
+    const descriptionKey = buildDescriptionGroupKey(selection.description);
+    let groupKey;
+    if (selection.personGroupId) {
+        groupKey = `group-${selection.personGroupId}`;
+    } else if (descriptionKey) {
+        groupKey = descriptionKey;
+    } else if (selection.id) {
+        groupKey = `selection-${selection.id}`;
+        console.warn('Selection missing grouping metadata; falling back to unique row.', selection);
+    } else {
+        groupKey = `selection-${crypto.randomUUID?.() || Math.random()}`;
+        console.warn('Selection missing grouping metadata and id; using random row key.', selection);
+    }
 
     let row = singleGroupRows.get(groupKey);
     if (!row) {
         row = document.createElement('div');
         row.className = 'single-selection-row';
         row.dataset.groupKey = groupKey;
+        row.dataset.groupSource = selection.personGroupId ? 'personGroupId' : descriptionKey ? 'description' : 'selectionId';
         singleGroupRows.set(groupKey, row);
         container.appendChild(row);
     }
