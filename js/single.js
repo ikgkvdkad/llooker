@@ -148,6 +148,9 @@ function renderSelectionRow(selection) {
         ? String(groupingProbabilityValue)
         : '';
     wrapper.dataset.groupingExplanation = groupingExplanationText || '';
+    wrapper.dataset.personGroupId = selection.personGroupId
+        ? String(selection.personGroupId)
+        : '';
 
     const img = document.createElement('img');
     img.className = 'single-selection-thumb';
@@ -172,8 +175,9 @@ function renderSelectionRow(selection) {
         const textEl = document.getElementById('singleDescriptionText');
         const probabilityEl = document.getElementById('singleGroupingProbability');
         const explanationEl = document.getElementById('singleGroupingExplanation');
+        const groupIdEl = document.getElementById('singleGroupingId');
 
-        if (!modal || !textEl || !probabilityEl || !explanationEl) {
+        if (!modal || !textEl || !probabilityEl || !explanationEl || !groupIdEl) {
             showWarning('Description viewer is missing required fields. Reload the page and try again.', {
                 diagnostics: false
             });
@@ -209,6 +213,15 @@ function renderSelectionRow(selection) {
         } else {
             explanationEl.textContent = 'Grouping explanation not available for this photo yet.';
             explanationEl.classList.add('is-empty');
+        }
+
+        const groupIdText = (wrapper.dataset.personGroupId || '').trim();
+        if (groupIdText) {
+            groupIdEl.textContent = `Group ID: ${groupIdText}`;
+            groupIdEl.classList.remove('is-empty');
+        } else {
+            groupIdEl.textContent = 'Group ID not available for this photo yet.';
+            groupIdEl.classList.add('is-empty');
         }
 
         modal.classList.add('is-open');
