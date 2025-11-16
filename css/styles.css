@@ -330,30 +330,22 @@ html {
 .single-selection-row {
     width: 100%;
     max-width: none;
-    display: flex;
-    flex-wrap: nowrap;
-    gap: 10px;
-    align-items: flex-start;
-    justify-content: flex-start;
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding-bottom: 4px;
-    touch-action: pan-x;
-    scrollbar-width: thin;
-    overscroll-behavior-x: contain;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    align-items: stretch;
+    justify-items: stretch;
 }
 
 .single-selection-thumb-wrapper {
-    flex: 0 0 120px;
-    width: 120px;
-    border-radius: 12px;
+    width: 100%;
+    border-radius: 10px;
     overflow: hidden;
     border: 2px solid rgba(255, 255, 255, 0.18);
     background: radial-gradient(circle at center, rgba(36, 38, 62, 0.65), rgba(5, 5, 12, 0.95));
     margin: 0;
     display: flex;
     flex-direction: column;
-    aspect-ratio: 3 / 4;
 }
 
 .single-selection-thumb-wrapper.has-description {
@@ -363,8 +355,7 @@ html {
 .single-selection-thumb {
     display: block;
     width: 100%;
-    height: 100%;
-    flex: 1 1 auto;
+    aspect-ratio: 1 / 1;
     object-fit: cover;
     object-position: center;
 }
@@ -418,6 +409,17 @@ html {
 
 .single-selection-grouping-empty {
     font-size: 12px;
+    color: rgba(255, 255, 255, 0.55);
+    font-style: italic;
+}
+
+.single-description-grouping-id {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.75);
+    margin: 6px 0 0;
+}
+
+.single-description-grouping-id.is-empty {
     color: rgba(255, 255, 255, 0.55);
     font-style: italic;
 }
@@ -1217,18 +1219,12 @@ body.single-body * {
 
 @media (max-width: 640px) {
     .single-selection-row {
-        grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+        grid-template-columns: repeat(4, minmax(0, 1fr));
         gap: 6px;
     }
 
     .single-selection-thumb-wrapper {
-        border-radius: 10px;
         border-width: 1.5px;
-        aspect-ratio: 2 / 3;
-    }
-
-    .single-selection-thumb {
-        border-radius: 6px;
     }
 
     .single-selection-meta {
