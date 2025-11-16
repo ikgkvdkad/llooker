@@ -137,6 +137,10 @@ function renderSelectionRow(selection) {
         wrapper.dataset.selectionId = String(selection.id);
     }
     wrapper.dataset.description = selection.description || '';
+    wrapper.dataset.groupingProbability = groupingProbabilityValue !== null
+        ? String(groupingProbabilityValue)
+        : '';
+    wrapper.dataset.groupingExplanation = groupingExplanationText || '';
 
     const img = document.createElement('img');
     img.className = 'single-selection-thumb';
@@ -146,13 +150,13 @@ function renderSelectionRow(selection) {
 
     wrapper.appendChild(img);
 
-      if (selection.capturedAt || selection.createdAt) {
-          const meta = document.createElement('div');
-          meta.className = 'single-selection-meta';
-          const timestamp = selection.capturedAt || selection.createdAt;
-          meta.textContent = timestamp ? new Date(timestamp).toLocaleString() : '';
-          wrapper.appendChild(meta);
-      }
+    if (selection.capturedAt || selection.createdAt) {
+        const meta = document.createElement('div');
+        meta.className = 'single-selection-meta';
+        const timestamp = selection.capturedAt || selection.createdAt;
+        meta.textContent = timestamp ? new Date(timestamp).toLocaleString() : '';
+        wrapper.appendChild(meta);
+    }
 
       const descriptionPanel = document.createElement('div');
       descriptionPanel.className = 'single-selection-description-panel';
@@ -212,16 +216,17 @@ function renderSelectionRow(selection) {
     const openDescription = async () => {
         const modal = document.getElementById('singleDescriptionModal');
         const textEl = document.getElementById('singleDescriptionText');
+        const probabilityEl = document.getElementById('singleGroupingProbability');
+        const explanationEl = document.getElementById('singleGroupingExplanation');
 
-        if (!modal || !textEl) {
-            showWarning('Description viewer unavailable. Reload the page and try again.', {
+        if (!modal || !textEl || !probabilityEl || !explanationEl) {
+            showWarning('Description viewer is missing required fields. Reload the page and try again.', {
                 diagnostics: false
             });
             return;
         }
 
         const description = wrapper.dataset.description || '';
-
         if (!description) {
             showWarning('Description not available for this photo. Capture a new photo to generate one.', {
                 diagnostics: false
@@ -230,6 +235,28 @@ function renderSelectionRow(selection) {
         }
 
         textEl.textContent = description;
+
+        const probabilityRaw = wrapper.dataset.groupingProbability || '';
+        const probabilityValue = Number.isFinite(Number(probabilityRaw))
+            ? Math.max(0, Math.min(100, Math.round(Number(probabilityRaw))))
+            : null;
+        if (probabilityValue !== null) {
+            probabilityEl.textContent = `${probabilityValue}% match likelihood`;
+            probabilityEl.classList.remove('is-empty');
+        } else {
+            probabilityEl.textContent = 'Grouping probability not available for this photo yet.';
+            probabilityEl.classList.add('is-empty');
+        }
+
+        const explanationText = (wrapper.dataset.groupingExplanation || '').trim();
+        if (explanationText) {
+            explanationEl.textContent = explanationText;
+            explanationEl.classList.remove('is-empty');
+        } else {
+            explanationEl.textContent = 'Grouping explanation not available for this photo yet.';
+            explanationEl.classList.add('is-empty');
+        }
+
         modal.classList.add('is-open');
         modal.setAttribute('aria-hidden', 'false');
     };

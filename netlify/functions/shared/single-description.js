@@ -124,21 +124,70 @@ async function evaluateDescriptionGrouping(newDescription, groups) {
       model: OPENAI_MODEL,
       response_format: { type: 'json_object' },
         messages: [
-          {
-            role: 'system',
-            content: [
-              'You compare textual descriptions of people for re-identification. Your task is to decide whether a NEW description refers to the same person as one of the EXISTING group descriptions.',
-              'Follow this comparison logic:',
-              '1. Use only stable appearance traits. Allowed evidence: gender presentation, perceived age range, body build and height impression, skin tone, hair type/length/colour, stable clothing items (tops, trousers/pants, dresses, jackets/coats, shoes), and distinctive accessories (jewellery, tattoos, scars, patterns, logos). Ignore pose, expression, background, camera angle, image quality, vibe, attractiveness, posture, cropping.',
-              '2. Clothing stability rule: Photos are taken within roughly an hour, so stable clothing items should match almost exactly. Accept minor wording differences (e.g., "navy blue jacket" vs "dark blue jacket"). Removable accessories (hats, sunglasses, scarves, bags, light outer layers) may differ and should not strongly penalize a match. Clothing is the primary anchor; accessories are secondary.',
-              '3. Weighting hierarchy: (A) Rare/distinctive elements (unique prints/logos, unusual jewellery, tattoos, scars) are very strong positives when they match; missing a rare element is only weakly negative. (B) Core clothing match on stable pieces is extremely strong evidence; contradictory core clothing usually means different people unless a removable item is involved. (C) Physical traits (gender, age band, build, height, skin tone). (D) Semi-stable traits (hair style, hair accessories, temporary items).',
-              '4. Normalisation rules: treat approximate wording and lighting tolerances as similar (e.g., "20s" vs "mid 20s", "dark blonde" vs "light brown-blonde", "navy" vs "dark blue"). Missing details count as unknown, not negative.',
-              '5. Time-gap logic: With only ~1 hour between photos, clothing remains highly stable; accessories/hair can change slightly.',
-              '6. Scoring rules: Give each group a similarity score from 0-100 reflecting likelihood of same person. 100 = extremely strong match, 0 = clearly different. If groups are close, prefer the one sharing more unique traits.',
-              '7. Output format: Return ONLY JSON { "best_group_id": <id or null>, "best_group_probability": <integer 0-100>, "explanation": "<brief explanation of the key matching traits>" }. "best_group_id" must be the id with the highest score (or null if none). "best_group_probability" must be that score.',
-              'Stay within these rules and never include additional keys.'
-            ].join(' ')
-          },
+            {
+              role: 'system',
+              content: [
+                'You compare textual descriptions of people for re-identification. Your task is to decide whether a NEW description refers to the same person as one of the EXISTING group descriptions.',
+                'Follow this comparison logic:',
+                '1. Use only stable appearance traits',
+                'Use these as your allowed evidence:',
+                'gender presentation',
+                'perceived age range',
+                'body build and height impression',
+                'skin tone',
+                'hair type, length, colour',
+                'stable clothing items (tops, trousers/pants, dresses, jackets/coats, shoes)',
+                'distinctive accessories (jewellery, tattoos, scars, patterns, logos)',
+                'Ignore: pose, expression, background, camera angle, image quality, vibe, attractiveness, posture, cropping.',
+                '2. Clothing stability rule (very important)',
+                'Since photos are usually taken within the same hour, assume:',
+                'Stable clothing items should match almost exactly (tops, jackets, trousers/pants, shoes, dresses).',
+                'Small wording differences (e.g., "navy blue jacket" vs "dark blue jacket") should be treated as consistent.',
+                'Removable accessories may differ and should NOT strongly penalize a match:',
+                'hats',
+                'sunglasses',
+                'scarves',
+                'bags',
+                'light outer layers that can be removed',
+                'Clothing is the primary anchor for determining identity. Accessories are secondary.',
+                '3. Weighting hierarchy (from strongest to weakest evidence)',
+                '(A) Rare/distinctive elements',
+                'Unique prints, logos, graphic placements, stains, tears, unusual jewellery, tattoos, visible scars.',
+                'Matching rare elements = very strong positive signal.',
+                'Missing rare element = only weak negative evidence.',
+                '(B) Core clothing match (same-hour assumption)',
+                'Matching stable clothing items = extremely strong evidence.',
+                'Contradictory clothing on major items (e.g., "red jacket" vs "black hoodie") usually means different individuals unless a removable item was added/removed.',
+                '(C) Physical traits',
+                'Gender, age band, build, height impression, skin tone.',
+                '(D) Semi-stable traits',
+                'Hair style, hair accessories, temporary accessories.',
+                '4. Normalisation rules',
+                'Treat approximate wording as similar when reasonable (e.g., "20s" ~= "mid 20s", "dark blonde" ~= "light brown-blonde").',
+                'Treat colour descriptions with lighting tolerance ("navy" ~= "dark blue").',
+                'Treat slight missing descriptions (e.g., one list omits "shoes") as unknown, not negative.',
+                '5. Time-gap logic (1-hour window)',
+                'With only ~1 hour between photos:',
+                'Clothing is highly stable.',
+                'Accessories may appear/disappear.',
+                'Hair may shift slightly.',
+                'No expectation of major outfit change.',
+                'This greatly increases the weight of clothing consistency.',
+                '6. Scoring rules',
+                'Give each group a similarity score from 0–100 reflecting how likely the new description is the same person.',
+                '100 = extremely strong match; all key anchors align',
+                '0 = clearly different',
+                'Score should reflect the weighted combination of all traits',
+                'If two groups have similar scores, choose the one with more unique matching traits',
+                '7. Output format (strict)',
+                'Return ONLY this JSON object:',
+                '{',
+                '  "best_group_id": <id or null>,',
+                '  "best_group_probability": <integer 0-100>,',
+                '  "explanation": "<brief explanation of the key matching traits>"',
+                '}'
+              ].join('\n')
+            },
         {
           role: 'user',
           content: [
@@ -202,14 +251,17 @@ async function evaluateDescriptionGrouping(newDescription, groups) {
         bestGroupProbability: 0
       };
     }
-
-    const bestGroupId = Number.isFinite(Number(parsed.best_group_id))
-      ? Number(parsed.best_group_id)
-      : null;
-    const bestGroupProbability = Number.isFinite(Number(parsed.best_group_probability))
-      ? Math.max(0, Math.min(100, Number(parsed.best_group_probability)))
+    const rawBestGroupId = parsed.best_group_id;
+    const bestGroupId = rawBestGroupId === null
+      ? null
+      : Number.isFinite(Number(rawBestGroupId))
+        ? Number(rawBestGroupId)
+        : null;
+    const rawProbability = Number(parsed.best_group_probability);
+    const bestGroupProbability = Number.isFinite(rawProbability)
+      ? Math.max(0, Math.min(100, Math.round(rawProbability)))
       : 0;
-    const explanation = typeof parsed.explanation === 'string' ? parsed.explanation : '';
+    const explanation = typeof parsed.explanation === 'string' ? parsed.explanation.trim() : '';
 
     console.log('=== single-grouping parsed result ===', {
       bestGroupId,
