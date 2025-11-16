@@ -330,16 +330,22 @@ html {
 .single-selection-row {
     width: 100%;
     max-width: none;
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    display: flex;
+    flex-wrap: nowrap;
     gap: 10px;
     align-items: flex-start;
     justify-content: flex-start;
-    touch-action: pan-y;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 4px;
+    touch-action: pan-x;
+    scrollbar-width: thin;
+    overscroll-behavior-x: contain;
 }
 
 .single-selection-thumb-wrapper {
-    width: 100%;
+    flex: 0 0 120px;
+    width: 120px;
     border-radius: 12px;
     overflow: hidden;
     border: 2px solid rgba(255, 255, 255, 0.18);
