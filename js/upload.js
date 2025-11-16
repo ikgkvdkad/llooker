@@ -47,39 +47,56 @@ export function attachUploadHandler(button, input, side) {
         }
     });
 
-    input.addEventListener('change', async () => {
-        const file = input.files && input.files[0];
-        if (!file) {
+    const label = side === 'you' ? 'You' : 'Me';
+    const fileQueue = [];
+    let isProcessing = false;
+
+    const processNextFile = async () => {
+        if (isProcessing) {
             return;
         }
-
-        const label = side === 'you' ? 'You' : 'Me';
-
-        if (file.type && !file.type.startsWith('image/')) {
-            const message = `${label} upload failed: selected file is not an image.`;
-            console.warn(message);
-            showError(message, { side });
-            setAnalysisState(side, 'error', message);
-            input.value = '';
-            return;
-        }
-
+        isProcessing = true;
         try {
-            const dataUrl = await readFileAsDataUrl(file);
-            if (typeof dataUrl !== 'string') {
-                throw new Error('Uploaded data unavailable.');
+            while (fileQueue.length > 0) {
+                const nextFile = fileQueue.shift();
+                if (!nextFile) {
+                    continue;
+                }
+                if (nextFile.type && !nextFile.type.startsWith('image/')) {
+                    const message = `${label} upload failed: selected file is not an image.`;
+                    console.warn(message);
+                    showError(message, { side });
+                    setAnalysisState(side, 'error', message);
+                    continue;
+                }
+                try {
+                    const dataUrl = await readFileAsDataUrl(nextFile);
+                    if (typeof dataUrl !== 'string') {
+                        throw new Error('Uploaded data unavailable.');
+                    }
+                    displayPhotoForSide(side, dataUrl);
+                    stopAllCameras();
+                    hideError();
+                } catch (error) {
+                    console.error(`${label} photo upload failed:`, error);
+                    const message = `${label} upload failed: ${error?.message || 'Unable to process image.'}`;
+                    showError(message, { side, detail: error?.stack || null });
+                    setAnalysisState(side, 'error', message);
+                }
             }
-            displayPhotoForSide(side, dataUrl);
-            stopAllCameras();
-            hideError();
-        } catch (error) {
-            console.error(`${label} photo upload failed:`, error);
-            const message = `${label} upload failed: ${error?.message || 'Unable to process image.'}`;
-            showError(message, { side, detail: error?.stack || null });
-            setAnalysisState(side, 'error', message);
         } finally {
-            input.value = '';
+            isProcessing = false;
         }
+    };
+
+    input.addEventListener('change', () => {
+        const files = input.files ? Array.from(input.files) : [];
+        input.value = '';
+        if (!files.length) {
+            return;
+        }
+        fileQueue.push(...files);
+        void processNextFile();
     });
 }
 
