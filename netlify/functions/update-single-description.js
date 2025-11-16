@@ -5,7 +5,8 @@ const {
 } = require('./shared/db.js');
 const {
   generateStablePersonDescription,
-  evaluateDescriptionGrouping
+  evaluateDescriptionGrouping,
+  GROUPING_MATCH_THRESHOLD
 } = require('./shared/single-description.js');
 
 exports.handler = async (event) => {
@@ -154,7 +155,11 @@ exports.handler = async (event) => {
           ? groupingResult.explanation.trim()
           : '';
 
-        if (bestGroupId && bestGroupProbability !== null && bestGroupProbability >= 90) {
+        if (
+          bestGroupId &&
+          bestGroupProbability !== null &&
+          bestGroupProbability >= GROUPING_MATCH_THRESHOLD
+        ) {
           personGroupId = bestGroupId;
         }
 
