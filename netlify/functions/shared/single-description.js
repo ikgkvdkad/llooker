@@ -96,11 +96,19 @@ async function evaluateDescriptionGrouping(newDescription, groups) {
     };
   }
 
-  const filteredGroups = Array.isArray(groups)
-    ? groups.filter(g => g && typeof g.id === 'number' && typeof g.description === 'string' && g.description.trim().length)
+  const normalizedGroups = Array.isArray(groups)
+    ? groups
+        .map(g => {
+          if (!g) return null;
+          const idNum = Number(g.id);
+          const desc = typeof g.description === 'string' ? g.description.trim() : '';
+          if (!Number.isFinite(idNum) || !desc) return null;
+          return { id: idNum, description: desc };
+        })
+        .filter(Boolean)
     : [];
 
-  if (!filteredGroups.length || typeof newDescription !== 'string' || !newDescription.trim().length) {
+  if (!normalizedGroups.length || typeof newDescription !== 'string' || !newDescription.trim().length) {
     return {
       bestGroupId: null,
       bestGroupProbability: 0
@@ -133,7 +141,7 @@ async function evaluateDescriptionGrouping(newDescription, groups) {
               type: 'text',
               text: JSON.stringify({
                 new_description: newDescription,
-                groups: filteredGroups.map(g => ({
+                groups: normalizedGroups.map(g => ({
                   id: g.id,
                   canonical_description: g.description
                 }))
@@ -146,7 +154,8 @@ async function evaluateDescriptionGrouping(newDescription, groups) {
 
     console.log('=== single-grouping OPENAI request ===', JSON.stringify({
       newDescription,
-      groups: filteredGroups,
+      groups: normalizedGroups,
+      groupCount: normalizedGroups.length,
       openaiPayload: requestPayload
     }, null, 2));
 
