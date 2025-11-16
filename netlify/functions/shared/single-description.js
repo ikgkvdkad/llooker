@@ -22,11 +22,15 @@ async function generateStablePersonDescription(imageDataUrl) {
             role: 'system',
             content: [
               'You describe cropped person photos for re-identification.',
-              'Write 5-7 short sentences that capture stable, visually obvious traits that are likely to remain unchanged over the next few hours.',
-              'Focus on: apparent gender presentation, age range, build, height impression, skin tone, hair colour/length/style, facial hair, eyewear/headwear, visible tattoos or scars, and any distinctive accessories or garments.',
-              'Ignore background, lighting, pose, facial expression, and guesses about personality or identity.',
-              'Do not mention the time of day, camera perspective, or anything outside the person.',
-              'Keep the description factual and detailed enough to help decide if a later photo shows the same person.'
+              'Write 10-14 short, clear sentences that capture stable, visually obvious traits that are likely to remain unchanged over the next few hours.', 
+              'Focus on: apparent gender presentation, age range, build, height impression, skin tone, hair colour/length/style, facial hair, eyewear/headwear, visible tattoos or scars, and especially distinctive accessories or garments.', 
+              'Pay special attention to small, rare visible details that would be unlikely to appear by chance on two different people, such as a specific logo placement, a unique print or pattern, a rip or stain in clothing, a distinctive piece of jewellery, or an unusual combination of garments.', 
+              'Treat the presence of the same rare detail in two descriptions as strong evidence that these photos show the same person, but treat the absence of that detail in one description as weak evidence against a match.', 
+              'Describe clothing colours as accurately as possible, mentally adjusting for plausible changes in lighting between photos when judging colour consistency.', 
+              'Remember that some clothing items, like trousers/pants, distinctive jackets, and shoes, are less likely to change within a few hours than removable items like hats, sunglasses, or light accessories; highlight those more stable items clearly.', 
+              'Ignore background, lighting, pose, facial expression, and guesses about personality or identity.', 
+              'Do not mention the time of day, camera perspective, or anything outside the person.', 
+              'Keep the description factual, specific, and detailed enough to help decide if a later photo shows the same person.'
             ].join(' ')
           },
           {
@@ -34,7 +38,7 @@ async function generateStablePersonDescription(imageDataUrl) {
             content: [
               {
                 type: 'text',
-                text: 'Describe the person in this cropped photo in 5-7 short sentences following the rules.'
+                text: 'Describe the person in this cropped photo in 10-14 short sentences following the rules.'
               },
               {
                 type: 'image_url',
@@ -46,7 +50,7 @@ async function generateStablePersonDescription(imageDataUrl) {
             ]
           }
         ],
-        max_tokens: 380,
+        max_tokens: 700,
         temperature: 0.2
       })
     });
@@ -68,12 +72,12 @@ async function generateStablePersonDescription(imageDataUrl) {
       return null;
     }
 
-    // Hard cap to roughly 7 sentences by splitting on sentence terminators.
+    // Hard cap to roughly 14 sentences by splitting on sentence terminators.
     const sentences = description
       .split(/(?<=[.!?])\s+/)
       .map(s => s.trim())
       .filter(Boolean)
-      .slice(0, 7);
+      .slice(0, 14);
 
     return sentences.join(' ');
   } catch (error) {
@@ -126,7 +130,11 @@ async function evaluateDescriptionGrouping(newDescription, groups) {
             'You compare textual descriptions of people for re-identification.',
             'You are given a new description and a list of existing group descriptions.',
             'Use ONLY stable appearance traits (gender presentation, age range, build, height impression, skin tone, hair details, eyewear/headwear, distinctive clothing/accessories, visible tattoos or scars).',
-            'Ignore differences that can change within a few hours (pose, facial expression, background, lighting, camera angle, small grooming or clothing adjustments).',
+            'Give extra weight to clearly distinctive and rare visible details that would be unlikely to occur by chance on two different people (for example, a specific logo placement, a unique print or pattern, a rip or stain, a very distinctive piece of jewellery, or an unusual combination of garments).',
+            'Treat the presence of the same rare detail in both descriptions as strong positive evidence for a match, but treat the absence of that detail in one description as only weak evidence against a match.',
+            'When comparing clothing colours, mentally account for plausible lighting differences and focus on whether the colours are broadly consistent rather than requiring exact wording matches.', 
+            'Remember that some clothing items, like trousers/pants, distinctive jackets, and shoes, are less likely to change within a few hours than easily removable items like hats, sunglasses, or scarves; treat consistent descriptions of those more stable items as especially strong evidence for a match.', 
+            'Ignore differences that can change within a few hours (pose, facial expression, background, camera angle, small grooming or clothing adjustments).',
             'For each group, you must internally estimate a similarity score from 0 to 100 based on how likely it is that the new description refers to the same person as that group.',
             'Set "best_group_id" to the id of the group with the highest similarity score (or null if there are no groups).',
             'Set "best_group_probability" to that highest similarity score (integer 0-100).',
