@@ -167,47 +167,7 @@ function renderSelectionRow(selection) {
             return;
         }
 
-        let description = wrapper.dataset.description || '';
-        const selectionId = wrapper.dataset.selectionId ? Number(wrapper.dataset.selectionId) : null;
-
-        const needsRefresh = !description || description.length < 400;
-
-        if (needsRefresh && selectionId) {
-            try {
-                const response = await fetch('/.netlify/functions/update-single-description', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ id: selectionId })
-                });
-
-                if (!response.ok) {
-                    const errorText = await response.text().catch(() => '');
-                    throw new Error(errorText || `HTTP ${response.status}`);
-                }
-
-                const payload = await response.json().catch(() => ({}));
-                if (payload && payload.groupingDebug) {
-                    console.log('single-page grouping (refresh)', payload.groupingDebug);
-                }
-                    if (payload && typeof payload.description === 'string' && payload.description.trim().length) {
-                        description = payload.description.trim();
-                        wrapper.dataset.description = description;
-                        wrapper.classList.add('has-description');
-                    } else {
-                    showWarning('Description generation did not return usable text. Try capturing a new photo.', {
-                        diagnostics: false
-                    });
-                }
-            } catch (error) {
-                console.error('Failed to refresh description for this photo:', error);
-                showError('Failed to refresh description for this photo. Check diagnostics and try again.', {
-                    diagnostics: false,
-                    detail: error?.message || null
-                });
-            }
-        }
+        const description = wrapper.dataset.description || '';
 
         if (!description) {
             showWarning('Description not available for this photo. Capture a new photo to generate one.', {
