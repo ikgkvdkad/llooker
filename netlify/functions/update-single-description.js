@@ -146,7 +146,7 @@ exports.handler = async (event) => {
       const bestGroupProbability = groupingResult.bestGroupProbability;
       const explanation = groupingResult.explanation || '';
 
-      if (bestGroupId && bestGroupProbability >= 66) {
+      if (bestGroupId && bestGroupProbability >= 90) {
         personGroupId = bestGroupId;
       }
 

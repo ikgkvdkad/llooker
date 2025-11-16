@@ -1,6 +1,6 @@
 // Single-camera page initialization and selection storage
 
-import { DEFAULT_BACK_ASPECT, SINGLE_SELECTIONS_STORE_URL, SINGLE_SELECTIONS_LIST_URL, SINGLE_SELECTIONS_CLEAR_URL } from './config.js';
+import { DEFAULT_BACK_ASPECT, SINGLE_SELECTIONS_STORE_URL, SINGLE_SELECTIONS_LIST_URL, SINGLE_SELECTIONS_CLEAR_URL, SINGLE_SELECTIONS_DELETE_URL } from './config.js';
 import * as dom from './dom.js';
 import { initializePhotoSlot, displayPhotoForSide } from './photo.js';
 import { setupSelectionInteractions, updateSelectionStyles } from './selection.js';
@@ -220,13 +220,106 @@ function renderSelectionRow(selection) {
         modal.classList.add('is-open');
         modal.setAttribute('aria-hidden', 'false');
     };
-    wrapper.addEventListener('click', () => {
-        void openDescription();
+
+    const deleteSelection = async () => {
+        const selectionId = wrapper.dataset.selectionId ? Number(wrapper.dataset.selectionId) : null;
+        assertConfigured(
+            SINGLE_SELECTIONS_DELETE_URL,
+            'Single selections API (delete) is not configured.'
+        );
+
+        if (!selectionId) {
+            console.warn('Cannot delete selection without a valid id.', wrapper);
+            return;
+        }
+
+        try {
+            const response = await fetch(SINGLE_SELECTIONS_DELETE_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ id: selectionId })
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text().catch(() => '');
+                throw new Error(errorText || `HTTP ${response.status}`);
+            }
+
+            const rowEl = wrapper.parentElement;
+            wrapper.remove();
+
+            if (rowEl && !rowEl.querySelector('.single-selection-thumb-wrapper')) {
+                const groupKey = rowEl.dataset.groupKey;
+                rowEl.remove();
+                if (groupKey && singleGroupRows.has(groupKey)) {
+                    singleGroupRows.delete(groupKey);
+                }
+            }
+        } catch (error) {
+            console.error('Failed to delete single selection:', error);
+            showError('Failed to delete this photo. Check diagnostics and try again.', {
+                diagnostics: false,
+                detail: error?.message || null
+            });
+        }
+    };
+
+    const LONG_PRESS_MS = 650;
+    let longPressTimerId = null;
+    let longPressTriggered = false;
+    let activePointerId = null;
+
+    const clearLongPressTimer = () => {
+        if (longPressTimerId !== null) {
+            window.clearTimeout(longPressTimerId);
+            longPressTimerId = null;
+        }
+    };
+
+    const handlePointerDown = (event) => {
+        if (event.pointerType !== 'touch') {
+            return;
+        }
+        activePointerId = event.pointerId;
+        longPressTriggered = false;
+        clearLongPressTimer();
+        longPressTimerId = window.setTimeout(() => {
+            longPressTriggered = true;
+            longPressTimerId = null;
+            void deleteSelection();
+        }, LONG_PRESS_MS);
+    };
+
+    const handlePointerEnd = (event) => {
+        if (event.pointerId !== activePointerId) {
+            return;
+        }
+        if (event.pointerType === 'touch') {
+            event.preventDefault();
+        }
+        clearLongPressTimer();
+        const wasLongPress = longPressTriggered;
+        activePointerId = null;
+
+        if (!wasLongPress && event.pointerType === 'touch') {
+            // Treat as a short tap -> open description
+            void openDescription();
+        }
+    };
+
+    wrapper.addEventListener('pointerdown', handlePointerDown);
+    wrapper.addEventListener('pointerup', handlePointerEnd);
+    wrapper.addEventListener('pointercancel', handlePointerEnd);
+    wrapper.addEventListener('pointerleave', handlePointerEnd);
+
+    // Desktop/mouse: regular click opens description
+    wrapper.addEventListener('click', (event) => {
+        if (event.pointerType === 'mouse' || typeof event.pointerType === 'undefined') {
+            void openDescription();
+        }
     });
-    wrapper.addEventListener('touchstart', (event) => {
-        event.preventDefault();
-        void openDescription();
-    }, { passive: false });
 }
 
 async function loadExistingSelections() {
