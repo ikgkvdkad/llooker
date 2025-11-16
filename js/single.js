@@ -128,6 +128,13 @@ function renderSelectionRow(selection) {
         container.appendChild(row);
     }
 
+    const groupingProbabilityValue = Number.isFinite(Number(selection.groupingProbability))
+        ? Math.max(0, Math.min(100, Number(selection.groupingProbability)))
+        : null;
+    const groupingExplanationText = typeof selection.groupingExplanation === 'string'
+        ? selection.groupingExplanation.trim()
+        : '';
+
     const wrapper = document.createElement('div');
     wrapper.className = 'single-selection-thumb-wrapper';
     if (selection.description && selection.description.length > 0) {
@@ -175,20 +182,13 @@ function renderSelectionRow(selection) {
 
       wrapper.appendChild(descriptionPanel);
 
-      const groupingPanel = document.createElement('div');
-      groupingPanel.className = 'single-selection-grouping-panel';
+    const groupingPanel = document.createElement('div');
+    groupingPanel.className = 'single-selection-grouping-panel';
 
-      const groupingLabel = document.createElement('div');
-      groupingLabel.className = 'single-selection-section-label';
-      groupingLabel.textContent = 'Grouping';
-      groupingPanel.appendChild(groupingLabel);
-
-      const groupingProbabilityValue = Number.isFinite(Number(selection.groupingProbability))
-          ? Math.max(0, Math.min(100, Number(selection.groupingProbability)))
-          : null;
-      const groupingExplanationText = typeof selection.groupingExplanation === 'string'
-          ? selection.groupingExplanation.trim()
-          : '';
+    const groupingLabel = document.createElement('div');
+    groupingLabel.className = 'single-selection-section-label';
+    groupingLabel.textContent = 'Grouping';
+    groupingPanel.appendChild(groupingLabel);
 
       if (groupingProbabilityValue !== null || groupingExplanationText) {
           if (groupingProbabilityValue !== null) {
