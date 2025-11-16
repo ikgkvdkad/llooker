@@ -630,6 +630,15 @@ function closeSingleCameraModal() {
     stopAllCameras();
 }
 
+function closeSingleDescriptionModal() {
+    const modal = document.getElementById('singleDescriptionModal');
+    if (!modal) {
+        return;
+    }
+    modal.classList.remove('is-open');
+    modal.setAttribute('aria-hidden', 'true');
+}
+
 function attachCameraModalHandlers() {
     const modal = document.getElementById('singleCameraModal');
     const overlay = document.getElementById('singleCameraOverlay');
@@ -640,12 +649,18 @@ function attachCameraModalHandlers() {
         });
     }
 
-    const descriptionModal = document.getElementById('singleDescriptionModal');
     const descriptionOverlay = document.getElementById('singleDescriptionOverlay');
-    if (descriptionOverlay && descriptionModal) {
+    if (descriptionOverlay) {
         descriptionOverlay.addEventListener('click', () => {
-            descriptionModal.classList.remove('is-open');
-            descriptionModal.setAttribute('aria-hidden', 'true');
+            closeSingleDescriptionModal();
+        });
+    }
+
+    const descriptionCloseButton = document.getElementById('singleDescriptionCloseButton');
+    if (descriptionCloseButton) {
+        descriptionCloseButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            closeSingleDescriptionModal();
         });
     }
 
