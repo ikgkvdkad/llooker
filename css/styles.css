@@ -561,6 +561,41 @@ body.single-body * {
     white-space: pre-wrap;
 }
 
+.single-description-grouping {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.single-description-grouping-label {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.single-description-grouping-probability {
+    font-size: 15px;
+    font-weight: 600;
+    color: rgba(34, 197, 94, 0.95);
+}
+
+.single-description-grouping-explanation {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.4;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.single-description-grouping-probability.is-empty,
+.single-description-grouping-explanation.is-empty {
+    color: rgba(255, 255, 255, 0.55);
+    font-style: italic;
+}
+
 .similarity-rationale-header {
     display: flex;
     align-items: center;
