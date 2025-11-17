@@ -612,7 +612,32 @@ async function clearAllSelections() {
         'Single selections API (clear) is not configured.'
     );
 
+    const clearButton = document.getElementById('singleClearButton');
+    const originalLabel = clearButton ? clearButton.textContent : null;
+    const setButtonBusy = (isBusy) => {
+        if (!clearButton) {
+            return;
+        }
+        if (isBusy) {
+            if (!clearButton.dataset.originalLabel) {
+                clearButton.dataset.originalLabel = originalLabel || clearButton.textContent || 'Clear';
+            }
+            clearButton.disabled = true;
+            clearButton.setAttribute('aria-busy', 'true');
+            clearButton.textContent = 'Clearing...';
+        } else {
+            clearButton.disabled = false;
+            clearButton.removeAttribute('aria-busy');
+            const label = clearButton.dataset.originalLabel || originalLabel;
+            if (label) {
+                clearButton.textContent = label;
+            }
+            delete clearButton.dataset.originalLabel;
+        }
+    };
+
     try {
+        setButtonBusy(true);
         const response = await fetch(SINGLE_SELECTIONS_CLEAR_URL, {
             method: 'POST',
             headers: {
@@ -625,16 +650,43 @@ async function clearAllSelections() {
             throw new Error(errorText || `HTTP ${response.status}`);
         }
 
+        const payload = await response.json().catch(() => null);
+        if (!payload || payload.status !== 'ok') {
+            throw new Error(payload?.error || 'Malformed response from clear API.');
+        }
+
+        const singleRemoved = Number(payload?.tables?.single?.rowsCleared) || 0;
+        const analysesRemoved = Number(payload?.tables?.analyses?.rowsCleared) || 0;
+        const analysesTruncated = Boolean(payload?.tables?.analyses?.truncated);
+
         const container = getSingleSelectionContainer();
         if (container) {
             container.innerHTML = '';
         }
+
+        const summaryParts = [
+            `Removed ${singleRemoved} single selection${singleRemoved === 1 ? '' : 's'}`
+        ];
+
+        if (analysesTruncated) {
+            summaryParts.push(
+                `reset ${analysesRemoved} canonical description record${analysesRemoved === 1 ? '' : 's'}`
+            );
+        } else {
+            summaryParts.push('analyses table was not truncated (verify server configuration).');
+        }
+
+        showWarning(`${summaryParts.join('; ')} Canonical values are fully cleared.`, {
+            diagnostics: false
+        });
     } catch (error) {
         console.error('Failed to clear single-camera selections:', error);
         showError('Failed to clear selections. Check diagnostics and try again.', {
             diagnostics: false,
             detail: error?.message || null
         });
+    } finally {
+        setButtonBusy(false);
     }
 }
 
