@@ -657,8 +657,10 @@ async function clearAllSelections() {
 
         const singleInfo = (payload?.tables && payload.tables.single) || {};
         const analysesInfo = (payload?.tables && payload.tables.analyses) || {};
-        const singleRemoved = Number(singleInfo.rowsCleared) || 0;
-        const analysesRemoved = Number(analysesInfo.rowsCleared) || 0;
+        const singleRemovedRaw = singleInfo.rowsCleared;
+        const analysesRemovedRaw = analysesInfo.rowsCleared;
+        const singleRemoved = Number.isFinite(Number(singleRemovedRaw)) ? Number(singleRemovedRaw) : null;
+        const analysesRemoved = Number.isFinite(Number(analysesRemovedRaw)) ? Number(analysesRemovedRaw) : null;
         const singleTruncated = Boolean(singleInfo.truncated);
         const analysesTruncated = Boolean(analysesInfo.truncated);
         const analysesExists = analysesInfo.exists !== false;
@@ -668,25 +670,32 @@ async function clearAllSelections() {
             container.innerHTML = '';
         }
 
+        const describeCount = (count, noun) => {
+            if (typeof count === 'number' && Number.isFinite(count)) {
+                return `${count} ${noun}${count === 1 ? '' : 's'}`;
+            }
+            return `all ${noun}s (count unavailable due to DB permissions)`;
+        };
+
         const summaryParts = [];
         if (singleTruncated) {
             summaryParts.push(
-                `Reset ${singleRemoved} single selection${singleRemoved === 1 ? '' : 's'} (IDs restarted)`
+                `Reset ${describeCount(singleRemoved, 'single selection')} (IDs restarted)`
             );
         } else {
             summaryParts.push(
-                `Deleted ${singleRemoved} single selection${singleRemoved === 1 ? '' : 's'} (IDs not reset)`
+                `Deleted ${describeCount(singleRemoved, 'single selection')} (IDs not reset)`
             );
         }
 
         if (analysesExists) {
             if (analysesTruncated) {
                 summaryParts.push(
-                    `reset ${analysesRemoved} canonical description record${analysesRemoved === 1 ? '' : 's'}`
+                    `reset ${describeCount(analysesRemoved, 'canonical description record')}`
                 );
             } else {
                 summaryParts.push(
-                    `deleted ${analysesRemoved} canonical description record${analysesRemoved === 1 ? '' : 's'} (IDs not reset)`
+                    `deleted ${describeCount(analysesRemoved, 'canonical description record')} (IDs not reset)`
                 );
             }
         } else {

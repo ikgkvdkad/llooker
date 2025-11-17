@@ -58,15 +58,29 @@ exports.handler = async (event) => {
   let analysesCleared = 0;
   let analysesTableTruncated = false;
   let analysesTableExists = false;
+  let analysesCountKnown = false;
+  let shouldAttemptAnalysesClear = true;
   let singleTableTruncated = true;
 
   try {
     await client.query('BEGIN');
 
-    const singleCountResult = await client.query(
-      `SELECT COUNT(*)::int AS count FROM ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME};`
-    );
-    singleCleared = singleCountResult.rows?.[0]?.count ?? 0;
+    try {
+      const singleCountResult = await client.query(
+        `SELECT COUNT(*)::int AS count FROM ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME};`
+      );
+      singleCleared = singleCountResult.rows?.[0]?.count ?? 0;
+    } catch (countError) {
+      if (countError?.code === PG_INSUFFICIENT_PRIVILEGE) {
+        console.warn(
+          `Insufficient privilege to count ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME} before clearing. Proceeding without pre-count.`
+        );
+        singleCleared = null;
+      } else {
+        throw countError;
+      }
+    }
+
     try {
       await client.query(`TRUNCATE ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME} RESTART IDENTITY;`);
       singleTableTruncated = true;
@@ -75,7 +89,12 @@ exports.handler = async (event) => {
         console.warn(
           `Insufficient privilege to truncate ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME}. Falling back to DELETE.`
         );
-        await client.query(`DELETE FROM ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME};`);
+        const deleteResult = await client.query(
+          `DELETE FROM ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME};`
+        );
+        if (!Number.isFinite(singleCleared)) {
+          singleCleared = deleteResult?.rowCount ?? 0;
+        }
         singleTableTruncated = false;
       } else {
         throw truncateError;
@@ -88,6 +107,26 @@ exports.handler = async (event) => {
       );
       analysesCleared = analysesCountResult.rows?.[0]?.count ?? 0;
       analysesTableExists = true;
+      analysesCountKnown = true;
+    } catch (countError) {
+      if (countError?.code === PG_TABLE_NOT_FOUND) {
+        console.warn(
+          `Analyses table "${ANALYSES_TABLE_NAME}" does not exist. Skipping analyses truncation.`
+        );
+        analysesTableExists = false;
+        shouldAttemptAnalysesClear = false;
+      } else if (countError?.code === PG_INSUFFICIENT_PRIVILEGE) {
+        console.warn(
+          `Insufficient privilege to inspect "${ANALYSES_TABLE_NAME}" before clearing. Attempting to clear without row count.`
+        );
+        analysesTableExists = true;
+        analysesCountKnown = false;
+      } else {
+        throw countError;
+      }
+    }
+
+    if (shouldAttemptAnalysesClear && analysesTableExists) {
       try {
         await client.query(`TRUNCATE ${ANALYSES_TABLE_NAME} RESTART IDENTITY;`);
         analysesTableTruncated = true;
@@ -96,19 +135,32 @@ exports.handler = async (event) => {
           console.warn(
             `Insufficient privilege to truncate ${ANALYSES_TABLE_NAME}. Falling back to DELETE.`
           );
-          await client.query(`DELETE FROM ${ANALYSES_TABLE_NAME};`);
-          analysesTableTruncated = false;
+          try {
+            const deleteResult = await client.query(`DELETE FROM ${ANALYSES_TABLE_NAME};`);
+            if (!analysesCountKnown) {
+              analysesCleared = deleteResult?.rowCount ?? 0;
+            }
+            analysesTableTruncated = false;
+          } catch (deleteError) {
+            if (deleteError?.code === PG_INSUFFICIENT_PRIVILEGE) {
+              console.warn(
+                `Insufficient privilege to delete ${ANALYSES_TABLE_NAME}. Canonical descriptions were not removed.`
+              );
+              analysesCleared = analysesCountKnown ? analysesCleared : 0;
+              analysesTableTruncated = false;
+              analysesTableExists = true;
+            } else {
+              throw deleteError;
+            }
+          }
+        } else if (truncateError?.code === PG_TABLE_NOT_FOUND) {
+          console.warn(
+            `Analyses table "${ANALYSES_TABLE_NAME}" disappeared before clearing. Skipping.`
+          );
+          analysesTableExists = false;
         } else {
           throw truncateError;
         }
-      }
-    } catch (tableError) {
-      if (tableError?.code === PG_TABLE_NOT_FOUND) {
-        console.warn(
-          `Analyses table "${ANALYSES_TABLE_NAME}" does not exist. Skipping analyses truncation.`
-        );
-      } else {
-        throw tableError;
       }
     }
 
