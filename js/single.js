@@ -494,8 +494,7 @@ async function clearAllSelections() {
     }
 }
 
-async function handleSingleUpload(fileInput) {
-    const file = fileInput.files && fileInput.files[0];
+async function processSingleUploadFile(file) {
     if (!file) {
         return;
     }
@@ -506,7 +505,6 @@ async function handleSingleUpload(fileInput) {
         const message = `${label} upload failed: selected file is not an image.`;
         console.warn(message);
         showError(message, { diagnostics: false });
-        fileInput.value = '';
         return;
     }
 
@@ -527,8 +525,6 @@ async function handleSingleUpload(fileInput) {
             diagnostics: false,
             detail: error?.stack || null
         });
-    } finally {
-        fileInput.value = '';
     }
 }
 
@@ -574,8 +570,39 @@ function attachSingleUploadHandler(button, input) {
         }
     });
 
+    const fileQueue = [];
+    let isProcessingUploads = false;
+
+    const processQueue = async () => {
+        if (isProcessingUploads) {
+            return;
+        }
+        isProcessingUploads = true;
+        try {
+            while (fileQueue.length > 0) {
+                const nextFile = fileQueue.shift();
+                if (!nextFile) {
+                    continue;
+                }
+                try {
+                    await processSingleUploadFile(nextFile);
+                } catch (error) {
+                    console.error('Unexpected error while processing single uploads:', error);
+                }
+            }
+        } finally {
+            isProcessingUploads = false;
+        }
+    };
+
     input.addEventListener('change', () => {
-        void handleSingleUpload(input);
+        const files = input.files ? Array.from(input.files) : [];
+        input.value = '';
+        if (!files.length) {
+            return;
+        }
+        fileQueue.push(...files);
+        void processQueue();
     });
 }
 

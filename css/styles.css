@@ -559,7 +559,11 @@ body.single-body * {
     display: flex;
     flex-direction: column;
     gap: 12px;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
   }
 
 .single-description-title {
@@ -575,12 +579,7 @@ body.single-body * {
     font-size: 14px;
     line-height: 1.5;
     white-space: pre-wrap;
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
-    padding-right: 4px;
-    touch-action: pan-y;
-    -webkit-overflow-scrolling: touch;
+    overflow-wrap: anywhere;
 }
 
 .single-description-grouping {
