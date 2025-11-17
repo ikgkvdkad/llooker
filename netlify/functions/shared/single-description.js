@@ -160,6 +160,9 @@ const FATAL_MISMATCH_TYPES = {
   MARK: 'mark'
 };
 const MIN_CLARITY_FOR_FATAL_HAIR = 60;
+const CLARITY_OVERRIDE_DELTA = 5;
+const CLARITY_OVERRIDE_PRO_MIN = PRO_MIN - 5; // allow slightly under raw threshold
+const CLARITY_OVERRIDE_CONTRA_MAX = CONTRA_MAX + 5;
 
 function confidenceProduct(valueA, valueB) {
   const a = Number(valueA);
@@ -1171,6 +1174,7 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
     };
   }
 
+  const newClarity = getImageClarity(newDescriptionSchema);
   const scored = [];
   for (const group of existingGroups) {
     if (!group || typeof group !== 'object') continue;
@@ -1178,6 +1182,7 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
     if (!canonical || typeof canonical !== 'object') continue;
     const groupId = group.group_id;
     const memberCount = Number(group.group_member_count) || 0;
+    const groupClarity = getImageClarity(canonical);
 
     const fatalMismatch = detectFatalMismatch(newDescriptionSchema, canonical);
     if (fatalMismatch) {
@@ -1190,7 +1195,8 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
         normContra: NORMALIZED_SCORE_SCALE,
         probability: 0,
         breakdown: createEmptyBreakdown(),
-        fatalMismatch
+        fatalMismatch,
+        groupClarity
       });
       continue;
     }
@@ -1210,7 +1216,8 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
       normContra,
       probability,
       breakdown,
-      fatalMismatch: null
+      fatalMismatch: null,
+      groupClarity
     });
   }
 
@@ -1237,6 +1244,43 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
       explanation = formatFatalMismatchMessage(candidate.fatalMismatch);
     } else if (candidate) {
       explanation = `No group passed thresholds. Best candidate had proScore=${Math.round(candidate.proScore)}, contraScore=${Math.round(candidate.contraScore)}.`;
+    }
+
+    const fallbackGroup = (() => {
+      if (!candidate || candidate.fatalMismatch) {
+        return null;
+      }
+      if (newClarity < MIN_CLARITY_FOR_FATAL_HAIR) {
+        return null;
+      }
+      const clarityEdge = typeof candidate.groupClarity === 'number'
+        ? newClarity >= candidate.groupClarity + CLARITY_OVERRIDE_DELTA
+        : false;
+      const proStrong = candidate.proScore >= CLARITY_OVERRIDE_PRO_MIN;
+      const contraAcceptable = candidate.contraScore <= CLARITY_OVERRIDE_CONTRA_MAX;
+      if (clarityEdge && proStrong && contraAcceptable) {
+        return candidate;
+      }
+      return null;
+    })();
+
+    if (fallbackGroup) {
+      const fallbackProbability = Math.max(GROUPING_MATCH_THRESHOLD, computeNormalizedProbability(
+        normalizeScore(fallbackGroup.proScore, PRO_SOFT_MAX),
+        normalizeScore(fallbackGroup.contraScore, CONTRA_SOFT_MAX)
+      ));
+      const clarityNote = `Clarity override: new image_clarity ${newClarity} vs canonical ${fallbackGroup.groupClarity ?? 'unknown'}.`;
+      const fallbackExplanation = [
+        explanation,
+        clarityNote,
+        `Assigned to group ${fallbackGroup.groupId} despite thresholds due to stronger clarity and near-match scores.`
+      ].filter(Boolean).join(' ');
+      return {
+        bestGroupId: fallbackGroup.groupId,
+        bestGroupProbability: fallbackProbability,
+        explanation: fallbackExplanation.trim(),
+        shortlist
+      };
     }
 
     return {
