@@ -39,6 +39,10 @@ function getSingleSelectionContainer() {
 
 const singleGroupRows = new Map();
 
+const SINGLE_UPLOAD_LABEL = 'Subject';
+const pendingSingleUploads = [];
+let isProcessingSingleUpload = false;
+
 function buildDescriptionGroupKey(description) {
     if (typeof description !== 'string') {
         return null;
@@ -494,19 +498,55 @@ async function clearAllSelections() {
     }
 }
 
-async function handleSingleUpload(fileInput) {
-    const file = fileInput.files && fileInput.files[0];
+function handleSingleUpload(fileInput) {
+    const files = Array.from(fileInput.files || []);
+    if (!files.length) {
+        return;
+    }
+
+    fileInput.value = '';
+    enqueueSingleUploads(files);
+}
+
+function enqueueSingleUploads(files) {
+    const validFiles = files.filter(Boolean);
+    if (!validFiles.length) {
+        return;
+    }
+
+    pendingSingleUploads.push(...validFiles);
+
+    if (!isProcessingSingleUpload) {
+        void processSingleUploadQueue();
+    }
+}
+
+async function processSingleUploadQueue() {
+    if (isProcessingSingleUpload) {
+        return;
+    }
+
+    isProcessingSingleUpload = true;
+    try {
+        while (pendingSingleUploads.length > 0) {
+            const nextFile = pendingSingleUploads.shift();
+            // eslint-disable-next-line no-await-in-loop
+            await processSingleUploadFile(nextFile);
+        }
+    } finally {
+        isProcessingSingleUpload = false;
+    }
+}
+
+async function processSingleUploadFile(file) {
     if (!file) {
         return;
     }
 
-    const label = 'Subject';
-
     if (file.type && !file.type.startsWith('image/')) {
-        const message = `${label} upload failed: selected file is not an image.`;
+        const message = `${SINGLE_UPLOAD_LABEL} upload failed: selected file is not an image.`;
         console.warn(message);
         showError(message, { diagnostics: false });
-        fileInput.value = '';
         return;
     }
 
@@ -515,20 +555,17 @@ async function handleSingleUpload(fileInput) {
         if (typeof dataUrl !== 'string' || !dataUrl.length) {
             throw new Error('Uploaded image data unavailable.');
         }
-        // Reuse existing display pipeline for the "you"/back slot
         displayPhotoForSide('you', dataUrl);
         stopAllCameras();
         const viewportOverride = await buildFullFrameViewportSnapshot(dataUrl);
         await saveCurrentSelection({ viewportOverride });
     } catch (error) {
-        console.error(`${label} photo upload failed (single page):`, error);
-        const message = `${label} upload failed: ${error?.message || 'Unable to process image.'}`;
+        console.error(`${SINGLE_UPLOAD_LABEL} photo upload failed (single page):`, error);
+        const message = `${SINGLE_UPLOAD_LABEL} upload failed: ${error?.message || 'Unable to process image.'}`;
         showError(message, {
             diagnostics: false,
             detail: error?.stack || null
         });
-    } finally {
-        fileInput.value = '';
     }
 }
 
