@@ -624,6 +624,77 @@ body.single-body * {
     font-style: italic;
 }
 
+.single-description-neighbors {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.single-description-neighbors-label {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.single-description-neighbors-list {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+}
+
+.single-description-neighbor-card {
+    flex: 0 0 auto;
+    width: 80px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.single-description-neighbor-thumb {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border-radius: 8px;
+    object-fit: cover;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.single-description-neighbor-meta {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.85);
+    line-height: 1.3;
+}
+
+.single-description-neighbor-meta strong {
+    display: block;
+}
+
+.single-description-neighbor-score {
+    font-size: 11px;
+    font-weight: 600;
+    color: rgba(34, 197, 94, 0.95);
+}
+
+.single-description-neighbor-explanation {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.78);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.single-description-neighbor-timestamp {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.55);
+}
+
 .single-description-close {
     position: absolute;
     top: 10px;

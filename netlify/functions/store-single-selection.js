@@ -69,37 +69,48 @@ exports.handler = async (event) => {
   const signature = typeof payload.signature === 'string' ? payload.signature.slice(0, 512) : null;
   const mode = typeof payload.mode === 'string' ? payload.mode.trim().toLowerCase().slice(0, 32) : 'single';
 
-  const description = await generateStablePersonDescription(imageDataUrl);
+  const descriptionResult = await generateStablePersonDescription(imageDataUrl);
 
   let personGroupIdForInsert = null;
   let groupingProbabilityForInsert = null;
   let groupingExplanationForInsert = null;
 
   try {
-    // Build canonical descriptions per existing person group using longest description.
+    // Build canonical descriptions per existing person group using structured description_json.
     const groupsResult = await pool.query(
       `
-      SELECT person_group_id, description
+      SELECT person_group_id, description_json
       FROM ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME}
-      WHERE description IS NOT NULL
+      WHERE description_json IS NOT NULL
         AND person_group_id IS NOT NULL
       `
     );
 
-    const groupMap = new Map();
-    for (const row of groupsResult.rows || []) {
+    const rows = groupsResult.rows || [];
+    const groups = [];
+    const memberCounts = new Map();
+    for (const row of rows) {
       const groupId = row.person_group_id;
-      const desc = typeof row.description === 'string' ? row.description : '';
-      if (!groupId || !desc) continue;
-      const existing = groupMap.get(groupId);
-      if (!existing || desc.length > existing.description.length) {
-        groupMap.set(groupId, { id: groupId, description: desc });
-      }
+      if (!groupId || !row.description_json) continue;
+      const key = String(groupId);
+      memberCounts.set(key, (memberCounts.get(key) || 0) + 1);
+    }
+    for (const row of rows) {
+      const groupId = row.person_group_id;
+      const canonical = row.description_json;
+      if (!groupId || !canonical) continue;
+      const key = String(groupId);
+      groups.push({
+        group_id: groupId,
+        group_canonical: canonical,
+        group_member_count: memberCounts.get(key) || 1
+      });
     }
 
-    const groups = Array.from(groupMap.values());
-
-    const groupingResult = await evaluateDescriptionGrouping(description || '', groups);
+    const groupingResult = await evaluateDescriptionGrouping(
+      descriptionResult ? descriptionResult.schema : null,
+      groups
+    );
     const bestGroupId = Number.isFinite(Number(groupingResult.bestGroupId))
       ? Number(groupingResult.bestGroupId)
       : null;
@@ -123,7 +134,7 @@ exports.handler = async (event) => {
 
     // Keep only lightweight debug data for the client
     var groupingDebugForResponse = {
-      newDescription: description || '',
+      newDescription: descriptionResult ? descriptionResult.schema : null,
       groups,
       bestGroupId,
       bestGroupProbability,
@@ -137,11 +148,13 @@ exports.handler = async (event) => {
     // Fall back to treating this as a new group; personGroupIdForInsert stays null.
   }
 
+  const hasStructuredDescription = descriptionResult && descriptionResult.schema && descriptionResult.naturalSummary;
+
   const insertQuery = {
     text: `
-        INSERT INTO ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME} (role, image_data_url, viewport, signature, captured_at, description, person_group_id, grouping_probability, grouping_explanation)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        RETURNING id, created_at, captured_at, role, description, person_group_id, grouping_probability, grouping_explanation
+        INSERT INTO ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME} (role, image_data_url, viewport, signature, captured_at, description, description_json, person_group_id, grouping_probability, grouping_explanation)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        RETURNING id, created_at, captured_at, role, description, description_json, person_group_id, grouping_probability, grouping_explanation
     `,
     values: [
       mode || 'single',
@@ -149,10 +162,11 @@ exports.handler = async (event) => {
       viewport ? JSON.stringify(viewport) : null,
       signature,
       capturedAt instanceof Date && !Number.isNaN(capturedAt.getTime()) ? capturedAt.toISOString() : null,
-      description,
-        personGroupIdForInsert,
-        groupingProbabilityForInsert,
-        groupingExplanationForInsert
+      hasStructuredDescription ? descriptionResult.naturalSummary : null,
+      hasStructuredDescription ? JSON.stringify(descriptionResult.schema) : null,
+      personGroupIdForInsert,
+      groupingProbabilityForInsert,
+      groupingExplanationForInsert
     ]
   };
 

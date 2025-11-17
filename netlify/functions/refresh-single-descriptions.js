@@ -44,10 +44,10 @@ exports.handler = async (event) => {
   try {
     const selectQuery = {
       text: `
-        SELECT id, image_data_url, description
+        SELECT id, image_data_url
         FROM ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME}
         WHERE image_data_url IS NOT NULL
-          AND (description IS NULL OR char_length(description) < 400)
+          AND (description IS NULL OR description_json IS NULL)
         ORDER BY created_at DESC
         LIMIT $1
       `,
@@ -64,19 +64,20 @@ exports.handler = async (event) => {
 
     for (const row of rows) {
       try {
-        const description = await generateStablePersonDescription(row.image_data_url);
-        if (!description) {
-          failures.push({ id: row.id, reason: 'empty_description' });
+        const descriptionResult = await generateStablePersonDescription(row.image_data_url);
+        if (!descriptionResult || !descriptionResult.schema || !descriptionResult.naturalSummary) {
+          failures.push({ id: row.id, reason: 'empty_description_or_schema' });
           continue;
         }
 
         await pool.query(
           `
           UPDATE ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME}
-          SET description = $1
-          WHERE id = $2
+          SET description = $1,
+              description_json = $2
+          WHERE id = $3
           `,
-          [description, row.id]
+          [descriptionResult.naturalSummary, JSON.stringify(descriptionResult.schema), row.id]
         );
         updated += 1;
       } catch (error) {

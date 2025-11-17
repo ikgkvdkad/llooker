@@ -180,8 +180,9 @@ function renderSelectionRow(selection) {
         const probabilityEl = document.getElementById('singleGroupingProbability');
         const explanationEl = document.getElementById('singleGroupingExplanation');
         const groupIdEl = document.getElementById('singleGroupingId');
+        const neighborsEl = document.getElementById('singleDescriptionNeighbors');
 
-        if (!modal || !textEl || !probabilityEl || !explanationEl || !groupIdEl) {
+        if (!modal || !textEl || !probabilityEl || !explanationEl || !groupIdEl || !neighborsEl) {
             showWarning('Description viewer is missing required fields. Reload the page and try again.', {
                 diagnostics: false
             });
@@ -226,6 +227,113 @@ function renderSelectionRow(selection) {
         } else {
             groupIdEl.textContent = 'Group ID not available for this photo yet.';
             groupIdEl.classList.add('is-empty');
+        }
+
+        // Nearest groups by appearance for this selection.
+        neighborsEl.innerHTML = '';
+        const selectionIdText = wrapper.dataset.selectionId || '';
+        const selectionId = Number.isFinite(Number(selectionIdText)) ? Number(selectionIdText) : null;
+
+        const label = document.createElement('div');
+        label.className = 'single-description-neighbors-label';
+        label.textContent = 'Closest groups by appearance';
+        neighborsEl.appendChild(label);
+
+        const content = document.createElement('div');
+        content.className = 'single-description-neighbors-list';
+        neighborsEl.appendChild(content);
+
+        if (!selectionId) {
+            const msg = document.createElement('div');
+            msg.className = 'single-description-neighbor-meta';
+            msg.textContent = 'Scoring details are not available for this thumbnail (missing id).';
+            content.appendChild(msg);
+        } else {
+            const loading = document.createElement('div');
+            loading.className = 'single-description-neighbor-meta';
+            loading.textContent = 'Loading closest groups…';
+            content.appendChild(loading);
+
+            try {
+                const response = await fetch(`/.netlify/functions/get-single-group-neighbors?id=${encodeURIComponent(selectionId)}`);
+                if (!response.ok) {
+                    const errorText = await response.text().catch(() => '');
+                    throw new Error(errorText || `HTTP ${response.status}`);
+                }
+                const payload = await response.json().catch(() => ({}));
+                const neighbors = Array.isArray(payload?.neighbors) ? payload.neighbors : [];
+
+                content.innerHTML = '';
+
+                if (!neighbors.length) {
+                    const msg = document.createElement('div');
+                    msg.className = 'single-description-neighbor-meta';
+                    msg.textContent = 'No strong group matches found for this photo yet.';
+                    content.appendChild(msg);
+                } else {
+                    neighbors.slice(0, 3).forEach((neighbor) => {
+                        const card = document.createElement('div');
+                        card.className = 'single-description-neighbor-card';
+
+                        if (neighbor.imageDataUrl) {
+                            const thumb = document.createElement('img');
+                            thumb.className = 'single-description-neighbor-thumb';
+                            thumb.src = neighbor.imageDataUrl;
+                            thumb.alt = `Group ${neighbor.personGroupId || ''} representative photo`;
+                            card.appendChild(thumb);
+                        }
+
+                        const meta = document.createElement('div');
+                        meta.className = 'single-description-neighbor-meta';
+
+                        const header = document.createElement('strong');
+                        const scoreValue = Number.isFinite(Number(neighbor.score))
+                            ? Math.max(0, Math.min(100, Math.round(Number(neighbor.score))))
+                            : null;
+                        if (neighbor.personGroupId && scoreValue !== null) {
+                            header.textContent = `Group ${neighbor.personGroupId} · ${scoreValue}% similarity`;
+                        } else if (neighbor.personGroupId) {
+                            header.textContent = `Group ${neighbor.personGroupId}`;
+                        } else if (scoreValue !== null) {
+                            header.textContent = `${scoreValue}% similarity`;
+                        } else {
+                            header.textContent = 'Group match';
+                        }
+                        meta.appendChild(header);
+
+                        const explanation = (neighbor.explanation || '').trim();
+                        if (explanation) {
+                            const expl = document.createElement('div');
+                            expl.className = 'single-description-neighbor-explanation';
+                            expl.textContent = explanation;
+                            meta.appendChild(expl);
+                        }
+
+                        const timestamp = neighbor.capturedAt || neighbor.createdAt || null;
+                        if (timestamp) {
+                            const tsEl = document.createElement('div');
+                            tsEl.className = 'single-description-neighbor-timestamp';
+                            try {
+                                const date = new Date(timestamp);
+                                tsEl.textContent = date.toLocaleString();
+                            } catch {
+                                tsEl.textContent = String(timestamp);
+                            }
+                            meta.appendChild(tsEl);
+                        }
+
+                        card.appendChild(meta);
+                        content.appendChild(card);
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to load single-group neighbors:', error);
+                content.innerHTML = '';
+                const msg = document.createElement('div');
+                msg.className = 'single-description-neighbor-meta';
+                msg.textContent = 'Scoring details could not be loaded for this photo. Check diagnostics.';
+                content.appendChild(msg);
+            }
         }
 
         modal.classList.add('is-open');
