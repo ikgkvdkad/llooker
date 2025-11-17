@@ -43,7 +43,7 @@
                 <span class="sr-only">Clear all</span>
             </button>
 
-            <input type="file" accept="image/*" id="youUploadInput" class="analysis-upload-input" aria-label="Upload photo for Subject">
+            <input type="file" accept="image/*" multiple id="youUploadInput" class="analysis-upload-input" aria-label="Upload photo for Subject">
         </div>
 
         <div class="single-selections-section">
@@ -62,12 +62,14 @@
                 <span aria-hidden="true">&times;</span>
             </button>
             <h2 id="singleDescriptionTitle" class="single-description-title">Photo description</h2>
-            <p id="singleDescriptionText" class="single-description-text"></p>
-            <div class="single-description-grouping" id="singleGroupingSection">
-                <div class="single-description-grouping-label">Grouping decision</div>
-                <div id="singleGroupingProbability" class="single-description-grouping-probability is-empty"></div>
-                <p id="singleGroupingExplanation" class="single-description-grouping-explanation is-empty"></p>
-                <div id="singleGroupingId" class="single-description-grouping-id is-empty"></div>
+            <div class="single-description-content">
+                <p id="singleDescriptionText" class="single-description-text"></p>
+                <div class="single-description-grouping" id="singleGroupingSection">
+                    <div class="single-description-grouping-label">Grouping decision</div>
+                    <div id="singleGroupingProbability" class="single-description-grouping-probability is-empty"></div>
+                    <p id="singleGroupingExplanation" class="single-description-grouping-explanation is-empty"></p>
+                    <div id="singleGroupingId" class="single-description-grouping-id is-empty"></div>
+                </div>
             </div>
         </div>
     </div>
