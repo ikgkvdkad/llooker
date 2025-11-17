@@ -6,7 +6,8 @@ const {
 const {
   generateStablePersonDescription,
   evaluateDescriptionGrouping,
-  GROUPING_MATCH_THRESHOLD
+  GROUPING_MATCH_THRESHOLD,
+  computeSchemaClarity
 } = require('./shared/single-description.js');
 const { verifyShortlistWithVision } = require('./shared/vision-verification.js');
 const {
@@ -95,6 +96,9 @@ exports.handler = async (event) => {
   const mode = typeof payload.mode === 'string' ? payload.mode.trim().toLowerCase().slice(0, 32) : 'single';
 
   const descriptionResult = await generateStablePersonDescription(imageDataUrl);
+  const newSchemaClarity = descriptionResult && descriptionResult.schema
+    ? computeSchemaClarity(descriptionResult.schema)
+    : 0;
 
   let personGroupIdForInsert = null;
   let groupingProbabilityForInsert = null;
@@ -199,7 +203,8 @@ exports.handler = async (event) => {
 
       const bestCandidateSummary = summarizeBestCandidate(
         groupingResult.bestCandidate,
-        groupsMap
+        groupsMap,
+        newSchemaClarity
       );
       bestCandidateSummaryForResponse = bestCandidateSummary;
 

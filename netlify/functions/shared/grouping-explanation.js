@@ -54,25 +54,31 @@ function unpackExplanationWithDetails(packed) {
   };
 }
 
-function summarizeBestCandidate(candidate, groupsMap) {
+function describeFatalMismatch(fatal) {
+  if (!fatal || typeof fatal !== 'object') {
+    return null;
+  }
+  const parts = [];
+  if (fatal.type) {
+    const label = fatal.type.replace(/_/g, ' ');
+    parts.push(label);
+  }
+  if (fatal.detail) {
+    parts.push(fatal.detail);
+  }
+  if (Number.isFinite(fatal.confidencePair)) {
+    parts.push(`conf_pair=${fatal.confidencePair}`);
+  }
+  return parts.join(' · ') || null;
+}
+
+function summarizeBestCandidate(candidate, groupsMap, newImageClarity = null) {
   if (!candidate || typeof candidate !== 'object') {
     return null;
   }
   const meta = groupsMap instanceof Map
     ? (groupsMap.get(String(candidate.groupId)) || {})
     : {};
-  let fatalMismatchDetail = null;
-  if (candidate.fatalMismatch) {
-    if (typeof candidate.fatalMismatch === 'string') {
-      fatalMismatchDetail = candidate.fatalMismatch;
-    } else if (typeof candidate.fatalMismatch === 'object') {
-      fatalMismatchDetail = candidate.fatalMismatch.detail
-        || candidate.fatalMismatch.type
-        || JSON.stringify(candidate.fatalMismatch);
-    } else {
-      fatalMismatchDetail = String(candidate.fatalMismatch);
-    }
-  }
   return {
     groupId: candidate.groupId ?? null,
     memberCount: Number(candidate.memberCount) || 0,
@@ -83,10 +89,10 @@ function summarizeBestCandidate(candidate, groupsMap) {
     probability: Number.isFinite(Number(candidate.probability))
       ? Math.round(Number(candidate.probability))
       : null,
-    fatalMismatch: candidate.fatalMismatch || null,
-    fatalMismatchDetail,
-    fallbackReason: candidate.overrideReason || null,
+    fatalMismatchReason: describeFatalMismatch(candidate.fatalMismatch) || null,
     groupClarity: typeof candidate.groupClarity === 'number' ? candidate.groupClarity : null,
+    newImageClarity: Number.isFinite(Number(newImageClarity)) ? Math.round(Number(newImageClarity)) : null,
+    fallbackReason: candidate.fallbackReason || null,
     breakdown: candidate.breakdown || null,
     representativeImage: meta.representativeImage || null,
     representativeSelectionId: meta.representativeSelectionId || null,

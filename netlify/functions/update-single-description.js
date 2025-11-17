@@ -6,7 +6,8 @@ const {
 const {
   generateStablePersonDescription,
   evaluateDescriptionGrouping,
-  GROUPING_MATCH_THRESHOLD
+  GROUPING_MATCH_THRESHOLD,
+  computeSchemaClarity
 } = require('./shared/single-description.js');
 const { verifyShortlistWithVision } = require('./shared/vision-verification.js');
 const {
@@ -142,6 +143,8 @@ exports.handler = async (event) => {
     };
   }
 
+  const newSchemaClarity = computeSchemaClarity(description.schema);
+
   const existingExplanation = unpackExplanationWithDetails(row.grouping_explanation || '');
   let personGroupId = row.person_group_id || null;
   let groupingDebugForResponse = null;
@@ -251,7 +254,8 @@ exports.handler = async (event) => {
       );
       const bestCandidateSummary = summarizeBestCandidate(
         groupingResult.bestCandidate,
-        groupsMap
+        groupsMap,
+        newSchemaClarity
       );
       if (bestCandidateSummary) {
         bestCandidateSummaryForResponse = bestCandidateSummary;

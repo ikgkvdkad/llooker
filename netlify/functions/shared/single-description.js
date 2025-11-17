@@ -140,8 +140,7 @@ const HAIR_CONTRA_WEIGHTS = {
 
 const COLOR_EQUIVALENCE_GROUPS = [
   ['navy', 'dark_blue', 'blue'],
-  ['dark_blonde', 'blonde', 'light_brown'],
-  ['black', 'grey']
+  ['dark_blonde', 'blonde', 'light_brown']
 ];
 
 const LOWER_GARMENT_KEYWORDS = {
@@ -320,15 +319,77 @@ function sanitizeClarity(value) {
   return clamped;
 }
 
-function getImageClarity(schema) {
+function computeSchemaClarity(schema) {
   if (!schema || typeof schema !== 'object') {
     return 0;
   }
-  const raw = Number(schema.image_clarity);
-  if (!Number.isFinite(raw)) {
-    return 0;
-  }
-  return Math.max(0, Math.min(100, raw));
+  const base = Number(schema.image_clarity);
+  const normalizedBase = Number.isFinite(base) ? Math.max(0, Math.min(100, base)) : 0;
+  const normalizedEvents = [];
+
+  const evalField = (obj, key, weight = 5) => {
+    if (!obj || typeof obj !== 'object') return 0;
+    const value = obj.value;
+    const confidence = Number(obj.confidence);
+    if (typeof value !== 'string' || !value || value === 'unknown') return 0;
+    if (!Number.isFinite(confidence) || confidence < 50) return 0;
+    return Math.min(weight, (confidence / 100) * weight);
+  };
+
+  const hairScore =
+    evalField(schema.hair?.color, 'value', 10) +
+    evalField(schema.hair?.length, 'value', 4) +
+    evalField(schema.hair?.facial_hair, 'value', 4);
+
+  const physicalScore =
+    evalField(schema.gender_presentation, 'value', 6) +
+    evalField(schema.age_band, 'value', 6) +
+    evalField(schema.build, 'value', 4) +
+    evalField(schema.skin_tone, 'value', 4) +
+    evalField(schema.height_impression, 'value', 2);
+
+  const clothingScore = ['top', 'trousers', 'shoes', 'jacket', 'dress'].reduce((sum, slot) => {
+    const part = schema.clothing?.[slot];
+    if (!part || typeof part !== 'object') return sum;
+    const color = part.color;
+    const desc = part.description;
+    const colorScore = evalField({ value: typeof color === 'string' ? color : '', confidence: part.confidence }, 'value', 8);
+    const descScore = typeof desc === 'string' && desc ? Math.min(5, (Number(part.confidence) || 0) / 100 * 5) : 0;
+    return sum + colorScore + descScore;
+  }, 0);
+
+  const accessoryScore = Array.isArray(schema.accessories)
+    ? Math.min(10, schema.accessories.reduce((sum, item) => {
+        if (!item || typeof item !== 'object') return sum;
+        const conf = Number(item.confidence);
+        if (!Number.isFinite(conf) || conf < 50) return sum;
+        return sum + 2;
+      }, 0))
+    : 0;
+
+  const distinctivenessScore = Number(schema.distinctiveness_score);
+  const distinctScore = Number.isFinite(distinctivenessScore)
+    ? Math.min(10, distinctivenessScore / 10)
+    : 0;
+
+  const coverageBonus = (() => {
+    const fields = [
+      schema.hair?.color?.value,
+      schema.hair?.length?.value,
+      schema.gender_presentation?.value,
+      schema.age_band?.value,
+      schema.build?.value,
+      schema.skin_tone?.value,
+      schema.clothing?.top?.description,
+      schema.clothing?.trousers?.description,
+      schema.clothing?.shoes?.description
+    ];
+    const filled = fields.filter((v) => typeof v === 'string' && v && v !== 'unknown').length;
+    return Math.min(15, filled * 2);
+  })();
+
+  const composite = normalizedBase + hairScore + physicalScore + clothingScore + accessoryScore + distinctScore + coverageBonus;
+  return Math.max(0, Math.min(100, Math.round(composite)));
 }
 
 function includesKeyword(text, keywords) {
@@ -508,8 +569,8 @@ function detectFatalMismatch(newSchema, canonical) {
 
   const hairNew = newSchema?.hair?.color;
   const hairGroup = canonical?.hair?.color;
-  const newClarity = getImageClarity(newSchema);
-  const groupClarity = getImageClarity(canonical);
+  const newClarity = computeSchemaClarity(newSchema);
+  const groupClarity = computeSchemaClarity(canonical);
   if (
     hairNew?.value &&
     hairGroup?.value &&
@@ -1237,7 +1298,7 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
     };
   }
 
-  const newClarity = getImageClarity(newDescriptionSchema);
+  const newClarity = computeSchemaClarity(newDescriptionSchema);
   const scored = [];
   for (const group of existingGroups) {
     if (!group || typeof group !== 'object') continue;
@@ -1245,7 +1306,7 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
     if (!canonical || typeof canonical !== 'object') continue;
     const groupId = group.group_id;
     const memberCount = Number(group.group_member_count) || 0;
-    const groupClarity = getImageClarity(canonical);
+    const groupClarity = computeSchemaClarity(canonical);
 
     const fatalMismatch = detectFatalMismatch(newDescriptionSchema, canonical);
     if (fatalMismatch) {
@@ -1321,17 +1382,7 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
         : false;
       const proStrong = candidate.proScore >= CLARITY_OVERRIDE_PRO_MIN;
       const contraAcceptable = candidate.contraScore <= CLARITY_OVERRIDE_CONTRA_MAX;
-      const rawStrong = candidate.proScore >= PRO_MIN;
-      const rawContraOk = candidate.contraScore <= CONTRA_MAX;
-      const clarityStrong = typeof candidate.groupClarity === 'number'
-        ? (candidate.groupClarity >= MIN_CLARITY_FOR_FATAL_HAIR && newClarity >= MIN_CLARITY_FOR_FATAL_HAIR)
-        : false;
       if (clarityEdge && proStrong && contraAcceptable) {
-        candidate.overrideReason = 'clarity_override';
-        return candidate;
-      }
-      if (rawStrong && rawContraOk && clarityStrong) {
-        candidate.overrideReason = 'raw_scores';
         return candidate;
       }
       return null;
@@ -1392,7 +1443,6 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
       const fallbackPro = Math.round(fallbackGroup.proScore);
       const fallbackContra = Math.round(fallbackGroup.contraScore);
       const clarityNote = `Clarity override: new image_clarity ${newClarity} vs canonical ${fallbackGroup.groupClarity ?? 'unknown'}.`;
-      const fallbackReason = fallbackGroup.overrideReason || 'clarity_override';
       const fallbackExplanation = [
         explanation,
         `Fallback candidate raw scores: pro=${fallbackPro}, contra=${fallbackContra}.`,
@@ -1400,9 +1450,7 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
         `Contras: ${fbContraParts.length ? fbContraParts.join(', ') : 'none'}.`,
         `Normalized fallback scores: normPro=${fallbackNormPro}, normContra=${fallbackNormContra}, probability=${fallbackProbability}%.`,
         clarityNote,
-        fallbackReason === 'raw_scores'
-          ? `Assigned to group ${fallbackGroup.groupId} despite thresholds because raw pro/contra met requirements with high clarity on both sides.`
-          : `Assigned to group ${fallbackGroup.groupId} despite thresholds due to stronger clarity and near-match scores.`
+        `Assigned to group ${fallbackGroup.groupId} despite thresholds due to stronger clarity and near-match scores.`
       ].filter(Boolean).join(' ');
       const fallbackDetails = {
         rawScores: { pro: fallbackPro, contra: fallbackContra },
@@ -1420,8 +1468,9 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
           canonical: typeof fallbackGroup.groupClarity === 'number' ? fallbackGroup.groupClarity : null
         },
         fallbackApplied: true,
-        fallbackReason
+        fallbackReason: 'clarity_override'
       };
+      fallbackGroup.fallbackReason = 'clarity_override';
       return {
         bestGroupId: fallbackGroup.groupId,
         bestGroupProbability: fallbackProbability,
@@ -1591,6 +1640,7 @@ module.exports = {
   generateStablePersonDescription,
   evaluateDescriptionGrouping,
   GROUPING_MATCH_THRESHOLD,
-  computeProContraScores
+  computeProContraScores,
+  computeSchemaClarity
 };
 

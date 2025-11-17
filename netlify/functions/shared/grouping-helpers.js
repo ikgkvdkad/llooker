@@ -2,11 +2,73 @@ function extractClarity(description) {
   if (!description || typeof description !== 'object') {
     return 0;
   }
-  const raw = Number(description.image_clarity);
-  if (!Number.isFinite(raw)) {
-    return 0;
-  }
-  return Math.max(0, Math.min(100, raw));
+  const base = Number(description.image_clarity);
+  const normalizedBase = Number.isFinite(base) ? Math.max(0, Math.min(100, base)) : 0;
+
+  const scoreField = (obj, weight = 5) => {
+    if (!obj || typeof obj !== 'object') return 0;
+    const value = obj.value;
+    const confidence = Number(obj.confidence);
+    if (typeof value !== 'string' || !value || value === 'unknown') return 0;
+    if (!Number.isFinite(confidence) || confidence < 50) return 0;
+    return Math.min(weight, (confidence / 100) * weight);
+  };
+
+  const hairScore =
+    scoreField(description.hair?.color, 10) +
+    scoreField(description.hair?.length, 4) +
+    scoreField(description.hair?.facial_hair, 4);
+
+  const physicalScore =
+    scoreField(description.gender_presentation, 6) +
+    scoreField(description.age_band, 6) +
+    scoreField(description.build, 4) +
+    scoreField(description.skin_tone, 4) +
+    scoreField(description.height_impression, 2);
+
+  const clothingSlots = ['top', 'trousers', 'shoes', 'jacket', 'dress'];
+  const clothingScore = clothingSlots.reduce((sum, slot) => {
+    const part = description.clothing?.[slot];
+    if (!part || typeof part !== 'object') return sum;
+    const colorScore = scoreField({ value: part.color, confidence: part.confidence }, 8);
+    const descScore = typeof part.description === 'string' && part.description
+      ? Math.min(5, ((Number(part.confidence) || 0) / 100) * 5)
+      : 0;
+    return sum + colorScore + descScore;
+  }, 0);
+
+  const accessoryScore = Array.isArray(description.accessories)
+    ? Math.min(10, description.accessories.reduce((acc, item) => {
+        if (!item || typeof item !== 'object') return acc;
+        const conf = Number(item.confidence);
+        if (!Number.isFinite(conf) || conf < 50) return acc;
+        return acc + 2;
+      }, 0))
+    : 0;
+
+  const distinctivenessScore = Number(description.distinctiveness_score);
+  const distinctScore = Number.isFinite(distinctivenessScore)
+    ? Math.min(10, distinctivenessScore / 10)
+    : 0;
+
+  const coverageBonus = (() => {
+    const fields = [
+      description.hair?.color?.value,
+      description.hair?.length?.value,
+      description.gender_presentation?.value,
+      description.age_band?.value,
+      description.build?.value,
+      description.skin_tone?.value,
+      description.clothing?.top?.description,
+      description.clothing?.trousers?.description,
+      description.clothing?.shoes?.description
+    ];
+    const filled = fields.filter((v) => typeof v === 'string' && v && v !== 'unknown').length;
+    return Math.min(15, filled * 2);
+  })();
+
+  const composite = normalizedBase + hairScore + physicalScore + clothingScore + accessoryScore + distinctScore + coverageBonus;
+  return Math.max(0, Math.min(100, Math.round(composite)));
 }
 
 function collectGroupsWithRepresentatives(rows) {
