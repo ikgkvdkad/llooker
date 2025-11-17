@@ -15,8 +15,21 @@ const {
 } = require('./shared/grouping-helpers.js');
 const {
   packExplanationWithDetails,
-  unpackExplanationWithDetails
+  unpackExplanationWithDetails,
+  summarizeBestCandidate
 } = require('./shared/grouping-explanation.js');
+
+function cloneDetails(details) {
+  if (!details || typeof details !== 'object') {
+    return null;
+  }
+  try {
+    return JSON.parse(JSON.stringify(details));
+  } catch (error) {
+    console.warn('Failed to clone grouping details payload (update).', error);
+    return { ...details };
+  }
+}
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -136,6 +149,8 @@ exports.handler = async (event) => {
   let groupingExplanationPackedForUpdate = null;
   let groupingExplanationTextForResponse = existingExplanation.explanation || null;
   let groupingExplanationDetailsForResponse = existingExplanation.details || null;
+  let bestCandidateForResponse = null;
+  let bestCandidateSummaryForResponse = existingExplanation.details?.bestCandidate || null;
   let groupsMap = new Map();
   let shortlist = [];
   let visionOutcome = null;
@@ -231,7 +246,21 @@ exports.handler = async (event) => {
       groupingProbabilityForUpdate = finalProbability;
       const combinedExplanation = explanationPieces.filter(Boolean).join(' ').trim();
       groupingExplanationTextForResponse = combinedExplanation || null;
-      groupingExplanationDetailsForResponse = groupingResult.explanationDetails || null;
+      groupingExplanationDetailsForResponse = cloneDetails(
+        groupingResult.explanationDetails || groupingResult.bestCandidateDetails || null
+      );
+      const bestCandidateSummary = summarizeBestCandidate(
+        groupingResult.bestCandidate,
+        groupsMap
+      );
+      if (bestCandidateSummary) {
+        bestCandidateSummaryForResponse = bestCandidateSummary;
+        if (groupingExplanationDetailsForResponse && typeof groupingExplanationDetailsForResponse === 'object') {
+          groupingExplanationDetailsForResponse.bestCandidate = bestCandidateSummary;
+        } else {
+          groupingExplanationDetailsForResponse = { bestCandidate: bestCandidateSummary };
+        }
+      }
       groupingExplanationPackedForUpdate = combinedExplanation
         ? packExplanationWithDetails(combinedExplanation, groupingExplanationDetailsForResponse)
         : null;
@@ -244,8 +273,11 @@ exports.handler = async (event) => {
         bestGroupProbability,
         explanation: groupingExplanationTextForResponse,
         explanationDetails: groupingExplanationDetailsForResponse,
+        bestCandidate: bestCandidateSummaryForResponse || null,
         vision: visionOutcome
       };
+
+      bestCandidateForResponse = bestCandidateSummaryForResponse;
   } catch (groupError) {
     console.error('Failed to evaluate grouping for updated single selection:', {
       id,
@@ -295,6 +327,7 @@ exports.handler = async (event) => {
       groupingProbability: groupingProbabilityForUpdate ?? row.grouping_probability ?? null,
       groupingExplanation: groupingExplanationTextForResponse,
       groupingExplanationDetails: groupingExplanationDetailsForResponse,
+      bestCandidate: bestCandidateSummaryForResponse,
       groupingDebug: groupingDebugForResponse
     })
   };

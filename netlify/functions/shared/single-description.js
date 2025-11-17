@@ -164,6 +164,68 @@ const CLARITY_OVERRIDE_DELTA = 5;
 const CLARITY_OVERRIDE_PRO_MIN = PRO_MIN - 5; // allow slightly under raw threshold
 const CLARITY_OVERRIDE_CONTRA_MAX = CONTRA_MAX + 5;
 
+function buildCandidateDetails(candidate, newClarity, probabilityOverride) {
+  if (!candidate || typeof candidate !== 'object') {
+    return null;
+  }
+  const bd = candidate.breakdown || {};
+  const pro = Math.round(candidate.proScore || 0);
+  const contra = Math.round(candidate.contraScore || 0);
+  const normPro = toOneDecimal(candidate.normPro || 0);
+  const normContra = toOneDecimal(candidate.normContra || 0);
+  const probability = Number.isFinite(Number(probabilityOverride))
+    ? Math.round(Number(probabilityOverride))
+    : Number.isFinite(Number(candidate.probability))
+      ? Math.round(Number(candidate.probability))
+      : computeNormalizedProbability(normPro, normContra);
+
+  let clothingCapNote = '';
+  if (
+    typeof bd.clothingProRaw === 'number' &&
+    typeof bd.clothingProApplied === 'number' &&
+    bd.clothingProRaw > bd.clothingProApplied
+  ) {
+    clothingCapNote = `capped at ${Math.round(bd.clothingProApplied)} of ${Math.round(bd.clothingProRaw)}`;
+  }
+
+  const makeContribution = (value, category, note) => ({
+    category,
+    value: Math.round(value || 0),
+    note: note || null
+  });
+
+  const proContributions = [];
+  if (bd.clothingPro > 0) proContributions.push(makeContribution(bd.clothingPro, 'clothing', clothingCapNote || null));
+  if (bd.physicalPro > 0) proContributions.push(makeContribution(bd.physicalPro, 'physical'));
+  if (bd.hairPro > 0) proContributions.push(makeContribution(bd.hairPro, 'hair'));
+  if (bd.rarePro > 0) proContributions.push(makeContribution(bd.rarePro, 'rare'));
+
+  const contraContributions = [];
+  if (bd.clothingContra > 0) contraContributions.push(makeContribution(bd.clothingContra, 'clothing'));
+  if (bd.physicalContra > 0) contraContributions.push(makeContribution(bd.physicalContra, 'physical'));
+  if (bd.hairContra > 0) contraContributions.push(makeContribution(bd.hairContra, 'hair'));
+  if (bd.rareContra > 0) contraContributions.push(makeContribution(bd.rareContra, 'rare'));
+
+  return {
+    rawScores: { pro, contra },
+    normalized: {
+      normPro,
+      normContra,
+      probability,
+      requiredNormPro: NORM_PRO_MIN,
+      requiredNormContra: NORM_CONTRA_MAX
+    },
+    proContributions,
+    contraContributions,
+    clarity: {
+      newImage: Number.isFinite(newClarity) ? Number(newClarity) : null,
+      canonical: typeof candidate.groupClarity === 'number' ? candidate.groupClarity : null
+    },
+    fallbackApplied: false,
+    fallbackReason: null
+  };
+}
+
 function confidenceProduct(valueA, valueB) {
   const a = Number(valueA);
   const b = Number(valueB);
@@ -1351,15 +1413,23 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
         bestGroupProbability: fallbackProbability,
         explanation: fallbackExplanation.trim(),
         explanationDetails: fallbackDetails,
-        shortlist
+        shortlist,
+        bestCandidate: fallbackGroup,
+        bestCandidateDetails: fallbackDetails
       };
     }
 
+    const candidateDetails = candidate
+      ? buildCandidateDetails(candidate, newClarity, candidate?.probability || 0)
+      : null;
     return {
       bestGroupId: null,
       bestGroupProbability: 0,
       explanation,
-      shortlist
+      explanationDetails: candidateDetails,
+      shortlist,
+      bestCandidate: candidate || null,
+      bestCandidateDetails: candidateDetails
     };
   }
 
@@ -1473,7 +1543,7 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
     clarityLine
   ].filter(Boolean).join(' ');
 
-  const explanationDetails = {
+  const explanationDetails = buildCandidateDetails(best, newClarity, bestProbability) || {
     rawScores: { pro, contra },
     normalized: {
       normPro,
@@ -1497,7 +1567,9 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
     bestGroupProbability: bestProbability,
     explanation,
     explanationDetails,
-    shortlist
+    shortlist,
+    bestCandidate: best,
+    bestCandidateDetails: explanationDetails
   };
 }
 

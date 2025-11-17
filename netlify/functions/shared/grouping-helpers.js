@@ -58,6 +58,9 @@ function collectGroupsWithRepresentatives(rows) {
       group_id: entry.group_id,
       group_canonical: entry.group_canonical,
       group_member_count: entry.group_member_count,
+      representativeImage: entry.representativeImage || null,
+      representativeSelectionId: entry.representativeSelectionId || null,
+      representativeCapturedAt: entry.representativeCapturedAt || null,
       group_image_clarity: typeof entry.best_clarity === 'number' ? entry.best_clarity : null
     });
   }

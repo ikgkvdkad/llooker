@@ -1,6 +1,14 @@
 const SENTINEL_START = '\n\n===SCORE_BREAKDOWN_JSON_START===\n';
 const SENTINEL_END = '\n===SCORE_BREAKDOWN_JSON_END===\n';
 
+function toOneDecimal(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) {
+    return null;
+  }
+  return Math.round(num * 10) / 10;
+}
+
 function packExplanationWithDetails(explanation, details) {
   if (!details) {
     return explanation || '';
@@ -46,9 +54,36 @@ function unpackExplanationWithDetails(packed) {
   };
 }
 
+function summarizeBestCandidate(candidate, groupsMap) {
+  if (!candidate || typeof candidate !== 'object') {
+    return null;
+  }
+  const meta = groupsMap instanceof Map
+    ? (groupsMap.get(String(candidate.groupId)) || {})
+    : {};
+  return {
+    groupId: candidate.groupId ?? null,
+    memberCount: Number(candidate.memberCount) || 0,
+    proScore: Math.round(candidate.proScore || 0),
+    contraScore: Math.round(candidate.contraScore || 0),
+    normPro: toOneDecimal(candidate.normPro),
+    normContra: toOneDecimal(candidate.normContra),
+    probability: Number.isFinite(Number(candidate.probability))
+      ? Math.round(Number(candidate.probability))
+      : null,
+    fatalMismatch: candidate.fatalMismatch || null,
+    groupClarity: typeof candidate.groupClarity === 'number' ? candidate.groupClarity : null,
+    breakdown: candidate.breakdown || null,
+    representativeImage: meta.representativeImage || null,
+    representativeSelectionId: meta.representativeSelectionId || null,
+    representativeCapturedAt: meta.representativeCapturedAt || null
+  };
+}
+
 module.exports = {
   packExplanationWithDetails,
   unpackExplanationWithDetails,
+  summarizeBestCandidate,
   SENTINEL_START,
   SENTINEL_END
 };

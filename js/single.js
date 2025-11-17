@@ -40,10 +40,31 @@ function getSingleSelectionContainer() {
 const singleGroupRows = new Map();
 const singleSelectionSchemas = new Map();
 const GROUPING_DETAILS_EMPTY_TEXT = 'Detailed score breakdown not available for this photo.';
+const BEST_CANDIDATE_EMPTY_TEXT = 'Top-scoring group preview is not available for this photo yet.';
 
 const SINGLE_UPLOAD_LABEL = 'Subject';
 const pendingSingleUploads = [];
 let isProcessingSingleUpload = false;
+
+function toOneDecimalLocal(value) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) {
+        return null;
+    }
+    return Math.round(num * 10) / 10;
+}
+
+function deepClone(value) {
+    if (!value || typeof value !== 'object') {
+        return null;
+    }
+    try {
+        return JSON.parse(JSON.stringify(value));
+    } catch (error) {
+        console.warn('Failed to clone grouping details payload.', error);
+        return value;
+    }
+}
 function buildContributionList(items) {
     if (!Array.isArray(items) || !items.length) {
         return null;
@@ -137,6 +158,75 @@ function renderGroupingDetails(container, details) {
     }
 }
 
+function renderBestCandidate(container, candidate, probabilityValue) {
+    if (!container) {
+        return;
+    }
+    container.innerHTML = '';
+    if (!candidate) {
+        container.classList.add('is-empty');
+        container.textContent = BEST_CANDIDATE_EMPTY_TEXT;
+        return;
+    }
+
+    container.classList.remove('is-empty');
+
+    const label = document.createElement('div');
+    label.className = 'single-best-candidate-label';
+    const assigned = typeof probabilityValue === 'number' && probabilityValue > 0;
+    label.textContent = assigned
+        ? 'Assigned group summary'
+        : 'Top scoring group (not assigned)';
+
+    const body = document.createElement('div');
+    body.className = 'single-best-candidate-body';
+
+    const thumbWrap = document.createElement('div');
+    thumbWrap.className = 'single-best-candidate-thumb-wrap';
+
+    if (candidate.representativeImage) {
+        const img = document.createElement('img');
+        img.src = candidate.representativeImage;
+        img.alt = 'Top scoring group reference';
+        img.className = 'single-best-candidate-thumb';
+        thumbWrap.appendChild(img);
+    } else {
+        const placeholder = document.createElement('div');
+        placeholder.className = 'single-best-candidate-thumb placeholder';
+        placeholder.textContent = 'No image';
+        thumbWrap.appendChild(placeholder);
+    }
+
+    const meta = document.createElement('div');
+    meta.className = 'single-best-candidate-meta';
+
+    const lines = [
+        candidate.groupId ? `Group ID: ${candidate.groupId}` : null,
+        `Raw scores: pro ${candidate.proScore ?? 'n/a'} vs contra ${candidate.contraScore ?? 'n/a'}`,
+        `Normalized: normPro ${candidate.normPro ?? 'n/a'}, normContra ${candidate.normContra ?? 'n/a'}, probability ${candidate.probability ?? 'n/a'}%`,
+        `Members: ${candidate.memberCount ?? 0}`,
+        candidate.fatalMismatch ? `Rejected due to fatal mismatch: ${candidate.fatalMismatch}` : null,
+        candidate.groupClarity !== null && candidate.groupClarity !== undefined
+            ? `Canonical clarity: ${candidate.groupClarity}`
+            : null
+    ].filter(Boolean);
+
+    lines.forEach((line) => {
+        const entry = document.createElement('div');
+        entry.textContent = line;
+        meta.appendChild(entry);
+    });
+
+    if (candidate.representativeCapturedAt) {
+        const timeEntry = document.createElement('div');
+        timeEntry.textContent = `Captured: ${new Date(candidate.representativeCapturedAt).toLocaleString()}`;
+        meta.appendChild(timeEntry);
+    }
+
+    body.append(thumbWrap, meta);
+    container.append(label, body);
+}
+
 function serializeGroupingDetails(details) {
     if (!details) {
         return '';
@@ -154,9 +244,38 @@ function parseGroupingDetails(raw) {
         return null;
     }
     try {
-        return JSON.parse(raw);
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && parsed.bestCandidate) {
+            delete parsed.bestCandidate;
+        }
+        return parsed;
     } catch (error) {
         console.warn('Failed to parse grouping explanation details.', error);
+        return null;
+    }
+}
+
+function serializeBestCandidate(candidate) {
+    if (!candidate) {
+        return '';
+    }
+    try {
+        return JSON.stringify(candidate);
+    } catch (error) {
+        console.warn('Failed to serialize best candidate summary.', error);
+        return '';
+    }
+}
+
+function parseBestCandidate(raw) {
+    if (!raw) {
+        return null;
+    }
+    try {
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch (error) {
+        console.warn('Failed to parse best candidate summary.', error);
         return null;
     }
 }
@@ -257,6 +376,12 @@ function renderSelectionRow(selection) {
         ? selection.groupingExplanation.trim()
         : '';
     const groupingExplanationDetails = selection.groupingExplanationDetails || null;
+    let detailPayload = deepClone(groupingExplanationDetails);
+    let bestCandidateSummary = selection.bestCandidate || null;
+    if (detailPayload && typeof detailPayload === 'object' && detailPayload.bestCandidate) {
+        bestCandidateSummary = bestCandidateSummary || detailPayload.bestCandidate;
+        delete detailPayload.bestCandidate;
+    }
 
     const wrapper = document.createElement('div');
     wrapper.className = 'single-selection-thumb-wrapper';
@@ -271,7 +396,8 @@ function renderSelectionRow(selection) {
         ? String(groupingProbabilityValue)
         : '';
     wrapper.dataset.groupingExplanation = groupingExplanationText || '';
-    wrapper.dataset.groupingDetails = serializeGroupingDetails(groupingExplanationDetails);
+    wrapper.dataset.groupingDetails = serializeGroupingDetails(detailPayload);
+    wrapper.dataset.bestCandidate = serializeBestCandidate(bestCandidateSummary);
     wrapper.dataset.personGroupId = selection.personGroupId
         ? String(selection.personGroupId)
         : '';
@@ -305,11 +431,12 @@ function renderSelectionRow(selection) {
         const probabilityEl = document.getElementById('singleGroupingProbability');
         const explanationEl = document.getElementById('singleGroupingExplanation');
         const breakdownEl = document.getElementById('singleGroupingDetails');
+        const bestCandidateEl = document.getElementById('singleBestCandidate');
         const groupIdEl = document.getElementById('singleGroupingId');
         const neighborsEl = document.getElementById('singleDescriptionNeighbors');
         const structuredEl = document.getElementById('singleDescriptionStructured');
 
-        if (!modal || !textEl || !probabilityEl || !explanationEl || !groupIdEl || !neighborsEl || !structuredEl || !breakdownEl) {
+        if (!modal || !textEl || !probabilityEl || !explanationEl || !groupIdEl || !neighborsEl || !structuredEl || !breakdownEl || !bestCandidateEl) {
             showWarning('Description viewer is missing required fields. Reload the page and try again.', {
                 diagnostics: false
             });
@@ -350,6 +477,10 @@ function renderSelectionRow(selection) {
         const detailsRaw = wrapper.dataset.groupingDetails || '';
         const explanationDetails = parseGroupingDetails(detailsRaw);
         renderGroupingDetails(breakdownEl, explanationDetails);
+
+        const bestCandidateRaw = wrapper.dataset.bestCandidate || '';
+        const bestCandidateSummary = parseBestCandidate(bestCandidateRaw) || null;
+        renderBestCandidate(bestCandidateEl, bestCandidateSummary, probabilityValue);
 
         const groupIdText = (wrapper.dataset.personGroupId || '').trim();
         if (groupIdText) {
@@ -720,7 +851,8 @@ async function saveCurrentSelection({ viewportOverride = null } = {}) {
                 ? Number(selectionMeta.groupingProbability)
                 : null,
             groupingExplanation: selectionMeta.groupingExplanation || null,
-            groupingExplanationDetails: selectionMeta.groupingExplanationDetails || null
+            groupingExplanationDetails: selectionMeta.groupingExplanationDetails || null,
+            bestCandidate: selectionMeta.bestCandidate || null
         });
     } catch (error) {
         console.error('Failed to store single-camera selection:', error);

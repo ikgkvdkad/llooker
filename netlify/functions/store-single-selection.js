@@ -14,8 +14,21 @@ const {
   buildVisionSummary
 } = require('./shared/grouping-helpers.js');
 const {
-  packExplanationWithDetails
+  packExplanationWithDetails,
+  summarizeBestCandidate
 } = require('./shared/grouping-explanation.js');
+
+function cloneDetails(details) {
+  if (!details || typeof details !== 'object') {
+    return null;
+  }
+  try {
+    return JSON.parse(JSON.stringify(details));
+  } catch (error) {
+    console.warn('Failed to clone grouping details payload.', error);
+    return { ...details };
+  }
+}
 
 function sanitizeViewport(viewport) {
   if (!viewport || typeof viewport !== 'object') {
@@ -88,6 +101,7 @@ exports.handler = async (event) => {
   let groupingExplanationForInsert = null;
   let groupingExplanationTextForResponse = null;
   let groupingExplanationDetailsForResponse = null;
+  let bestCandidateSummaryForResponse = null;
   let groupsMap = new Map();
   let shortlist = [];
   let visionOutcome = null;
@@ -126,7 +140,9 @@ exports.handler = async (event) => {
       const explanation = groupingResult.explanation && typeof groupingResult.explanation === 'string'
         ? groupingResult.explanation.trim()
         : '';
-      groupingExplanationDetailsForResponse = groupingResult.explanationDetails || null;
+      groupingExplanationDetailsForResponse = cloneDetails(
+        groupingResult.explanationDetails || groupingResult.bestCandidateDetails || null
+      );
       shortlist = Array.isArray(groupingResult.shortlist) ? groupingResult.shortlist : [];
 
       let finalGroupId = bestGroupId;
@@ -181,6 +197,19 @@ exports.handler = async (event) => {
         personGroupIdForInsert = finalGroupId;
       }
 
+      const bestCandidateSummary = summarizeBestCandidate(
+        groupingResult.bestCandidate,
+        groupsMap
+      );
+      bestCandidateSummaryForResponse = bestCandidateSummary;
+
+      if (bestCandidateSummaryForResponse) {
+        if (!groupingExplanationDetailsForResponse || typeof groupingExplanationDetailsForResponse !== 'object') {
+          groupingExplanationDetailsForResponse = {};
+        }
+        groupingExplanationDetailsForResponse.bestCandidate = bestCandidateSummaryForResponse;
+      }
+
       groupingProbabilityForInsert = finalProbability;
       const combinedExplanation = explanationPieces.filter(Boolean).join(' ').trim();
       groupingExplanationTextForResponse = combinedExplanation || null;
@@ -197,6 +226,7 @@ exports.handler = async (event) => {
         bestGroupProbability,
         explanation: groupingExplanationTextForResponse,
         explanationDetails: groupingExplanationDetailsForResponse || null,
+        bestCandidate: bestCandidateSummaryForResponse || groupingResult.bestCandidate || null,
         vision: visionOutcome
       };
   } catch (groupingError) {
@@ -271,7 +301,8 @@ exports.handler = async (event) => {
           personGroupId: finalGroupId ?? null,
           groupingProbability: record?.grouping_probability ?? null,
           groupingExplanation: groupingExplanationTextForResponse,
-          groupingExplanationDetails: groupingExplanationDetailsForResponse || null
+          groupingExplanationDetails: groupingExplanationDetailsForResponse || null,
+          bestCandidate: bestCandidateSummaryForResponse || null
         }
       })
     };

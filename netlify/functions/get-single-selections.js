@@ -60,6 +60,14 @@ exports.handler = async (event) => {
 
     const selections = result.rows.map((row) => {
       const unpacked = unpackExplanationWithDetails(row.grouping_explanation || '');
+      let details = unpacked.details && typeof unpacked.details === 'object'
+        ? unpacked.details
+        : null;
+      let bestCandidate = null;
+      if (details && typeof details === 'object' && details.bestCandidate) {
+        bestCandidate = details.bestCandidate;
+        delete details.bestCandidate;
+      }
       return {
         id: row.id,
         createdAt: row.created_at,
@@ -73,7 +81,8 @@ exports.handler = async (event) => {
           ? Number(row.grouping_probability)
           : null,
         groupingExplanation: unpacked.explanation || null,
-        groupingExplanationDetails: unpacked.details || null
+        groupingExplanationDetails: details,
+        bestCandidate
       };
     });
 
