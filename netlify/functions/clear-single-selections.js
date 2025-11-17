@@ -59,19 +59,26 @@ exports.handler = async (event) => {
   }
 
   const client = await pool.connect();
-  let singleCleared = 0;
-  let analysesCleared = 0;
-  let analysesTableTruncated = false;
-  let analysesTableExists = false;
-  let analysesCountKnown = false;
-  let shouldAttemptAnalysesClear = true;
-  let singleTableTruncated = true;
-  let lastAction = 'init';
+
+  const resultSummary = {
+    single: {
+      table: SINGLE_CAMERA_SELECTIONS_TABLE_NAME,
+      rowsCleared: 0,
+      truncated: false
+    },
+    analyses: {
+      table: ANALYSES_TABLE_NAME,
+      rowsCleared: 0,
+      truncated: false,
+      exists: true,
+      cleared: false
+    }
+  };
 
   try {
     await client.query('BEGIN');
-    lastAction = 'begin_transaction';
 
+    let singleCleared = null;
     try {
       const singleCountResult = await client.query(
         `SELECT COUNT(*)::int AS count FROM ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME};`
@@ -87,17 +94,15 @@ exports.handler = async (event) => {
           `Insufficient privilege to count ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME} before clearing. Proceeding without pre-count.`,
           { code: countError.code, message: countError.message }
         );
-        singleCleared = null;
       } else {
-        lastAction = 'count_single';
         throw countError;
       }
     }
 
-    lastAction = 'truncate_single';
+    let singleTruncated = false;
     try {
       await client.query(`TRUNCATE ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME} RESTART IDENTITY;`);
-      singleTableTruncated = true;
+      singleTruncated = true;
       console.info('clear-single-selections: truncated single selection table.');
     } catch (truncateError) {
       if (isTruncateDisallowed(truncateError)) {
@@ -108,104 +113,24 @@ exports.handler = async (event) => {
         const deleteResult = await client.query(
           `DELETE FROM ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME};`
         );
-        if (!Number.isFinite(singleCleared)) {
-          singleCleared = deleteResult?.rowCount ?? 0;
-        }
-        singleTableTruncated = false;
-        console.info('clear-single-selections: deleted rows from single selection table due to missing truncate privilege.', {
-          rowsCleared: singleCleared
-        });
+        singleCleared = Number.isFinite(singleCleared) ? singleCleared : deleteResult?.rowCount ?? 0;
       } else {
-        lastAction = 'truncate_single';
         throw truncateError;
       }
     }
 
-    lastAction = 'count_analyses';
-    try {
-      const analysesCountResult = await client.query(
-        `SELECT COUNT(*)::int AS count FROM ${ANALYSES_TABLE_NAME};`
-      );
-      analysesCleared = analysesCountResult.rows?.[0]?.count ?? 0;
-      analysesTableExists = true;
-      analysesCountKnown = true;
-      console.info('clear-single-selections: counted analyses rows', {
-        table: ANALYSES_TABLE_NAME,
-        count: analysesCleared
-      });
-    } catch (countError) {
-      if (countError?.code === PG_TABLE_NOT_FOUND) {
-        console.warn(
-          `Analyses table "${ANALYSES_TABLE_NAME}" does not exist. Skipping analyses truncation.`
-        );
-        analysesTableExists = false;
-        shouldAttemptAnalysesClear = false;
-      } else if (countError?.code === PG_INSUFFICIENT_PRIVILEGE) {
-        console.warn(
-          `Insufficient privilege to inspect "${ANALYSES_TABLE_NAME}" before clearing. Attempting to clear without row count.`,
-          { code: countError.code, message: countError.message }
-        );
-        analysesTableExists = true;
-        analysesCountKnown = false;
-      } else {
-        lastAction = 'count_analyses';
-        throw countError;
-      }
+    if (!singleTruncated && !Number.isFinite(singleCleared)) {
+      singleCleared = 0;
     }
 
-    if (shouldAttemptAnalysesClear && analysesTableExists) {
-      lastAction = 'truncate_analyses';
-      try {
-        await client.query(`TRUNCATE ${ANALYSES_TABLE_NAME} RESTART IDENTITY;`);
-        analysesTableTruncated = true;
-        console.info('clear-single-selections: truncated analyses table.');
-      } catch (truncateError) {
-        if (isTruncateDisallowed(truncateError)) {
-          console.warn(
-            `Unable to truncate ${ANALYSES_TABLE_NAME}; falling back to DELETE.`,
-            { code: truncateError?.code, message: truncateError?.message }
-          );
-          try {
-            const deleteResult = await client.query(`DELETE FROM ${ANALYSES_TABLE_NAME};`);
-            if (!analysesCountKnown) {
-              analysesCleared = deleteResult?.rowCount ?? 0;
-            }
-            analysesTableTruncated = false;
-            console.info('clear-single-selections: deleted rows from analyses table due to missing truncate privilege.', {
-              rowsCleared: analysesCleared
-            });
-          } catch (deleteError) {
-            if (deleteError?.code === PG_INSUFFICIENT_PRIVILEGE) {
-              console.warn(
-                `Insufficient privilege to delete ${ANALYSES_TABLE_NAME}. Canonical descriptions were not removed.`
-              );
-              analysesCleared = analysesCountKnown ? analysesCleared : 0;
-              analysesTableTruncated = false;
-              analysesTableExists = true;
-            } else {
-              lastAction = 'delete_analyses';
-              throw deleteError;
-            }
-          }
-        } else if (truncateError?.code === PG_TABLE_NOT_FOUND) {
-          console.warn(
-            `Analyses table "${ANALYSES_TABLE_NAME}" disappeared before clearing. Skipping.`
-          );
-          analysesTableExists = false;
-        } else {
-          lastAction = 'truncate_analyses';
-          throw truncateError;
-        }
-      }
-    }
-
-    lastAction = 'commit';
     await client.query('COMMIT');
+    resultSummary.single.rowsCleared = Number(singleCleared) || 0;
+    resultSummary.single.truncated = singleTruncated;
   } catch (error) {
     try {
       await client.query('ROLLBACK');
     } catch (rollbackError) {
-      console.error('Rollback failed after clear-single-selections error:', {
+      console.error('Rollback failed after single table clear:', {
         message: rollbackError?.message,
         stack: rollbackError?.stack
       });
@@ -213,19 +138,106 @@ exports.handler = async (event) => {
     console.error('Failed to clear single camera selections:', {
       message: error?.message,
       stack: error?.stack,
-      code: error?.code,
-      lastAction
+      code: error?.code
     });
     return {
       statusCode: 500,
       body: JSON.stringify({
         error: 'Failed to clear single selections.',
-        code: error?.code || null,
-        lastAction
+        code: error?.code || null
       })
     };
-  } finally {
-    client.release();
+  }
+
+  // Attempt to clear analyses table without failing the overall request.
+  try {
+    const analysesClient = await pool.connect();
+    try {
+      await analysesClient.query('BEGIN');
+      let analysesCleared = null;
+      let analysesCountKnown = false;
+
+      try {
+        const analysesCountResult = await analysesClient.query(
+          `SELECT COUNT(*)::int AS count FROM ${ANALYSES_TABLE_NAME};`
+        );
+        analysesCleared = analysesCountResult.rows?.[0]?.count ?? 0;
+        analysesCountKnown = true;
+        console.info('clear-single-selections: counted analyses rows', {
+          table: ANALYSES_TABLE_NAME,
+          count: analysesCleared
+        });
+      } catch (countError) {
+        if (countError?.code === PG_TABLE_NOT_FOUND) {
+          console.warn(
+            `Analyses table "${ANALYSES_TABLE_NAME}" does not exist. Skipping analyses truncation.`
+          );
+          resultSummary.analyses.exists = false;
+          await analysesClient.query('ROLLBACK');
+          analysesClient.release();
+          return {
+            statusCode: 200,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              status: 'ok',
+              message: 'Single selections cleared, analyses table missing.',
+              tables: resultSummary
+            })
+          };
+        } else if (countError?.code === PG_INSUFFICIENT_PRIVILEGE) {
+          console.warn(
+            `Insufficient privilege to inspect "${ANALYSES_TABLE_NAME}" before clearing. Attempting to clear without row count.`,
+            { code: countError.code, message: countError.message }
+          );
+        } else {
+          throw countError;
+        }
+      }
+
+      let analysesTruncated = false;
+      try {
+        await analysesClient.query(`TRUNCATE ${ANALYSES_TABLE_NAME} RESTART IDENTITY;`);
+        analysesTruncated = true;
+        console.info('clear-single-selections: truncated analyses table.');
+      } catch (truncateError) {
+        if (isTruncateDisallowed(truncateError)) {
+          console.warn(
+            `Unable to truncate ${ANALYSES_TABLE_NAME}; falling back to DELETE.`,
+            { code: truncateError?.code, message: truncateError?.message }
+          );
+          const deleteResult = await analysesClient.query(`DELETE FROM ${ANALYSES_TABLE_NAME};`);
+          if (!analysesCountKnown) {
+            analysesCleared = deleteResult?.rowCount ?? 0;
+          }
+        } else {
+          throw truncateError;
+        }
+      }
+
+      await analysesClient.query('COMMIT');
+      resultSummary.analyses.rowsCleared = Number(analysesCleared) || 0;
+      resultSummary.analyses.truncated = analysesTruncated;
+      resultSummary.analyses.cleared = true;
+    } catch (analysesError) {
+      try {
+        await analysesClient.query('ROLLBACK');
+      } catch {
+        // ignore rollback failure for analyses
+      }
+      console.error('Failed to clear analyses table (non-fatal):', {
+        message: analysesError?.message,
+        code: analysesError?.code,
+        stack: analysesError?.stack
+      });
+    } finally {
+      analysesClient.release();
+    }
+  } catch (outerError) {
+    console.error('Failed to run analyses cleanup (non-fatal):', {
+      message: outerError?.message,
+      code: outerError?.code,
+      stack: outerError?.stack
+    });
   }
 
   return {
@@ -234,19 +246,7 @@ exports.handler = async (event) => {
     body: JSON.stringify({
       status: 'ok',
       message: 'Single selections and canonical descriptions cleared.',
-      tables: {
-        single: {
-          table: SINGLE_CAMERA_SELECTIONS_TABLE_NAME,
-          rowsCleared: singleCleared,
-          truncated: singleTableTruncated
-        },
-        analyses: {
-          table: ANALYSES_TABLE_NAME,
-          rowsCleared: analysesCleared,
-          truncated: analysesTableTruncated,
-          exists: analysesTableExists
-        }
-      }
+      tables: resultSummary
     })
   };
 };
