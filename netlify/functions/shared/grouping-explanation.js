@@ -61,6 +61,18 @@ function summarizeBestCandidate(candidate, groupsMap) {
   const meta = groupsMap instanceof Map
     ? (groupsMap.get(String(candidate.groupId)) || {})
     : {};
+  let fatalMismatchDetail = null;
+  if (candidate.fatalMismatch) {
+    if (typeof candidate.fatalMismatch === 'string') {
+      fatalMismatchDetail = candidate.fatalMismatch;
+    } else if (typeof candidate.fatalMismatch === 'object') {
+      fatalMismatchDetail = candidate.fatalMismatch.detail
+        || candidate.fatalMismatch.type
+        || JSON.stringify(candidate.fatalMismatch);
+    } else {
+      fatalMismatchDetail = String(candidate.fatalMismatch);
+    }
+  }
   return {
     groupId: candidate.groupId ?? null,
     memberCount: Number(candidate.memberCount) || 0,
@@ -72,6 +84,8 @@ function summarizeBestCandidate(candidate, groupsMap) {
       ? Math.round(Number(candidate.probability))
       : null,
     fatalMismatch: candidate.fatalMismatch || null,
+    fatalMismatchDetail,
+    fallbackReason: candidate.overrideReason || null,
     groupClarity: typeof candidate.groupClarity === 'number' ? candidate.groupClarity : null,
     breakdown: candidate.breakdown || null,
     representativeImage: meta.representativeImage || null,

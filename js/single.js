@@ -205,7 +205,9 @@ function renderBestCandidate(container, candidate, probabilityValue) {
         `Raw scores: pro ${candidate.proScore ?? 'n/a'} vs contra ${candidate.contraScore ?? 'n/a'}`,
         `Normalized: normPro ${candidate.normPro ?? 'n/a'}, normContra ${candidate.normContra ?? 'n/a'}, probability ${candidate.probability ?? 'n/a'}%`,
         `Members: ${candidate.memberCount ?? 0}`,
-        candidate.fatalMismatch ? `Rejected due to fatal mismatch: ${candidate.fatalMismatch}` : null,
+        candidate.fatalMismatchDetail
+            ? `Rejected due to fatal mismatch: ${candidate.fatalMismatchDetail}`
+            : (candidate.fatalMismatch ? 'Rejected due to fatal mismatch.' : null),
         candidate.groupClarity !== null && candidate.groupClarity !== undefined
             ? `Canonical clarity: ${candidate.groupClarity}`
             : null
@@ -217,6 +219,16 @@ function renderBestCandidate(container, candidate, probabilityValue) {
         meta.appendChild(entry);
     });
 
+    if (candidate.fallbackReason === 'raw_scores') {
+        const note = document.createElement('div');
+        note.textContent = 'Accepted via raw-score override (high-clarity match).';
+        meta.appendChild(note);
+    } else if (candidate.fallbackReason === 'clarity_override') {
+        const note = document.createElement('div');
+        note.textContent = 'Accepted via clarity override (new photo significantly clearer).';
+        meta.appendChild(note);
+    }
+
     if (candidate.representativeCapturedAt) {
         const timeEntry = document.createElement('div');
         timeEntry.textContent = `Captured: ${new Date(candidate.representativeCapturedAt).toLocaleString()}`;
@@ -227,56 +239,41 @@ function renderBestCandidate(container, candidate, probabilityValue) {
     container.append(label, body);
 }
 
-function serializeGroupingDetails(details) {
-    if (!details) {
+function serializeGroupingPayload(details, bestCandidate) {
+    const payload = {};
+    if (details && typeof details === 'object' && Object.keys(details).length) {
+        payload.details = details;
+    }
+    if (bestCandidate && typeof bestCandidate === 'object') {
+        payload.bestCandidate = bestCandidate;
+    }
+    if (!Object.keys(payload).length) {
         return '';
     }
     try {
-        return JSON.stringify(details);
+        return JSON.stringify(payload);
     } catch (error) {
-        console.warn('Failed to serialize grouping explanation details.', error);
+        console.warn('Failed to serialize grouping payload.', error);
         return '';
     }
 }
 
-function parseGroupingDetails(raw) {
+function parseGroupingPayload(raw) {
     if (!raw) {
-        return null;
+        return { details: null, bestCandidate: null };
     }
     try {
         const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object' && parsed.bestCandidate) {
-            delete parsed.bestCandidate;
+        if (!parsed || typeof parsed !== 'object') {
+            return { details: null, bestCandidate: null };
         }
-        return parsed;
+        return {
+            details: parsed.details || null,
+            bestCandidate: parsed.bestCandidate || null
+        };
     } catch (error) {
-        console.warn('Failed to parse grouping explanation details.', error);
-        return null;
-    }
-}
-
-function serializeBestCandidate(candidate) {
-    if (!candidate) {
-        return '';
-    }
-    try {
-        return JSON.stringify(candidate);
-    } catch (error) {
-        console.warn('Failed to serialize best candidate summary.', error);
-        return '';
-    }
-}
-
-function parseBestCandidate(raw) {
-    if (!raw) {
-        return null;
-    }
-    try {
-        const parsed = JSON.parse(raw);
-        return parsed && typeof parsed === 'object' ? parsed : null;
-    } catch (error) {
-        console.warn('Failed to parse best candidate summary.', error);
-        return null;
+        console.warn('Failed to parse grouping payload.', error);
+        return { details: null, bestCandidate: null };
     }
 }
 
@@ -376,12 +373,8 @@ function renderSelectionRow(selection) {
         ? selection.groupingExplanation.trim()
         : '';
     const groupingExplanationDetails = selection.groupingExplanationDetails || null;
-    let detailPayload = deepClone(groupingExplanationDetails);
-    let bestCandidateSummary = selection.bestCandidate || null;
-    if (detailPayload && typeof detailPayload === 'object' && detailPayload.bestCandidate) {
-        bestCandidateSummary = bestCandidateSummary || detailPayload.bestCandidate;
-        delete detailPayload.bestCandidate;
-    }
+    const bestCandidateSummary = selection.bestCandidate || null;
+    const detailPayload = deepClone(groupingExplanationDetails);
 
     const wrapper = document.createElement('div');
     wrapper.className = 'single-selection-thumb-wrapper';
@@ -396,7 +389,7 @@ function renderSelectionRow(selection) {
         ? String(groupingProbabilityValue)
         : '';
     wrapper.dataset.groupingExplanation = groupingExplanationText || '';
-    wrapper.dataset.groupingDetails = serializeGroupingDetails(detailPayload);
+    wrapper.dataset.groupingDetails = serializeGroupingPayload(detailPayload, bestCandidateSummary);
     wrapper.dataset.bestCandidate = serializeBestCandidate(bestCandidateSummary);
     wrapper.dataset.personGroupId = selection.personGroupId
         ? String(selection.personGroupId)
@@ -474,13 +467,9 @@ function renderSelectionRow(selection) {
             explanationEl.classList.add('is-empty');
         }
 
-        const detailsRaw = wrapper.dataset.groupingDetails || '';
-        const explanationDetails = parseGroupingDetails(detailsRaw);
-        renderGroupingDetails(breakdownEl, explanationDetails);
-
-        const bestCandidateRaw = wrapper.dataset.bestCandidate || '';
-        const bestCandidateSummary = parseBestCandidate(bestCandidateRaw) || null;
-        renderBestCandidate(bestCandidateEl, bestCandidateSummary, probabilityValue);
+        const payload = parseGroupingPayload(wrapper.dataset.groupingDetails || '');
+        renderGroupingDetails(breakdownEl, payload.details);
+        renderBestCandidate(bestCandidateEl, payload.bestCandidate, probabilityValue);
 
         const groupIdText = (wrapper.dataset.personGroupId || '').trim();
         if (groupIdText) {

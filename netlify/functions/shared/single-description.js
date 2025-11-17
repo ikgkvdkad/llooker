@@ -140,7 +140,8 @@ const HAIR_CONTRA_WEIGHTS = {
 
 const COLOR_EQUIVALENCE_GROUPS = [
   ['navy', 'dark_blue', 'blue'],
-  ['dark_blonde', 'blonde', 'light_brown']
+  ['dark_blonde', 'blonde', 'light_brown'],
+  ['black', 'grey']
 ];
 
 const LOWER_GARMENT_KEYWORDS = {
@@ -1320,7 +1321,17 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
         : false;
       const proStrong = candidate.proScore >= CLARITY_OVERRIDE_PRO_MIN;
       const contraAcceptable = candidate.contraScore <= CLARITY_OVERRIDE_CONTRA_MAX;
+      const rawStrong = candidate.proScore >= PRO_MIN;
+      const rawContraOk = candidate.contraScore <= CONTRA_MAX;
+      const clarityStrong = typeof candidate.groupClarity === 'number'
+        ? (candidate.groupClarity >= MIN_CLARITY_FOR_FATAL_HAIR && newClarity >= MIN_CLARITY_FOR_FATAL_HAIR)
+        : false;
       if (clarityEdge && proStrong && contraAcceptable) {
+        candidate.overrideReason = 'clarity_override';
+        return candidate;
+      }
+      if (rawStrong && rawContraOk && clarityStrong) {
+        candidate.overrideReason = 'raw_scores';
         return candidate;
       }
       return null;
@@ -1381,6 +1392,7 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
       const fallbackPro = Math.round(fallbackGroup.proScore);
       const fallbackContra = Math.round(fallbackGroup.contraScore);
       const clarityNote = `Clarity override: new image_clarity ${newClarity} vs canonical ${fallbackGroup.groupClarity ?? 'unknown'}.`;
+      const fallbackReason = fallbackGroup.overrideReason || 'clarity_override';
       const fallbackExplanation = [
         explanation,
         `Fallback candidate raw scores: pro=${fallbackPro}, contra=${fallbackContra}.`,
@@ -1388,7 +1400,9 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
         `Contras: ${fbContraParts.length ? fbContraParts.join(', ') : 'none'}.`,
         `Normalized fallback scores: normPro=${fallbackNormPro}, normContra=${fallbackNormContra}, probability=${fallbackProbability}%.`,
         clarityNote,
-        `Assigned to group ${fallbackGroup.groupId} despite thresholds due to stronger clarity and near-match scores.`
+        fallbackReason === 'raw_scores'
+          ? `Assigned to group ${fallbackGroup.groupId} despite thresholds because raw pro/contra met requirements with high clarity on both sides.`
+          : `Assigned to group ${fallbackGroup.groupId} despite thresholds due to stronger clarity and near-match scores.`
       ].filter(Boolean).join(' ');
       const fallbackDetails = {
         rawScores: { pro: fallbackPro, contra: fallbackContra },
@@ -1406,7 +1420,7 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
           canonical: typeof fallbackGroup.groupClarity === 'number' ? fallbackGroup.groupClarity : null
         },
         fallbackApplied: true,
-        fallbackReason: 'clarity_override'
+        fallbackReason
       };
       return {
         bestGroupId: fallbackGroup.groupId,
