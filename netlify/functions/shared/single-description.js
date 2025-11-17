@@ -1277,19 +1277,45 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
       const fbHairPro = Math.round(fallbackBd.hairPro || 0);
       const fbRarePro = Math.round(fallbackBd.rarePro || 0);
       const fbProParts = [];
-      if (fbClothingPro > 0) fbProParts.push(`clothing ${fbClothingPro}`);
-      if (fbPhysicalPro > 0) fbProParts.push(`physical ${fbPhysicalPro}`);
-      if (fbHairPro > 0) fbProParts.push(`hair ${fbHairPro}`);
-      if (fbRarePro > 0) fbProParts.push(`rare ${fbRarePro}`);
+      const fbProDetails = [];
+      if (fbClothingPro > 0) {
+        fbProParts.push(`clothing ${fbClothingPro}`);
+        fbProDetails.push({ category: 'clothing', value: fbClothingPro });
+      }
+      if (fbPhysicalPro > 0) {
+        fbProParts.push(`physical ${fbPhysicalPro}`);
+        fbProDetails.push({ category: 'physical', value: fbPhysicalPro });
+      }
+      if (fbHairPro > 0) {
+        fbProParts.push(`hair ${fbHairPro}`);
+        fbProDetails.push({ category: 'hair', value: fbHairPro });
+      }
+      if (fbRarePro > 0) {
+        fbProParts.push(`rare ${fbRarePro}`);
+        fbProDetails.push({ category: 'rare', value: fbRarePro });
+      }
       const fbClothingContra = Math.round(fallbackBd.clothingContra || 0);
       const fbPhysicalContra = Math.round(fallbackBd.physicalContra || 0);
       const fbHairContra = Math.round(fallbackBd.hairContra || 0);
       const fbRareContra = Math.round(fallbackBd.rareContra || 0);
       const fbContraParts = [];
-      if (fbClothingContra > 0) fbContraParts.push(`clothing ${fbClothingContra}`);
-      if (fbPhysicalContra > 0) fbContraParts.push(`physical ${fbPhysicalContra}`);
-      if (fbHairContra > 0) fbContraParts.push(`hair ${fbHairContra}`);
-      if (fbRareContra > 0) fbContraParts.push(`rare ${fbRareContra}`);
+      const fbContraDetails = [];
+      if (fbClothingContra > 0) {
+        fbContraParts.push(`clothing ${fbClothingContra}`);
+        fbContraDetails.push({ category: 'clothing', value: fbClothingContra });
+      }
+      if (fbPhysicalContra > 0) {
+        fbContraParts.push(`physical ${fbPhysicalContra}`);
+        fbContraDetails.push({ category: 'physical', value: fbPhysicalContra });
+      }
+      if (fbHairContra > 0) {
+        fbContraParts.push(`hair ${fbHairContra}`);
+        fbContraDetails.push({ category: 'hair', value: fbHairContra });
+      }
+      if (fbRareContra > 0) {
+        fbContraParts.push(`rare ${fbRareContra}`);
+        fbContraDetails.push({ category: 'rare', value: fbRareContra });
+      }
       const fallbackPro = Math.round(fallbackGroup.proScore);
       const fallbackContra = Math.round(fallbackGroup.contraScore);
       const clarityNote = `Clarity override: new image_clarity ${newClarity} vs canonical ${fallbackGroup.groupClarity ?? 'unknown'}.`;
@@ -1302,10 +1328,29 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
         clarityNote,
         `Assigned to group ${fallbackGroup.groupId} despite thresholds due to stronger clarity and near-match scores.`
       ].filter(Boolean).join(' ');
+      const fallbackDetails = {
+        rawScores: { pro: fallbackPro, contra: fallbackContra },
+        normalized: {
+          normPro: fallbackNormPro,
+          normContra: fallbackNormContra,
+          probability: fallbackProbability,
+          requiredNormPro: NORM_PRO_MIN,
+          requiredNormContra: NORM_CONTRA_MAX
+        },
+        proContributions: fbProDetails,
+        contraContributions: fbContraDetails,
+        clarity: {
+          newImage: Number.isFinite(newClarity) ? newClarity : null,
+          canonical: typeof fallbackGroup.groupClarity === 'number' ? fallbackGroup.groupClarity : null
+        },
+        fallbackApplied: true,
+        fallbackReason: 'clarity_override'
+      };
       return {
         bestGroupId: fallbackGroup.groupId,
         bestGroupProbability: fallbackProbability,
         explanation: fallbackExplanation.trim(),
+        explanationDetails: fallbackDetails,
         shortlist
       };
     }
@@ -1397,6 +1442,24 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
   if (hairContra > 0) contraParts.push(`hair ${hairContra}`);
   if (rareContra > 0) contraParts.push(`rare ${rareContra}`);
 
+  const proContributionDetails = [];
+  if (clothingPro > 0) {
+    proContributionDetails.push({
+      category: 'clothing',
+      value: clothingPro,
+      note: clothingCapNote ? clothingCapNote.trim() : null
+    });
+  }
+  if (physicalPro > 0) proContributionDetails.push({ category: 'physical', value: physicalPro });
+  if (hairPro > 0) proContributionDetails.push({ category: 'hair', value: hairPro });
+  if (rarePro > 0) proContributionDetails.push({ category: 'rare', value: rarePro });
+
+  const contraContributionDetails = [];
+  if (clothingContra > 0) contraContributionDetails.push({ category: 'clothing', value: clothingContra });
+  if (physicalContra > 0) contraContributionDetails.push({ category: 'physical', value: physicalContra });
+  if (hairContra > 0) contraContributionDetails.push({ category: 'hair', value: hairContra });
+  if (rareContra > 0) contraContributionDetails.push({ category: 'rare', value: rareContra });
+
   const proText = proParts.length ? proParts.join(', ') : 'none';
   const contraText = contraParts.length ? contraParts.join(', ') : 'none';
   const clarityLine = typeof best.groupClarity === 'number'
@@ -1410,10 +1473,30 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
     clarityLine
   ].filter(Boolean).join(' ');
 
+  const explanationDetails = {
+    rawScores: { pro, contra },
+    normalized: {
+      normPro,
+      normContra,
+      probability: bestProbability,
+      requiredNormPro: NORM_PRO_MIN,
+      requiredNormContra: NORM_CONTRA_MAX
+    },
+    proContributions: proContributionDetails,
+    contraContributions: contraContributionDetails,
+    clarity: {
+      newImage: Number.isFinite(newClarity) ? newClarity : null,
+      canonical: typeof best.groupClarity === 'number' ? best.groupClarity : null
+    },
+    fallbackApplied: false,
+    fallbackReason: null
+  };
+
   return {
     bestGroupId: best.groupId ?? null,
     bestGroupProbability: bestProbability,
     explanation,
+    explanationDetails,
     shortlist
   };
 }

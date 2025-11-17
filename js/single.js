@@ -39,10 +39,127 @@ function getSingleSelectionContainer() {
 
 const singleGroupRows = new Map();
 const singleSelectionSchemas = new Map();
+const GROUPING_DETAILS_EMPTY_TEXT = 'Detailed score breakdown not available for this photo.';
 
 const SINGLE_UPLOAD_LABEL = 'Subject';
 const pendingSingleUploads = [];
 let isProcessingSingleUpload = false;
+function buildContributionList(items) {
+    if (!Array.isArray(items) || !items.length) {
+        return null;
+    }
+    const list = document.createElement('ul');
+    list.className = 'single-grouping-detail-list';
+    items.forEach((item) => {
+        const li = document.createElement('li');
+        const label = document.createElement('span');
+        label.className = 'category-label';
+        const noteText = item?.note ? ` (${item.note})` : '';
+        label.textContent = `${item?.category || 'unknown'}${noteText}`;
+        const value = document.createElement('span');
+        value.className = 'value-label';
+        value.textContent = Number.isFinite(Number(item?.value))
+            ? String(Math.round(Number(item.value)))
+            : (item?.value ?? '-');
+        li.append(label, value);
+        list.appendChild(li);
+    });
+    return list;
+}
+
+function createDetailSection(title, content) {
+    const section = document.createElement('div');
+    section.className = 'single-grouping-detail-section';
+    const heading = document.createElement('div');
+    heading.className = 'single-grouping-detail-section-title';
+    heading.textContent = title;
+    section.appendChild(heading);
+    if (typeof content === 'string') {
+        const body = document.createElement('div');
+        body.className = 'single-grouping-detail-body';
+        body.textContent = content;
+        section.appendChild(body);
+    } else if (content instanceof Node) {
+        section.appendChild(content);
+    }
+    return section;
+}
+
+function renderGroupingDetails(container, details) {
+    if (!container) {
+        return;
+    }
+    container.innerHTML = '';
+    if (!details) {
+        container.classList.add('is-empty');
+        container.textContent = GROUPING_DETAILS_EMPTY_TEXT;
+        return;
+    }
+    container.classList.remove('is-empty');
+    const rawScores = details.rawScores || {};
+    container.appendChild(createDetailSection(
+        'Raw scores',
+        `pro ${rawScores.pro ?? 'unknown'} vs contra ${rawScores.contra ?? 'unknown'}`
+    ));
+
+    const normalized = details.normalized || {};
+    container.appendChild(createDetailSection(
+        'Normalized',
+        `normPro ${normalized.normPro ?? 'unknown'} / ≥${normalized.requiredNormPro ?? 'n/a'}, normContra ${normalized.normContra ?? 'unknown'} / ≤${normalized.requiredNormContra ?? 'n/a'}, probability ${normalized.probability ?? 'unknown'}%`
+    ));
+
+    const proList = buildContributionList(details.proContributions);
+    container.appendChild(createDetailSection(
+        'Supporting evidence',
+        proList || 'No strong supporting cues were detected.'
+    ));
+
+    const contraList = buildContributionList(details.contraContributions);
+    container.appendChild(createDetailSection(
+        'Conflicting cues',
+        contraList || 'No major conflicts were recorded.'
+    ));
+
+    if (details.clarity && (details.clarity.newImage !== null || details.clarity.canonical !== null)) {
+        container.appendChild(createDetailSection(
+            'Image clarity',
+            `incoming ${details.clarity.newImage ?? 'unknown'} vs canonical ${details.clarity.canonical ?? 'unknown'}`
+        ));
+    }
+
+    if (details.fallbackApplied) {
+        container.appendChild(createDetailSection(
+            'Override applied',
+            details.fallbackReason === 'clarity_override'
+                ? 'Accepted despite thresholds because the new photo is significantly clearer than the group reference.'
+                : 'Accepted via fallback despite thresholds.'
+        ));
+    }
+}
+
+function serializeGroupingDetails(details) {
+    if (!details) {
+        return '';
+    }
+    try {
+        return JSON.stringify(details);
+    } catch (error) {
+        console.warn('Failed to serialize grouping explanation details.', error);
+        return '';
+    }
+}
+
+function parseGroupingDetails(raw) {
+    if (!raw) {
+        return null;
+    }
+    try {
+        return JSON.parse(raw);
+    } catch (error) {
+        console.warn('Failed to parse grouping explanation details.', error);
+        return null;
+    }
+}
 
 function buildDescriptionGroupKey(description) {
     if (typeof description !== 'string') {
@@ -139,6 +256,7 @@ function renderSelectionRow(selection) {
     const groupingExplanationText = typeof selection.groupingExplanation === 'string'
         ? selection.groupingExplanation.trim()
         : '';
+    const groupingExplanationDetails = selection.groupingExplanationDetails || null;
 
     const wrapper = document.createElement('div');
     wrapper.className = 'single-selection-thumb-wrapper';
@@ -153,6 +271,7 @@ function renderSelectionRow(selection) {
         ? String(groupingProbabilityValue)
         : '';
     wrapper.dataset.groupingExplanation = groupingExplanationText || '';
+    wrapper.dataset.groupingDetails = serializeGroupingDetails(groupingExplanationDetails);
     wrapper.dataset.personGroupId = selection.personGroupId
         ? String(selection.personGroupId)
         : '';
@@ -185,11 +304,12 @@ function renderSelectionRow(selection) {
         const textEl = document.getElementById('singleDescriptionText');
         const probabilityEl = document.getElementById('singleGroupingProbability');
         const explanationEl = document.getElementById('singleGroupingExplanation');
+        const breakdownEl = document.getElementById('singleGroupingDetails');
         const groupIdEl = document.getElementById('singleGroupingId');
         const neighborsEl = document.getElementById('singleDescriptionNeighbors');
         const structuredEl = document.getElementById('singleDescriptionStructured');
 
-        if (!modal || !textEl || !probabilityEl || !explanationEl || !groupIdEl || !neighborsEl || !structuredEl) {
+        if (!modal || !textEl || !probabilityEl || !explanationEl || !groupIdEl || !neighborsEl || !structuredEl || !breakdownEl) {
             showWarning('Description viewer is missing required fields. Reload the page and try again.', {
                 diagnostics: false
             });
@@ -226,6 +346,10 @@ function renderSelectionRow(selection) {
             explanationEl.textContent = 'Grouping explanation not available for this photo yet.';
             explanationEl.classList.add('is-empty');
         }
+
+        const detailsRaw = wrapper.dataset.groupingDetails || '';
+        const explanationDetails = parseGroupingDetails(detailsRaw);
+        renderGroupingDetails(breakdownEl, explanationDetails);
 
         const groupIdText = (wrapper.dataset.personGroupId || '').trim();
         if (groupIdText) {
@@ -595,7 +719,8 @@ async function saveCurrentSelection({ viewportOverride = null } = {}) {
             groupingProbability: Number.isFinite(Number(selectionMeta.groupingProbability))
                 ? Number(selectionMeta.groupingProbability)
                 : null,
-            groupingExplanation: selectionMeta.groupingExplanation || null
+            groupingExplanation: selectionMeta.groupingExplanation || null,
+            groupingExplanationDetails: selectionMeta.groupingExplanationDetails || null
         });
     } catch (error) {
         console.error('Failed to store single-camera selection:', error);

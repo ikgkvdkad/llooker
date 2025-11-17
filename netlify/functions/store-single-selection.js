@@ -13,6 +13,9 @@ const {
   collectGroupsWithRepresentatives,
   buildVisionSummary
 } = require('./shared/grouping-helpers.js');
+const {
+  packExplanationWithDetails
+} = require('./shared/grouping-explanation.js');
 
 function sanitizeViewport(viewport) {
   if (!viewport || typeof viewport !== 'object') {
@@ -83,6 +86,8 @@ exports.handler = async (event) => {
   let personGroupIdForInsert = null;
   let groupingProbabilityForInsert = null;
   let groupingExplanationForInsert = null;
+  let groupingExplanationTextForResponse = null;
+  let groupingExplanationDetailsForResponse = null;
   let groupsMap = new Map();
   let shortlist = [];
   let visionOutcome = null;
@@ -121,6 +126,7 @@ exports.handler = async (event) => {
       const explanation = groupingResult.explanation && typeof groupingResult.explanation === 'string'
         ? groupingResult.explanation.trim()
         : '';
+      groupingExplanationDetailsForResponse = groupingResult.explanationDetails || null;
       shortlist = Array.isArray(groupingResult.shortlist) ? groupingResult.shortlist : [];
 
       let finalGroupId = bestGroupId;
@@ -177,7 +183,10 @@ exports.handler = async (event) => {
 
       groupingProbabilityForInsert = finalProbability;
       const combinedExplanation = explanationPieces.filter(Boolean).join(' ').trim();
-      groupingExplanationForInsert = combinedExplanation || null;
+      groupingExplanationTextForResponse = combinedExplanation || null;
+      groupingExplanationForInsert = combinedExplanation
+        ? packExplanationWithDetails(combinedExplanation, groupingExplanationDetailsForResponse)
+        : null;
 
       // Keep only lightweight debug data for the client
       var groupingDebugForResponse = {
@@ -186,7 +195,8 @@ exports.handler = async (event) => {
         shortlist,
         bestGroupId,
         bestGroupProbability,
-        explanation: groupingExplanationForInsert,
+        explanation: groupingExplanationTextForResponse,
+        explanationDetails: groupingExplanationDetailsForResponse || null,
         vision: visionOutcome
       };
   } catch (groupingError) {
@@ -260,7 +270,8 @@ exports.handler = async (event) => {
           descriptionSchema: record?.description_json ?? null,
           personGroupId: finalGroupId ?? null,
           groupingProbability: record?.grouping_probability ?? null,
-          groupingExplanation: record?.grouping_explanation ?? null
+          groupingExplanation: groupingExplanationTextForResponse,
+          groupingExplanationDetails: groupingExplanationDetailsForResponse || null
         }
       })
     };

@@ -3,6 +3,7 @@ const {
   ensureSingleCameraSelectionsTable,
   SINGLE_CAMERA_SELECTIONS_TABLE_NAME
 } = require('./shared/db.js');
+const { unpackExplanationWithDetails } = require('./shared/grouping-explanation.js');
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'GET') {
@@ -57,20 +58,24 @@ exports.handler = async (event) => {
     const countResult = await pool.query(`SELECT COUNT(*) AS total FROM ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME}`);
     const total = parseInt(countResult.rows?.[0]?.total ?? 0, 10);
 
-    const selections = result.rows.map(row => ({
-      id: row.id,
-      createdAt: row.created_at,
-      capturedAt: row.captured_at,
-      role: row.role,
-      imageDataUrl: row.image_data_url,
-      description: row.description || null,
-      descriptionSchema: row.description_json || null,
-      personGroupId: row.person_group_id || null,
-      groupingProbability: Number.isFinite(Number(row.grouping_probability))
-        ? Number(row.grouping_probability)
-        : null,
-      groupingExplanation: row.grouping_explanation || null
-    }));
+    const selections = result.rows.map((row) => {
+      const unpacked = unpackExplanationWithDetails(row.grouping_explanation || '');
+      return {
+        id: row.id,
+        createdAt: row.created_at,
+        capturedAt: row.captured_at,
+        role: row.role,
+        imageDataUrl: row.image_data_url,
+        description: row.description || null,
+        descriptionSchema: row.description_json || null,
+        personGroupId: row.person_group_id || null,
+        groupingProbability: Number.isFinite(Number(row.grouping_probability))
+          ? Number(row.grouping_probability)
+          : null,
+        groupingExplanation: unpacked.explanation || null,
+        groupingExplanationDetails: unpacked.details || null
+      };
+    });
 
     return {
       statusCode: 200,

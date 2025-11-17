@@ -13,6 +13,10 @@ const {
   collectGroupsWithRepresentatives,
   buildVisionSummary
 } = require('./shared/grouping-helpers.js');
+const {
+  packExplanationWithDetails,
+  unpackExplanationWithDetails
+} = require('./shared/grouping-explanation.js');
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -125,10 +129,13 @@ exports.handler = async (event) => {
     };
   }
 
+  const existingExplanation = unpackExplanationWithDetails(row.grouping_explanation || '');
   let personGroupId = row.person_group_id || null;
   let groupingDebugForResponse = null;
   let groupingProbabilityForUpdate = null;
-  let groupingExplanationForUpdate = null;
+  let groupingExplanationPackedForUpdate = null;
+  let groupingExplanationTextForResponse = existingExplanation.explanation || null;
+  let groupingExplanationDetailsForResponse = existingExplanation.details || null;
   let groupsMap = new Map();
   let shortlist = [];
   let visionOutcome = null;
@@ -223,7 +230,11 @@ exports.handler = async (event) => {
 
       groupingProbabilityForUpdate = finalProbability;
       const combinedExplanation = explanationPieces.filter(Boolean).join(' ').trim();
-      groupingExplanationForUpdate = combinedExplanation || null;
+      groupingExplanationTextForResponse = combinedExplanation || null;
+      groupingExplanationDetailsForResponse = groupingResult.explanationDetails || null;
+      groupingExplanationPackedForUpdate = combinedExplanation
+        ? packExplanationWithDetails(combinedExplanation, groupingExplanationDetailsForResponse)
+        : null;
 
       groupingDebugForResponse = {
         newDescription: description.schema,
@@ -231,7 +242,8 @@ exports.handler = async (event) => {
         shortlist,
         bestGroupId,
         bestGroupProbability,
-        explanation: groupingExplanationForUpdate,
+        explanation: groupingExplanationTextForResponse,
+        explanationDetails: groupingExplanationDetailsForResponse,
         vision: visionOutcome
       };
   } catch (groupError) {
@@ -258,7 +270,7 @@ exports.handler = async (event) => {
         JSON.stringify(description.schema),
         personGroupId || null,
         groupingProbabilityForUpdate,
-        groupingExplanationForUpdate,
+        groupingExplanationPackedForUpdate,
         id
       ]
     );
@@ -280,8 +292,9 @@ exports.handler = async (event) => {
     body: JSON.stringify({
       id,
       description: description.naturalSummary,
-        groupingProbability: groupingProbabilityForUpdate ?? row.grouping_probability ?? null,
-        groupingExplanation: groupingExplanationForUpdate ?? row.grouping_explanation ?? null,
+      groupingProbability: groupingProbabilityForUpdate ?? row.grouping_probability ?? null,
+      groupingExplanation: groupingExplanationTextForResponse,
+      groupingExplanationDetails: groupingExplanationDetailsForResponse,
       groupingDebug: groupingDebugForResponse
     })
   };
