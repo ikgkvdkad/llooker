@@ -162,11 +162,8 @@ exports.handler = async (event) => {
       ? groupingResult.explanation.trim()
       : '';
 
-    if (
-      bestGroupId &&
-      bestGroupProbability !== null &&
-      bestGroupProbability >= GROUPING_MATCH_THRESHOLD
-    ) {
+    // Rely on the pro/contra thresholds inside evaluateDescriptionGrouping.
+    if (bestGroupId) {
       personGroupId = bestGroupId;
     }
 

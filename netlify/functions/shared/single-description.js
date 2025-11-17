@@ -4,13 +4,66 @@ const OPENAI_MODEL = 'gpt-4o-mini';
 const GROUPING_MATCH_THRESHOLD = 60;
 
 // Shared scoring constants for deterministic grouping and neighbor scoring.
-const WEIGHT_RARE = 40;
-const WEIGHT_CLOTHING = 35;
-const WEIGHT_PHYSICAL = 12;
-const WEIGHT_HAIR = 8;
+// NOTE: These are *not* normalized; pro and contra scores are allowed to grow.
 const LOCATION_MATCH_BONUS = 8;
 const RARE_MISSING_PENALTY = -6;
 const TIE_DELTA = 6;
+
+// Pro/contra thresholds
+const PRO_MIN = 120;      // minimum proScore to consider a group
+const CONTRA_MAX = 40;    // maximum contraScore tolerated
+
+// Clothing weights (stable items dominate)
+const STABLE_CLOTHING_PRO_WEIGHTS = {
+  top: 40,
+  jacket: 35,
+  trousers: 40,
+  shoes: 35,
+  dress: 40
+};
+
+const STABLE_CLOTHING_CONTRA_WEIGHTS = {
+  top: 30,
+  jacket: 30,
+  trousers: 30,
+  shoes: 25,
+  dress: 30
+};
+
+// Rare/distinctive
+const RARE_PRO_BASE = 80;
+const RARE_CONTRA_BASE = 40;
+
+// Physical traits
+const PHYSICAL_PRO_WEIGHTS = {
+  gender_presentation: 25,
+  age_band: 20,
+  build: 15,
+  height_impression: 10,
+  skin_tone: 15
+};
+
+const PHYSICAL_CONTRA_WEIGHTS = {
+  gender_presentation: 120,  // near-fatal when high-confidence conflict
+  age_band: 25,
+  build: 15,
+  height_impression: 15,
+  skin_tone: 20
+};
+
+// Hair and facial hair
+const HAIR_PRO_WEIGHTS = {
+  color: 15,
+  length: 8,
+  style: 5,
+  facial_hair: 8
+};
+
+const HAIR_CONTRA_WEIGHTS = {
+  color: 15,
+  length: 10,
+  facial_hair: 20
+};
 
 const COLOR_EQUIVALENCE_GROUPS = [
   ['navy', 'dark_blue', 'blue'],
@@ -62,64 +115,107 @@ function ageAdjacent(a, b) {
   return Math.abs(ia - ib) === 1;
 }
 
-function computeDistinctiveBonus(newSchema, groupCanonical) {
-  const marks = Array.isArray(groupCanonical.distinctive_marks) ? groupCanonical.distinctive_marks : [];
-  const newMarks = Array.isArray(newSchema.distinctive_marks) ? newSchema.distinctive_marks : [];
-  let sum = 0;
-  for (const gm of marks) {
-    const rarity = Number(gm?.rarity_score);
-    if (!Number.isFinite(rarity) || rarity < 1) continue;
-    const gmDesc = typeof gm.description === 'string' ? gm.description : '';
-    const gmType = gm.type || null;
-    const gmConf = Number(gm.confidence) || 100;
-    for (const nm of newMarks) {
-      if (!nm || typeof nm !== 'object') continue;
-      if (gmType && nm.type && gmType !== nm.type) continue;
-      if (!substringTokenMatch(nm.description, gmDesc)) continue;
-      const econf = effectiveConfidence(nm.confidence, gmConf);
-      if (econf <= 0) continue;
-      sum += (rarity * econf);
-    }
+/**
+ * Compute separate pro and contra scores between a new description and a canonical group description.
+ * Returns unbounded pro/contra scores plus a rough domain breakdown.
+ */
+function computeProContraScores(newSchema, groupCanonical) {
+  if (!newSchema || typeof newSchema !== 'object' || !groupCanonical || typeof groupCanonical !== 'object') {
+    return {
+      proScore: 0,
+      contraScore: 0,
+      breakdown: {
+        clothingPro: 0,
+        clothingContra: 0,
+        rarePro: 0,
+        rareContra: 0,
+        physicalPro: 0,
+        physicalContra: 0,
+        hairPro: 0,
+        hairContra: 0
+      },
+      fatalGenderMismatch: false
+    };
   }
-  return Math.min(5, sum / 20);
-}
 
-function buildExplanation(contrib) {
-  const parts = [];
-  if (contrib.A > 0) {
-    parts.push('distinctive marks');
-  }
-  if (contrib.B > 0) {
-    parts.push('clothing');
-  }
-  if (contrib.C > 0) {
-    parts.push('physical traits');
-  }
-  if (contrib.D > 0) {
-    parts.push('hair');
-  }
-  if (!parts.length) {
-    return 'No strong matching features.';
-  }
-  const used = parts.slice(0, 3);
-  return `Matched ${used.join(', ')}.`;
-}
+  const breakdown = {
+    clothingPro: 0,
+    clothingContra: 0,
+    rarePro: 0,
+    rareContra: 0,
+    physicalPro: 0,
+    physicalContra: 0,
+    hairPro: 0,
+    hairContra: 0
+  };
 
-function scoreAgainstGroup(newSchema, groupCanonical) {
-  let A = 0;
-  let B = 0;
-  let C = 0;
-  let D = 0;
-  let hasHighConfidenceGenderMismatch = false;
+  let proScore = 0;
+  let contraScore = 0;
+  let fatalGenderMismatch = false;
 
-  const newMarks = Array.isArray(newSchema.distinctive_marks) ? newSchema.distinctive_marks : [];
-  const groupMarks = Array.isArray(groupCanonical.distinctive_marks) ? groupCanonical.distinctive_marks : [];
-  const groupClothing = groupCanonical.clothing && typeof groupCanonical.clothing === 'object'
-    ? groupCanonical.clothing
-    : {};
+  const visibleConfidence = Number(newSchema.visible_confidence) || 0;
+  const visibilityFactor = Math.max(0.3, Math.min(1, visibleConfidence / 100));
+
   const newClothing = newSchema.clothing && typeof newSchema.clothing === 'object'
     ? newSchema.clothing
     : {};
+  const groupClothing = groupCanonical.clothing && typeof groupCanonical.clothing === 'object'
+    ? groupCanonical.clothing
+    : {};
+
+  const lightingUncertainty = Number(newSchema.lighting_uncertainty) || 0;
+
+  // Clothing pros/cons.
+  const clothingSlots = ['top', 'jacket', 'trousers', 'shoes', 'dress'];
+  for (const slot of clothingSlots) {
+    const newSlot = newClothing[slot];
+    const groupSlot = groupClothing[slot];
+    if (!newSlot || !groupSlot || typeof newSlot !== 'object' || typeof groupSlot !== 'object') {
+      continue;
+    }
+    if (newSlot.description === 'unknown' || groupSlot.description === 'unknown') {
+      continue;
+    }
+
+    const econf = effectiveConfidence(newSlot.confidence, groupSlot.confidence) * visibilityFactor;
+    if (econf <= 0) continue;
+
+    const isStableNew = newSlot.permanence === 'stable';
+    const isStableGroup = groupSlot.permanence === 'stable';
+
+    const colorOk = areColorsEquivalent(newSlot.color, groupSlot.color, lightingUncertainty);
+    const descOk = substringTokenMatch(newSlot.description, groupSlot.description);
+    const colorScore = colorOk ? 1 : 0;
+    const descScore = descOk ? 1 : 0;
+    const slotSim = (colorScore * 0.6) + (descScore * 0.4);
+
+    let stabilityMultiplier = 1;
+    if (newSlot.permanence === 'removable' || groupSlot.permanence === 'removable') {
+      stabilityMultiplier = 0.3;
+    } else if (newSlot.permanence === 'possibly_removable' || groupSlot.permanence === 'possibly_removable') {
+      stabilityMultiplier = 0.6;
+    }
+
+    const basePro = STABLE_CLOTHING_PRO_WEIGHTS[slot] || 0;
+    const baseContra = STABLE_CLOTHING_CONTRA_WEIGHTS[slot] || 0;
+
+    if (slotSim > 0 && basePro > 0) {
+      const contrib = basePro * slotSim * stabilityMultiplier * econf;
+      proScore += contrib;
+      breakdown.clothingPro += contrib;
+    }
+
+    // Strong contradictions on stable clothing only.
+    if (isStableNew && isStableGroup && slotSim <= 0.2 && baseContra > 0) {
+      const contraContrib = baseContra * (1 - slotSim) * econf;
+      contraScore += contraContrib;
+      breakdown.clothingContra += contraContrib;
+    }
+  }
+
+  // Rare / distinctive marks and rare clothing.
+  const newMarks = Array.isArray(newSchema.distinctive_marks) ? newSchema.distinctive_marks : [];
+  const groupMarks = Array.isArray(groupCanonical.distinctive_marks) ? groupCanonical.distinctive_marks : [];
 
   const rareSources = [
     ...groupMarks,
@@ -145,14 +241,15 @@ function scoreAgainstGroup(newSchema, groupCanonical) {
     }
 
     if (matched) {
-      const econf = effectiveConfidence(matched.confidence, gmConf);
+      const econf = effectiveConfidence(matched.confidence, gmConf) * visibilityFactor;
       if (econf > 0) {
-        let points = WEIGHT_RARE * (rarity / 100) * econf;
+        let contrib = RARE_PRO_BASE * (rarity / 100) * econf;
         const nmLocation = matched.location || null;
         if ((gmLocation && nmLocation && gmLocation === nmLocation) || (!gmLocation && !nmLocation)) {
-          points += LOCATION_MATCH_BONUS * econf;
+          contrib += LOCATION_MATCH_BONUS * econf;
         }
-        A += points;
+        proScore += contrib;
+        breakdown.rarePro += contrib;
       }
     } else {
       const missingRare = newMarks.some((nm) => {
@@ -161,50 +258,15 @@ function scoreAgainstGroup(newSchema, groupCanonical) {
         return nm.description === 'unknown' && Number(nm.confidence) >= 80;
       });
       if (missingRare) {
-        A -= Math.abs(RARE_MISSING_PENALTY) * (rarity / 100);
+        const contraContrib = RARE_CONTRA_BASE * (rarity / 100) * visibilityFactor;
+        contraScore += contraContrib;
+        breakdown.rareContra += contraContrib;
       }
     }
   }
 
-  if (A > WEIGHT_RARE) A = WEIGHT_RARE;
-
-  const lightingUncertainty = Number(newSchema.lighting_uncertainty) || 0;
-  const clothingSlots = ['top', 'jacket', 'trousers', 'shoes', 'dress'];
-  for (const slot of clothingSlots) {
-    const newSlot = newClothing[slot];
-    const groupSlot = groupClothing[slot];
-    if (!newSlot || !groupSlot || typeof newSlot !== 'object' || typeof groupSlot !== 'object') {
-      continue;
-    }
-    if (newSlot.description === 'unknown' || groupSlot.description === 'unknown') {
-      continue;
-    }
-    const colorOk = areColorsEquivalent(newSlot.color, groupSlot.color, lightingUncertainty);
-    const descOk = substringTokenMatch(newSlot.description, groupSlot.description);
-    const colorScore = colorOk ? 1 : 0;
-    const descScore = descOk ? 1 : 0;
-    let raw = (colorScore * 0.6) + (descScore * 0.4);
-    if (raw <= 0) continue;
-
-    let permMult = 1;
-    const newPerm = newSlot.permanence;
-    const groupPerm = groupSlot.permanence;
-    if (newPerm === 'removable' || groupPerm === 'removable') {
-      permMult = 0.3;
-    } else if (newPerm === 'possibly_removable' || groupPerm === 'possibly_removable') {
-      permMult = 0.6;
-    }
-
-    const econf = effectiveConfidence(newSlot.confidence, groupSlot.confidence);
-    if (econf <= 0) continue;
-
-    const slotPoints = WEIGHT_CLOTHING * raw * permMult * econf;
-    B += slotPoints;
-  }
-  if (B > WEIGHT_CLOTHING) B = WEIGHT_CLOTHING;
-
+  // Physical traits.
   const physFields = ['gender_presentation', 'age_band', 'build', 'height_impression', 'skin_tone'];
-  const subWeight = WEIGHT_PHYSICAL / physFields.length;
   for (const field of physFields) {
     const newField = newSchema[field];
     const groupField = groupCanonical[field];
@@ -216,122 +278,119 @@ function scoreAgainstGroup(newSchema, groupCanonical) {
     if (!nv || !gv || nv === 'unknown' || gv === 'unknown') {
       continue;
     }
-    const econf = effectiveConfidence(newField.confidence, groupField.confidence);
+
+    const econf = effectiveConfidence(newField.confidence, groupField.confidence) * visibilityFactor;
     if (econf <= 0) continue;
 
+    const wPro = PHYSICAL_PRO_WEIGHTS[field] || 0;
+    const wContra = PHYSICAL_CONTRA_WEIGHTS[field] || 0;
+
     if (nv === gv) {
-      C += subWeight * 1 * econf;
+      if (wPro > 0) {
+        const contrib = wPro * econf;
+        proScore += contrib;
+        breakdown.physicalPro += contrib;
+      }
     } else if (field === 'age_band' && ageAdjacent(nv, gv)) {
-      C += subWeight * 0.5 * econf;
+      // Slight disagreement in age bands – small contra, small pro forgiveness.
+      if (wPro > 0) {
+        const contrib = (wPro * 0.4) * econf;
+        proScore += contrib;
+        breakdown.physicalPro += contrib;
+      }
+      if (wContra > 0) {
+        const contraContrib = (wContra * 0.2) * econf;
+        contraScore += contraContrib;
+        breakdown.physicalContra += contraContrib;
+      }
     } else {
-      C -= subWeight * 0.35 * econf;
-      // Treat high-confidence gender mismatches as near-fatal.
-      if (field === 'gender_presentation' && econf >= 0.6) {
-        hasHighConfidenceGenderMismatch = true;
+      if (field === 'gender_presentation') {
+        // Gender mismatch is near-fatal.
+        const fatalContra = (PHYSICAL_CONTRA_WEIGHTS.gender_presentation || 120) * econf;
+        contraScore += fatalContra;
+        breakdown.physicalContra += fatalContra;
+        fatalGenderMismatch = true;
+      } else if (wContra > 0) {
+        const contraContrib = wContra * econf;
+        contraScore += contraContrib;
+        breakdown.physicalContra += contraContrib;
       }
     }
   }
-  if (C < 0) C = 0;
-  if (C > WEIGHT_PHYSICAL) C = WEIGHT_PHYSICAL;
 
+  // Hair and facial hair.
   const hairNew = newSchema.hair && typeof newSchema.hair === 'object' ? newSchema.hair : null;
   const hairGroup = groupCanonical.hair && typeof groupCanonical.hair === 'object' ? groupCanonical.hair : null;
   if (hairNew && hairGroup) {
     const newColor = hairNew.color || {};
     const groupColor = hairGroup.color || {};
-    if (newColor.value !== 'unknown' && groupColor.value !== 'unknown') {
-      if (areColorsEquivalent(newColor.value, groupColor.value, lightingUncertainty)) {
-        const econf = effectiveConfidence(newColor.confidence, groupColor.confidence);
-        if (econf > 0) {
-          D += 0.5 * WEIGHT_HAIR * econf;
+    if (newColor.value && groupColor.value && newColor.value !== 'unknown' && groupColor.value !== 'unknown') {
+      const econf = effectiveConfidence(newColor.confidence, groupColor.confidence) * visibilityFactor;
+      if (econf > 0) {
+        if (areColorsEquivalent(newColor.value, groupColor.value, lightingUncertainty)) {
+          const contrib = HAIR_PRO_WEIGHTS.color * econf;
+          proScore += contrib;
+          breakdown.hairPro += contrib;
+        } else {
+          const contraContrib = HAIR_CONTRA_WEIGHTS.color * econf;
+          contraScore += contraContrib;
+          breakdown.hairContra += contraContrib;
         }
       }
     }
 
     const newLength = hairNew.length || {};
     const groupLength = hairGroup.length || {};
-    if (newLength.value && groupLength.value && newLength.value !== 'unknown' && groupLength.value !== 'unknown' && newLength.value === groupLength.value) {
-      const econf = effectiveConfidence(newLength.confidence, groupLength.confidence);
+    if (newLength.value && groupLength.value && newLength.value !== 'unknown' && groupLength.value !== 'unknown') {
+      const econf = effectiveConfidence(newLength.confidence, groupLength.confidence) * visibilityFactor;
       if (econf > 0) {
-        D += 0.3 * WEIGHT_HAIR * econf;
+        if (newLength.value === groupLength.value) {
+          const contrib = HAIR_PRO_WEIGHTS.length * econf;
+          proScore += contrib;
+          breakdown.hairPro += contrib;
+        } else {
+          const contraContrib = HAIR_CONTRA_WEIGHTS.length * econf;
+          contraScore += contraContrib;
+          breakdown.hairContra += contraContrib;
+        }
       }
     }
 
     const newStyle = hairNew.style || {};
     const groupStyle = hairGroup.style || {};
-    if (substringTokenMatch(newStyle.value, groupStyle.value)) {
-      const econf = effectiveConfidence(newStyle.confidence, groupStyle.confidence);
-      if (econf > 0) {
-        D += 0.1 * WEIGHT_HAIR * econf;
+    if (newStyle.value && groupStyle.value && newStyle.value !== 'unknown' && groupStyle.value !== 'unknown') {
+      const econf = effectiveConfidence(newStyle.confidence, groupStyle.confidence) * visibilityFactor;
+      if (econf > 0 && substringTokenMatch(newStyle.value, groupStyle.value)) {
+        const contrib = HAIR_PRO_WEIGHTS.style * econf;
+        proScore += contrib;
+        breakdown.hairPro += contrib;
       }
     }
 
     const newFacial = hairNew.facial_hair || {};
     const groupFacial = hairGroup.facial_hair || {};
-    if (newFacial.value && groupFacial.value && newFacial.value !== 'unknown' && groupFacial.value !== 'unknown' && newFacial.value === groupFacial.value) {
-      const econf = effectiveConfidence(newFacial.confidence, groupFacial.confidence);
+    if (newFacial.value && groupFacial.value && newFacial.value !== 'unknown' && groupFacial.value !== 'unknown') {
+      const econf = effectiveConfidence(newFacial.confidence, groupFacial.confidence) * visibilityFactor;
       if (econf > 0) {
-        D += 0.1 * WEIGHT_HAIR * econf;
+        if (newFacial.value === groupFacial.value) {
+          const contrib = HAIR_PRO_WEIGHTS.facial_hair * econf;
+          proScore += contrib;
+          breakdown.hairPro += contrib;
+        } else {
+          const contraContrib = HAIR_CONTRA_WEIGHTS.facial_hair * econf;
+          contraScore += contraContrib;
+          breakdown.hairContra += contraContrib;
+        }
       }
     }
   }
-  if (D > WEIGHT_HAIR) D = WEIGHT_HAIR;
-
-  const bonus = computeDistinctiveBonus(newSchema, groupCanonical);
-
-  let rawScore = A + B + C + D + bonus;
-  if (hasHighConfidenceGenderMismatch) {
-    // Hard clamp scores when gender presentations clearly disagree.
-    rawScore = Math.min(rawScore, 20);
-  }
-  const visibleConfidence = Number(newSchema.visible_confidence) || 0;
-  if (visibleConfidence < 30) {
-    rawScore -= 10;
-  }
-  if (!Number.isFinite(rawScore)) {
-    rawScore = 0;
-  }
-  if (rawScore < 0) rawScore = 0;
-  if (rawScore > 100) rawScore = 100;
-
-  const finalScore = Math.round(rawScore);
-  const explanation = buildExplanation({ A, B, C, D });
 
   return {
-    score: finalScore,
-    explanation,
-    distinctiveBonus: bonus
+    proScore,
+    contraScore,
+    breakdown,
+    fatalGenderMismatch
   };
-}
-
-/**
- * Score a structured description against many canonical group descriptions.
- * Returns a sorted array of scored groups, highest score first.
- */
-function scoreDescriptionAgainstGroups(newDescriptionSchema, existingGroups) {
-  if (!newDescriptionSchema || typeof newDescriptionSchema !== 'object' || !Array.isArray(existingGroups) || !existingGroups.length) {
-    return [];
-  }
-
-  const scoredGroups = [];
-  for (const group of existingGroups) {
-    if (!group || typeof group !== 'object') continue;
-    const canonical = group.group_canonical;
-    if (!canonical || typeof canonical !== 'object') continue;
-    const groupId = group.group_id;
-    const memberCount = Number(group.group_member_count) || 0;
-    const { score, explanation, distinctiveBonus } = scoreAgainstGroup(newDescriptionSchema, canonical);
-    scoredGroups.push({
-      groupId,
-      memberCount,
-      score,
-      explanation,
-      distinctiveBonus
-    });
-  }
-
-  scoredGroups.sort((a, b) => b.score - a.score);
-  return scoredGroups;
 }
 
 async function generateStablePersonDescription(imageDataUrl) {
@@ -517,10 +576,7 @@ async function generateStablePersonDescription(imageDataUrl) {
 
 // Deterministic grouping based on structured description schema.
 async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups) {
-  const MERGE_THRESHOLD = GROUPING_MATCH_THRESHOLD || 60;
-
-  const scoredGroups = scoreDescriptionAgainstGroups(newDescriptionSchema, existingGroups);
-  if (!scoredGroups.length) {
+  if (!newDescriptionSchema || typeof newDescriptionSchema !== 'object' || !Array.isArray(existingGroups) || !existingGroups.length) {
     return {
       bestGroupId: null,
       bestGroupProbability: 0,
@@ -528,22 +584,63 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
     };
   }
 
-  const top = scoredGroups[0];
+  const scored = [];
+  for (const group of existingGroups) {
+    if (!group || typeof group !== 'object') continue;
+    const canonical = group.group_canonical;
+    if (!canonical || typeof canonical !== 'object') continue;
+    const groupId = group.group_id;
+    const memberCount = Number(group.group_member_count) || 0;
 
-  if (!top || top.score < MERGE_THRESHOLD) {
+    const { proScore, contraScore, breakdown, fatalGenderMismatch } =
+      computeProContraScores(newDescriptionSchema, canonical);
+
+    scored.push({
+      groupId,
+      memberCount,
+      proScore,
+      contraScore,
+      breakdown,
+      fatalGenderMismatch
+    });
+  }
+
+  if (!scored.length) {
     return {
       bestGroupId: null,
-      bestGroupProbability: top ? top.score : 0,
-      explanation: top ? top.explanation : ''
+      bestGroupProbability: 0,
+      explanation: ''
     };
   }
 
-  const tied = scoredGroups.filter((g) => (top.score - g.score) <= TIE_DELTA);
+  // Apply pro/contra gates.
+  const survivors = scored.filter((g) => g.proScore >= PRO_MIN && g.contraScore <= CONTRA_MAX);
+
+  if (!survivors.length) {
+    // Find the best overall candidate for explanation purposes.
+    scored.sort((a, b) => b.proScore - a.proScore);
+    const candidate = scored[0];
+    const explanation = candidate
+      ? `No group passed thresholds. Best candidate had proScore=${Math.round(candidate.proScore)}, contraScore=${Math.round(candidate.contraScore)}.`
+      : '';
+
+    return {
+      bestGroupId: null,
+      bestGroupProbability: 0,
+      explanation
+    };
+  }
+
+  survivors.sort((a, b) => b.proScore - a.proScore);
+  const top = survivors[0];
+  const tied = survivors.filter((g) => Math.abs(top.proScore - g.proScore) <= TIE_DELTA);
+
   let best = top;
   if (tied.length > 1) {
     tied.sort((a, b) => {
-      if (b.distinctiveBonus !== a.distinctiveBonus) {
-        return b.distinctiveBonus - a.distinctiveBonus;
+      // Prefer groups with lower contraScore, then higher memberCount.
+      if (a.contraScore !== b.contraScore) {
+        return a.contraScore - b.contraScore;
       }
       if (b.memberCount !== a.memberCount) {
         return b.memberCount - a.memberCount;
@@ -553,10 +650,47 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
     best = tied[0];
   }
 
+  const pro = Math.round(best.proScore);
+  const contra = Math.round(best.contraScore);
+
+  // Derive a friendly 0–100 "likelihood" purely for UI.
+  const denominator = best.proScore + best.contraScore + 50;
+  const probability = denominator > 0
+    ? Math.max(0, Math.min(100, Math.round((best.proScore / denominator) * 100)))
+    : 0;
+
+  const bd = best.breakdown || {};
+  const clothingPro = Math.round(bd.clothingPro || 0);
+  const physicalPro = Math.round(bd.physicalPro || 0);
+  const hairPro = Math.round(bd.hairPro || 0);
+  const rarePro = Math.round(bd.rarePro || 0);
+
+  const clothingContra = Math.round(bd.clothingContra || 0);
+  const physicalContra = Math.round(bd.physicalContra || 0);
+  const hairContra = Math.round(bd.hairContra || 0);
+  const rareContra = Math.round(bd.rareContra || 0);
+
+  const proParts = [];
+  if (clothingPro > 0) proParts.push(`clothing ${clothingPro}`);
+  if (physicalPro > 0) proParts.push(`physical ${physicalPro}`);
+  if (hairPro > 0) proParts.push(`hair ${hairPro}`);
+  if (rarePro > 0) proParts.push(`rare ${rarePro}`);
+
+  const contraParts = [];
+  if (clothingContra > 0) contraParts.push(`clothing ${clothingContra}`);
+  if (physicalContra > 0) contraParts.push(`physical ${physicalContra}`);
+  if (hairContra > 0) contraParts.push(`hair ${hairContra}`);
+  if (rareContra > 0) contraParts.push(`rare ${rareContra}`);
+
+  const proText = proParts.length ? proParts.join(', ') : 'none';
+  const contraText = contraParts.length ? contraParts.join(', ') : 'none';
+
+  const explanation = `proScore=${pro}, contraScore=${contra}. Pros: ${proText}. Contras: ${contraText}.`;
+
   return {
     bestGroupId: best.groupId ?? null,
-    bestGroupProbability: best.score,
-    explanation: best.explanation || ''
+    bestGroupProbability: probability,
+    explanation
   };
 }
 

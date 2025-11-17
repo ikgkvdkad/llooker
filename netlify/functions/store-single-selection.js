@@ -121,11 +121,10 @@ exports.handler = async (event) => {
       ? groupingResult.explanation.trim()
       : '';
 
-    if (
-      bestGroupId &&
-      bestGroupProbability !== null &&
-      bestGroupProbability >= GROUPING_MATCH_THRESHOLD
-    ) {
+    // Grouping decision is now controlled by the internal pro/contra gates
+    // inside evaluateDescriptionGrouping; if a bestGroupId is returned we
+    // trust that it passed those thresholds.
+    if (bestGroupId) {
       personGroupIdForInsert = bestGroupId;
     }
 
