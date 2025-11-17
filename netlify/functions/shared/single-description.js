@@ -33,7 +33,7 @@ const CLOTHING_PRO_CAP_RATIO = (() => {
   if (Number.isFinite(raw) && raw > 0) {
     return raw;
   }
-  return 0.6;
+  return 1.0; // allow full PRO_MIN contribution from strong clothing matches
 })();
 const CLOTHING_PRO_CAP = (() => {
   const raw = Number(process.env.CLOTHING_PRO_CAP);
@@ -47,7 +47,7 @@ const PRO_SOFT_MAX = (() => {
   if (Number.isFinite(raw) && raw > 0) {
     return raw;
   }
-  return 220;
+  return 180; // softer normalization so ~270 raw pro passes 60 norm gate
 })();
 const CONTRA_SOFT_MAX = (() => {
   const raw = Number(process.env.CONTRA_SOFT_MAX);
@@ -62,7 +62,7 @@ const NORM_PRO_MIN = (() => {
   if (Number.isFinite(raw)) {
     return Math.max(0, Math.min(100, raw));
   }
-  return 60;
+  return 50; // allow strong-but-limited descriptions to survive shortlist gate
 })();
 const NORM_CONTRA_MAX = (() => {
   const raw = Number(process.env.NORM_CONTRA_MAX);
