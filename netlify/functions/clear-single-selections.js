@@ -7,6 +7,7 @@ const {
 const DEFAULT_ANALYSES_TABLE_NAME = 'portrait_analyses';
 const ANALYSES_TABLE_ENV_KEY = 'ANALYSES_TABLE';
 const PG_TABLE_NOT_FOUND = '42P01';
+const PG_INSUFFICIENT_PRIVILEGE = '42501';
 
 function resolveAnalysesTableName() {
   const configured = process.env[ANALYSES_TABLE_ENV_KEY];
@@ -56,6 +57,8 @@ exports.handler = async (event) => {
   let singleCleared = 0;
   let analysesCleared = 0;
   let analysesTableTruncated = false;
+  let analysesTableExists = false;
+  let singleTableTruncated = true;
 
   try {
     await client.query('BEGIN');
@@ -64,15 +67,41 @@ exports.handler = async (event) => {
       `SELECT COUNT(*)::int AS count FROM ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME};`
     );
     singleCleared = singleCountResult.rows?.[0]?.count ?? 0;
-    await client.query(`TRUNCATE ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME} RESTART IDENTITY;`);
+    try {
+      await client.query(`TRUNCATE ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME} RESTART IDENTITY;`);
+      singleTableTruncated = true;
+    } catch (truncateError) {
+      if (truncateError?.code === PG_INSUFFICIENT_PRIVILEGE) {
+        console.warn(
+          `Insufficient privilege to truncate ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME}. Falling back to DELETE.`
+        );
+        await client.query(`DELETE FROM ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME};`);
+        singleTableTruncated = false;
+      } else {
+        throw truncateError;
+      }
+    }
 
     try {
       const analysesCountResult = await client.query(
         `SELECT COUNT(*)::int AS count FROM ${ANALYSES_TABLE_NAME};`
       );
       analysesCleared = analysesCountResult.rows?.[0]?.count ?? 0;
-      await client.query(`TRUNCATE ${ANALYSES_TABLE_NAME} RESTART IDENTITY;`);
-      analysesTableTruncated = true;
+      analysesTableExists = true;
+      try {
+        await client.query(`TRUNCATE ${ANALYSES_TABLE_NAME} RESTART IDENTITY;`);
+        analysesTableTruncated = true;
+      } catch (truncateError) {
+        if (truncateError?.code === PG_INSUFFICIENT_PRIVILEGE) {
+          console.warn(
+            `Insufficient privilege to truncate ${ANALYSES_TABLE_NAME}. Falling back to DELETE.`
+          );
+          await client.query(`DELETE FROM ${ANALYSES_TABLE_NAME};`);
+          analysesTableTruncated = false;
+        } else {
+          throw truncateError;
+        }
+      }
     } catch (tableError) {
       if (tableError?.code === PG_TABLE_NOT_FOUND) {
         console.warn(
@@ -115,12 +144,13 @@ exports.handler = async (event) => {
         single: {
           table: SINGLE_CAMERA_SELECTIONS_TABLE_NAME,
           rowsCleared: singleCleared,
-          truncated: true
+          truncated: singleTableTruncated
         },
         analyses: {
           table: ANALYSES_TABLE_NAME,
           rowsCleared: analysesCleared,
-          truncated: analysesTableTruncated
+          truncated: analysesTableTruncated,
+          exists: analysesTableExists
         }
       }
     })

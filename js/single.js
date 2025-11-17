@@ -655,28 +655,45 @@ async function clearAllSelections() {
             throw new Error(payload?.error || 'Malformed response from clear API.');
         }
 
-        const singleRemoved = Number(payload?.tables?.single?.rowsCleared) || 0;
-        const analysesRemoved = Number(payload?.tables?.analyses?.rowsCleared) || 0;
-        const analysesTruncated = Boolean(payload?.tables?.analyses?.truncated);
+        const singleInfo = (payload?.tables && payload.tables.single) || {};
+        const analysesInfo = (payload?.tables && payload.tables.analyses) || {};
+        const singleRemoved = Number(singleInfo.rowsCleared) || 0;
+        const analysesRemoved = Number(analysesInfo.rowsCleared) || 0;
+        const singleTruncated = Boolean(singleInfo.truncated);
+        const analysesTruncated = Boolean(analysesInfo.truncated);
+        const analysesExists = analysesInfo.exists !== false;
 
         const container = getSingleSelectionContainer();
         if (container) {
             container.innerHTML = '';
         }
 
-        const summaryParts = [
-            `Removed ${singleRemoved} single selection${singleRemoved === 1 ? '' : 's'}`
-        ];
-
-        if (analysesTruncated) {
+        const summaryParts = [];
+        if (singleTruncated) {
             summaryParts.push(
-                `reset ${analysesRemoved} canonical description record${analysesRemoved === 1 ? '' : 's'}`
+                `Reset ${singleRemoved} single selection${singleRemoved === 1 ? '' : 's'} (IDs restarted)`
             );
         } else {
-            summaryParts.push('analyses table was not truncated (verify server configuration).');
+            summaryParts.push(
+                `Deleted ${singleRemoved} single selection${singleRemoved === 1 ? '' : 's'} (IDs not reset)`
+            );
         }
 
-        showWarning(`${summaryParts.join('; ')} Canonical values are fully cleared.`, {
+        if (analysesExists) {
+            if (analysesTruncated) {
+                summaryParts.push(
+                    `reset ${analysesRemoved} canonical description record${analysesRemoved === 1 ? '' : 's'}`
+                );
+            } else {
+                summaryParts.push(
+                    `deleted ${analysesRemoved} canonical description record${analysesRemoved === 1 ? '' : 's'} (IDs not reset)`
+                );
+            }
+        } else {
+            summaryParts.push('canonical description table not found on database; skipped reset.');
+        }
+
+        showWarning(`Database wipe complete: ${summaryParts.join('; ')}.`, {
             diagnostics: false
         });
     } catch (error) {
