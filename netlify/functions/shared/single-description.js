@@ -1265,13 +1265,40 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
     })();
 
     if (fallbackGroup) {
+      const fallbackNormPro = toOneDecimal(fallbackGroup.normPro);
+      const fallbackNormContra = toOneDecimal(fallbackGroup.normContra);
       const fallbackProbability = Math.max(GROUPING_MATCH_THRESHOLD, computeNormalizedProbability(
         normalizeScore(fallbackGroup.proScore, PRO_SOFT_MAX),
         normalizeScore(fallbackGroup.contraScore, CONTRA_SOFT_MAX)
       ));
+      const fallbackBd = fallbackGroup.breakdown || {};
+      const fbClothingPro = Math.round(fallbackBd.clothingPro || 0);
+      const fbPhysicalPro = Math.round(fallbackBd.physicalPro || 0);
+      const fbHairPro = Math.round(fallbackBd.hairPro || 0);
+      const fbRarePro = Math.round(fallbackBd.rarePro || 0);
+      const fbProParts = [];
+      if (fbClothingPro > 0) fbProParts.push(`clothing ${fbClothingPro}`);
+      if (fbPhysicalPro > 0) fbProParts.push(`physical ${fbPhysicalPro}`);
+      if (fbHairPro > 0) fbProParts.push(`hair ${fbHairPro}`);
+      if (fbRarePro > 0) fbProParts.push(`rare ${fbRarePro}`);
+      const fbClothingContra = Math.round(fallbackBd.clothingContra || 0);
+      const fbPhysicalContra = Math.round(fallbackBd.physicalContra || 0);
+      const fbHairContra = Math.round(fallbackBd.hairContra || 0);
+      const fbRareContra = Math.round(fallbackBd.rareContra || 0);
+      const fbContraParts = [];
+      if (fbClothingContra > 0) fbContraParts.push(`clothing ${fbClothingContra}`);
+      if (fbPhysicalContra > 0) fbContraParts.push(`physical ${fbPhysicalContra}`);
+      if (fbHairContra > 0) fbContraParts.push(`hair ${fbHairContra}`);
+      if (fbRareContra > 0) fbContraParts.push(`rare ${fbRareContra}`);
+      const fallbackPro = Math.round(fallbackGroup.proScore);
+      const fallbackContra = Math.round(fallbackGroup.contraScore);
       const clarityNote = `Clarity override: new image_clarity ${newClarity} vs canonical ${fallbackGroup.groupClarity ?? 'unknown'}.`;
       const fallbackExplanation = [
         explanation,
+        `Fallback candidate raw scores: pro=${fallbackPro}, contra=${fallbackContra}.`,
+        `Pros: ${fbProParts.length ? fbProParts.join(', ') : 'none'}.`,
+        `Contras: ${fbContraParts.length ? fbContraParts.join(', ') : 'none'}.`,
+        `Normalized fallback scores: normPro=${fallbackNormPro}, normContra=${fallbackNormContra}, probability=${fallbackProbability}%.`,
         clarityNote,
         `Assigned to group ${fallbackGroup.groupId} despite thresholds due to stronger clarity and near-match scores.`
       ].filter(Boolean).join(' ');
@@ -1372,11 +1399,16 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
 
   const proText = proParts.length ? proParts.join(', ') : 'none';
   const contraText = contraParts.length ? contraParts.join(', ') : 'none';
-
+  const clarityLine = typeof best.groupClarity === 'number'
+    ? `Image clarity — new=${newClarity || 'unknown'}, canonical=${best.groupClarity}.`
+    : null;
   const explanation = [
-    `normPro=${normPro}, normContra=${normContra}, probability=${bestProbability}%.`,
-    `Raw proScore=${pro}, contraScore=${contra}. Pros: ${proText}. Contras: ${contraText}.`
-  ].join(' ');
+    `Raw scores: pro=${pro}, contra=${contra}.`,
+    `Pro contributions: ${proText}.`,
+    `Contra penalties: ${contraText}.`,
+    `Normalized scores: normPro=${normPro} (needs ≥${NORM_PRO_MIN}), normContra=${normContra} (needs ≤${NORM_CONTRA_MAX}), probability=${bestProbability}%.`,
+    clarityLine
+  ].filter(Boolean).join(' ');
 
   return {
     bestGroupId: best.groupId ?? null,
