@@ -208,9 +208,10 @@ exports.handler = async (event) => {
           capturedAt: record?.captured_at ?? null,
           role: record?.role ?? null,
           description: record?.description ?? null,
-            personGroupId: finalGroupId ?? null,
-            groupingProbability: record?.grouping_probability ?? null,
-            groupingExplanation: record?.grouping_explanation ?? null
+          descriptionSchema: record?.description_json ?? null,
+          personGroupId: finalGroupId ?? null,
+          groupingProbability: record?.grouping_probability ?? null,
+          groupingExplanation: record?.grouping_explanation ?? null
         }
       })
     };

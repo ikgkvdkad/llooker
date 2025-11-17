@@ -38,6 +38,7 @@ function getSingleSelectionContainer() {
 }
 
 const singleGroupRows = new Map();
+const singleSelectionSchemas = new Map();
 
 const SINGLE_UPLOAD_LABEL = 'Subject';
 const pendingSingleUploads = [];
@@ -174,6 +175,11 @@ function renderSelectionRow(selection) {
 
     row.appendChild(wrapper);
 
+    // Cache structured schema for this selection if available.
+    if (selection.id && selection.descriptionSchema && typeof selection.descriptionSchema === 'object') {
+        singleSelectionSchemas.set(Number(selection.id), selection.descriptionSchema);
+    }
+
     const openDescription = async () => {
         const modal = document.getElementById('singleDescriptionModal');
         const textEl = document.getElementById('singleDescriptionText');
@@ -181,8 +187,9 @@ function renderSelectionRow(selection) {
         const explanationEl = document.getElementById('singleGroupingExplanation');
         const groupIdEl = document.getElementById('singleGroupingId');
         const neighborsEl = document.getElementById('singleDescriptionNeighbors');
+        const structuredEl = document.getElementById('singleDescriptionStructured');
 
-        if (!modal || !textEl || !probabilityEl || !explanationEl || !groupIdEl || !neighborsEl) {
+        if (!modal || !textEl || !probabilityEl || !explanationEl || !groupIdEl || !neighborsEl || !structuredEl) {
             showWarning('Description viewer is missing required fields. Reload the page and try again.', {
                 diagnostics: false
             });
@@ -334,6 +341,30 @@ function renderSelectionRow(selection) {
                 msg.textContent = 'Scoring details could not be loaded for this photo. Check diagnostics.';
                 content.appendChild(msg);
             }
+        }
+
+        // Structured variables from the full description schema.
+        structuredEl.innerHTML = '';
+        const structuredLabel = document.createElement('div');
+        structuredLabel.className = 'single-description-structured-label';
+        structuredLabel.textContent = 'Structured variables';
+        structuredEl.appendChild(structuredLabel);
+
+        const schema = selectionId ? singleSelectionSchemas.get(selectionId) : null;
+        if (schema) {
+            const pre = document.createElement('pre');
+            pre.className = 'single-description-structured-pre';
+            try {
+                pre.textContent = JSON.stringify(schema, null, 2);
+            } catch {
+                pre.textContent = '[Unable to render structured variables]';
+            }
+            structuredEl.appendChild(pre);
+        } else {
+            const msg = document.createElement('div');
+            msg.className = 'single-description-neighbor-meta';
+            msg.textContent = 'Structured variables are not available for this photo yet.';
+            structuredEl.appendChild(msg);
         }
 
         modal.classList.add('is-open');
@@ -559,11 +590,12 @@ async function saveCurrentSelection({ viewportOverride = null } = {}) {
             imageDataUrl: croppedDataUrl,
             createdAt: selectionMeta.createdAt || null,
             capturedAt: selectionMeta.capturedAt || capturedAtIso,
-          description: selectionMeta.description || '',
-          groupingProbability: Number.isFinite(Number(selectionMeta.groupingProbability))
-              ? Number(selectionMeta.groupingProbability)
-              : null,
-          groupingExplanation: selectionMeta.groupingExplanation || null
+            description: selectionMeta.description || '',
+            descriptionSchema: selectionMeta.descriptionSchema || null,
+            groupingProbability: Number.isFinite(Number(selectionMeta.groupingProbability))
+                ? Number(selectionMeta.groupingProbability)
+                : null,
+            groupingExplanation: selectionMeta.groupingExplanation || null
         });
     } catch (error) {
         console.error('Failed to store single-camera selection:', error);
