@@ -1,3 +1,14 @@
+function extractClarity(description) {
+  if (!description || typeof description !== 'object') {
+    return 0;
+  }
+  const raw = Number(description.image_clarity);
+  if (!Number.isFinite(raw)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(100, raw));
+}
+
 function collectGroupsWithRepresentatives(rows) {
   const groupsMap = new Map();
   for (const row of rows) {
@@ -5,31 +16,36 @@ function collectGroupsWithRepresentatives(rows) {
     const canonical = row.description_json;
     if (!groupId || !canonical) continue;
     const key = String(groupId);
+    const clarity = extractClarity(canonical);
+    const captured = row.captured_at || row.created_at || null;
+    const capturedIso = captured instanceof Date && !Number.isNaN(captured.getTime())
+      ? captured.toISOString()
+      : (typeof captured === 'string' ? captured : null);
     let entry = groupsMap.get(key);
     if (!entry) {
-      const captured = row.captured_at || row.created_at || null;
-      const capturedIso = captured instanceof Date && !Number.isNaN(captured.getTime())
-        ? captured.toISOString()
-        : (typeof captured === 'string' ? captured : null);
       entry = {
         group_id: groupId,
         group_canonical: canonical,
         group_member_count: 0,
         representativeImage: row.image_data_url || null,
         representativeCapturedAt: capturedIso,
-        representativeSelectionId: row.id || null
+        representativeSelectionId: row.id || null,
+        best_clarity: clarity
       };
       groupsMap.set(key, entry);
     }
     entry.group_member_count += 1;
-    if (!entry.group_canonical && canonical) {
+
+    const shouldReplaceCanonical = typeof entry.best_clarity !== 'number' || clarity > entry.best_clarity;
+    if (shouldReplaceCanonical) {
       entry.group_canonical = canonical;
-    }
-    if (!entry.representativeImage && row.image_data_url) {
-      const captured = row.captured_at || row.created_at || null;
-      const capturedIso = captured instanceof Date && !Number.isNaN(captured.getTime())
-        ? captured.toISOString()
-        : (typeof captured === 'string' ? captured : null);
+      entry.best_clarity = clarity;
+      if (row.image_data_url) {
+        entry.representativeImage = row.image_data_url;
+        entry.representativeCapturedAt = capturedIso;
+        entry.representativeSelectionId = row.id || null;
+      }
+    } else if (!entry.representativeImage && row.image_data_url) {
       entry.representativeImage = row.image_data_url;
       entry.representativeCapturedAt = capturedIso;
       entry.representativeSelectionId = row.id || null;
@@ -41,7 +57,8 @@ function collectGroupsWithRepresentatives(rows) {
     groups.push({
       group_id: entry.group_id,
       group_canonical: entry.group_canonical,
-      group_member_count: entry.group_member_count
+      group_member_count: entry.group_member_count,
+      group_image_clarity: typeof entry.best_clarity === 'number' ? entry.best_clarity : null
     });
   }
   return { groups, groupsMap };

@@ -244,6 +244,15 @@ function normalizeText(value) {
   return value.trim().toLowerCase();
 }
 
+function sanitizeClarity(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) {
+    return null;
+  }
+  const clamped = Math.max(0, Math.min(100, Math.round(num)));
+  return clamped;
+}
+
 function includesKeyword(text, keywords) {
   if (!text || !keywords || !keywords.length) {
     return false;
@@ -978,7 +987,8 @@ async function generateStablePersonDescription(imageDataUrl) {
               'For clothing and accessories include a permanence value which must be one of "stable", "possibly_removable", or "removable".',
               'For distinctive marks, include rarity_score 0–100 (0 = common, 100 = unique).',
               'At the end, include natural_summary — a 10–14 short-sentence human readable description that follows earlier guidelines (factual, no background/pose).',
-              'Follow the description_schema exactly.'
+              'Follow the description_schema exactly.',
+              'Provide a top-level image_clarity integer (0–100) representing visual sharpness and unobstructed view (0 = unusable/blurry, 100 = perfect).'
             ].join(' ')
           },
           {
@@ -987,7 +997,7 @@ async function generateStablePersonDescription(imageDataUrl) {
               {
                 type: 'text',
                 text: [
-                  'Describe the person in this cropped photo. Produce only JSON that matches this schema:',
+                  'Describe the person in this cropped photo. Produce only JSON with shape {"description_schema": {...}, "image_clarity": 0-100} that matches this schema:',
                   '',
                   '{',
                   '  "description_schema": {',
@@ -1033,6 +1043,7 @@ async function generateStablePersonDescription(imageDataUrl) {
                   'lighting_uncertainty = 0 if color is clear, up to 100 if heavily tinted/unclear.',
                   'visible_confidence = overall confidence 0–100 that visible traits were read correctly.',
                   'natural_summary must be 10–14 short factual sentences, following the guidelines above.',
+                  'image_clarity must be an integer 0–100 (0 = unusable/blurry, 100 = perfectly sharp).',
                   'Produce only the JSON document. Nothing else.'
                 ].join('\n')
               },
@@ -1084,6 +1095,13 @@ async function generateStablePersonDescription(imageDataUrl) {
       console.warn('Single selection description schema missing or invalid.');
       return null;
     }
+
+    const clarityValue = sanitizeClarity(parsed?.image_clarity);
+    if (clarityValue === null) {
+      console.warn('Single selection image_clarity missing or invalid.');
+      return null;
+    }
+    schema.image_clarity = clarityValue;
 
     const naturalSummary = typeof schema.natural_summary === 'string'
       ? schema.natural_summary.trim()
