@@ -110,6 +110,7 @@ function scoreAgainstGroup(newSchema, groupCanonical) {
   let B = 0;
   let C = 0;
   let D = 0;
+  let hasHighConfidenceGenderMismatch = false;
 
   const newMarks = Array.isArray(newSchema.distinctive_marks) ? newSchema.distinctive_marks : [];
   const groupMarks = Array.isArray(groupCanonical.distinctive_marks) ? groupCanonical.distinctive_marks : [];
@@ -224,6 +225,10 @@ function scoreAgainstGroup(newSchema, groupCanonical) {
       C += subWeight * 0.5 * econf;
     } else {
       C -= subWeight * 0.35 * econf;
+      // Treat high-confidence gender mismatches as near-fatal.
+      if (field === 'gender_presentation' && econf >= 0.6) {
+        hasHighConfidenceGenderMismatch = true;
+      }
     }
   }
   if (C < 0) C = 0;
@@ -275,6 +280,10 @@ function scoreAgainstGroup(newSchema, groupCanonical) {
   const bonus = computeDistinctiveBonus(newSchema, groupCanonical);
 
   let rawScore = A + B + C + D + bonus;
+  if (hasHighConfidenceGenderMismatch) {
+    // Hard clamp scores when gender presentations clearly disagree.
+    rawScore = Math.min(rawScore, 20);
+  }
   const visibleConfidence = Number(newSchema.visible_confidence) || 0;
   if (visibleConfidence < 30) {
     rawScore -= 10;
