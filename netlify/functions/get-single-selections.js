@@ -4,6 +4,7 @@ const {
   SINGLE_CAMERA_SELECTIONS_TABLE_NAME
 } = require('./shared/db.js');
 const { unpackExplanationWithDetails } = require('./shared/grouping-explanation.js');
+const { computeSchemaClarity } = require('./shared/single-description.js');
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'GET') {
@@ -68,6 +69,11 @@ exports.handler = async (event) => {
         bestCandidate = details.bestCandidate;
         delete details.bestCandidate;
       }
+      const descriptionSchema = row.description_json || null;
+      const descriptionClarity = descriptionSchema
+        ? computeSchemaClarity(descriptionSchema)
+        : null;
+
       return {
         id: row.id,
         createdAt: row.created_at,
@@ -75,7 +81,8 @@ exports.handler = async (event) => {
         role: row.role,
         imageDataUrl: row.image_data_url,
         description: row.description || null,
-        descriptionSchema: row.description_json || null,
+        descriptionSchema,
+        descriptionClarity,
         personGroupId: row.person_group_id || null,
         groupingProbability: Number.isFinite(Number(row.grouping_probability))
           ? Number(row.grouping_probability)

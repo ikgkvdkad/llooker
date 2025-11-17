@@ -41,6 +41,7 @@ const singleGroupRows = new Map();
 const singleSelectionSchemas = new Map();
 const GROUPING_DETAILS_EMPTY_TEXT = 'Detailed score breakdown not available for this photo.';
 const BEST_CANDIDATE_EMPTY_TEXT = 'Top-scoring group preview is not available for this photo yet.';
+const DESCRIPTION_CLARITY_EMPTY_TEXT = 'Clarity score not available for this photo yet.';
 
 const SINGLE_UPLOAD_LABEL = 'Subject';
 const pendingSingleUploads = [];
@@ -64,6 +65,14 @@ function deepClone(value) {
         console.warn('Failed to clone grouping details payload.', error);
         return value;
     }
+}
+
+function normalizeClarityValue(value) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) {
+        return null;
+    }
+    return Math.max(0, Math.min(100, Math.round(num)));
 }
 function buildContributionList(items) {
     if (!Array.isArray(items) || !items.length) {
@@ -382,6 +391,10 @@ function renderSelectionRow(selection) {
         ? selection.groupingExplanation.trim()
         : '';
     const groupingExplanationDetails = selection.groupingExplanationDetails || null;
+    const rawClarity = Number.isFinite(Number(selection.descriptionClarity))
+        ? Number(selection.descriptionClarity)
+        : Number(selection.descriptionSchema?.image_clarity);
+    const descriptionClarity = normalizeClarityValue(rawClarity);
     let detailPayload = deepClone(groupingExplanationDetails);
     let bestCandidateSummary = selection.bestCandidate || null;
     if (detailPayload && typeof detailPayload === 'object' && detailPayload.bestCandidate) {
@@ -404,6 +417,7 @@ function renderSelectionRow(selection) {
     wrapper.dataset.groupingExplanation = groupingExplanationText || '';
     wrapper.dataset.groupingDetails = serializeGroupingDetails(detailPayload);
     wrapper.dataset.bestCandidate = serializeBestCandidate(bestCandidateSummary);
+    wrapper.dataset.descriptionClarity = descriptionClarity !== null ? String(descriptionClarity) : '';
     wrapper.dataset.personGroupId = selection.personGroupId
         ? String(selection.personGroupId)
         : '';
@@ -434,6 +448,7 @@ function renderSelectionRow(selection) {
     const openDescription = async () => {
         const modal = document.getElementById('singleDescriptionModal');
         const textEl = document.getElementById('singleDescriptionText');
+        const clarityEl = document.getElementById('singleDescriptionClarity');
         const probabilityEl = document.getElementById('singleGroupingProbability');
         const explanationEl = document.getElementById('singleGroupingExplanation');
         const breakdownEl = document.getElementById('singleGroupingDetails');
@@ -442,7 +457,7 @@ function renderSelectionRow(selection) {
         const neighborsEl = document.getElementById('singleDescriptionNeighbors');
         const structuredEl = document.getElementById('singleDescriptionStructured');
 
-        if (!modal || !textEl || !probabilityEl || !explanationEl || !groupIdEl || !neighborsEl || !structuredEl || !breakdownEl || !bestCandidateEl) {
+        if (!modal || !textEl || !probabilityEl || !explanationEl || !groupIdEl || !neighborsEl || !structuredEl || !breakdownEl || !bestCandidateEl || !clarityEl) {
             showWarning('Description viewer is missing required fields. Reload the page and try again.', {
                 diagnostics: false
             });
@@ -458,6 +473,14 @@ function renderSelectionRow(selection) {
         }
 
         textEl.textContent = description;
+        const clarityValue = normalizeClarityValue(wrapper.dataset.descriptionClarity || '');
+        if (clarityValue !== null) {
+            clarityEl.textContent = `Clarity score: ${clarityValue} / 100`;
+            clarityEl.classList.remove('is-empty');
+        } else {
+            clarityEl.textContent = DESCRIPTION_CLARITY_EMPTY_TEXT;
+            clarityEl.classList.add('is-empty');
+        }
 
         const probabilityRaw = wrapper.dataset.groupingProbability || '';
         const probabilityValue = Number.isFinite(Number(probabilityRaw))

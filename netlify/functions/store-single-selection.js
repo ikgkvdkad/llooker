@@ -225,6 +225,7 @@ exports.handler = async (event) => {
       // Keep only lightweight debug data for the client
       var groupingDebugForResponse = {
         newDescription: descriptionResult ? descriptionResult.schema : null,
+        descriptionClarity: newSchemaClarity,
         groups,
         shortlist,
         bestGroupId,
@@ -303,6 +304,7 @@ exports.handler = async (event) => {
           role: record?.role ?? null,
           description: record?.description ?? null,
           descriptionSchema: record?.description_json ?? null,
+          descriptionClarity: newSchemaClarity,
           personGroupId: finalGroupId ?? null,
           groupingProbability: record?.grouping_probability ?? null,
           groupingExplanation: groupingExplanationTextForResponse,

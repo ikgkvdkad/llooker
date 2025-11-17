@@ -271,6 +271,7 @@ exports.handler = async (event) => {
 
       groupingDebugForResponse = {
         newDescription: description.schema,
+        descriptionClarity: newSchemaClarity,
         groups,
         shortlist,
         bestGroupId,
@@ -328,6 +329,7 @@ exports.handler = async (event) => {
     body: JSON.stringify({
       id,
       description: description.naturalSummary,
+      descriptionClarity: newSchemaClarity,
       groupingProbability: groupingProbabilityForUpdate ?? row.grouping_probability ?? null,
       groupingExplanation: groupingExplanationTextForResponse,
       groupingExplanationDetails: groupingExplanationDetailsForResponse,

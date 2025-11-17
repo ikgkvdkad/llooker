@@ -589,6 +589,16 @@ body.single-body * {
     white-space: pre-wrap;
 }
 
+.single-description-clarity {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.single-description-clarity.is-empty {
+    color: rgba(255, 255, 255, 0.55);
+    font-style: italic;
+}
+
 .single-description-grouping {
     padding-top: 12px;
     border-top: 1px solid rgba(255, 255, 255, 0.15);
