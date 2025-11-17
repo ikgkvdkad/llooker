@@ -159,6 +159,7 @@ const FATAL_MISMATCH_TYPES = {
   AGE: 'age',
   MARK: 'mark'
 };
+const MIN_CLARITY_FOR_FATAL_HAIR = 60;
 
 function confidenceProduct(valueA, valueB) {
   const a = Number(valueA);
@@ -251,6 +252,17 @@ function sanitizeClarity(value) {
   }
   const clamped = Math.max(0, Math.min(100, Math.round(num)));
   return clamped;
+}
+
+function getImageClarity(schema) {
+  if (!schema || typeof schema !== 'object') {
+    return 0;
+  }
+  const raw = Number(schema.image_clarity);
+  if (!Number.isFinite(raw)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(100, raw));
 }
 
 function includesKeyword(text, keywords) {
@@ -430,11 +442,15 @@ function detectFatalMismatch(newSchema, canonical) {
 
   const hairNew = newSchema?.hair?.color;
   const hairGroup = canonical?.hair?.color;
+  const newClarity = getImageClarity(newSchema);
+  const groupClarity = getImageClarity(canonical);
   if (
     hairNew?.value &&
     hairGroup?.value &&
     hairNew.value !== 'unknown' &&
-    hairGroup.value !== 'unknown'
+    hairGroup.value !== 'unknown' &&
+    groupClarity >= MIN_CLARITY_FOR_FATAL_HAIR &&
+    newClarity >= MIN_CLARITY_FOR_FATAL_HAIR
   ) {
     const pairConf = confidenceProduct(hairNew.confidence, hairGroup.confidence);
     if (pairConf >= FATAL_CONFIDENCE_PRODUCT_THRESHOLD) {
