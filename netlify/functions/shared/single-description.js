@@ -30,6 +30,13 @@ const STABLE_CLOTHING_CONTRA_WEIGHTS = {
   dress: 30
 };
 
+const CLOTHING_SLOTS = ['top', 'jacket', 'trousers', 'shoes', 'dress'];
+const COLOR_MATCH_WEIGHT = 0.6;
+const TYPE_MATCH_WEIGHT = 0.4;
+const CONTRA_MISMATCH_THRESHOLD = 0.2;
+const OUTER_LAYER_KEYWORDS = ['blazer', 'jacket', 'coat', 'cardigan', 'sport coat', 'suit jacket'];
+const CROSS_SLOT_OUTER_LAYER_BONUS = 10;
+
 // Rare/distinctive
 const RARE_PRO_BASE = 80;
 const RARE_CONTRA_BASE = 40;
@@ -115,6 +122,178 @@ function ageAdjacent(a, b) {
   return Math.abs(ia - ib) === 1;
 }
 
+function isUsableClothingItem(item) {
+  return !!(item && typeof item === 'object' && item.description && item.description !== 'unknown');
+}
+
+function getGarmentCategory(slotName, description) {
+  const desc = (description || '').toLowerCase();
+  if (slotName === 'trousers') return 'lower';
+  if (slotName === 'shoes') return 'footwear';
+  if (slotName === 'dress') return 'one_piece';
+  if (slotName === 'jacket') return 'outer_layer';
+  if (slotName === 'top') {
+    if (OUTER_LAYER_KEYWORDS.some((kw) => desc.includes(kw))) {
+      return 'outer_layer';
+    }
+    return 'base_top';
+  }
+  if (OUTER_LAYER_KEYWORDS.some((kw) => desc.includes(kw))) {
+    return 'outer_layer';
+  }
+  return null;
+}
+
+function computeStabilityMultiplier(itemA, itemB) {
+  const perms = [itemA?.permanence, itemB?.permanence];
+  if (perms.some((p) => p === 'removable')) {
+    return 0.3;
+  }
+  if (perms.some((p) => p === 'possibly_removable')) {
+    return 0.6;
+  }
+  return 1;
+}
+
+function buildClothingMetrics(itemA, itemB, visibilityFactor, lightingUncertainty) {
+  if (!isUsableClothingItem(itemA) || !isUsableClothingItem(itemB)) {
+    return null;
+  }
+  const econf = effectiveConfidence(itemA.confidence, itemB.confidence) * visibilityFactor;
+  if (econf <= 0) {
+    return null;
+  }
+  return {
+    econf,
+    stabilityMultiplier: computeStabilityMultiplier(itemA, itemB),
+    colorOk: areColorsEquivalent(itemA.color, itemB.color, lightingUncertainty),
+    descOk: substringTokenMatch(itemA.description, itemB.description),
+    isStableA: itemA.permanence === 'stable',
+    isStableB: itemB.permanence === 'stable'
+  };
+}
+
+function computeClothingContribution({ basePro, baseContra, metrics, allowContra = true }) {
+  if (!metrics || basePro <= 0) {
+    return {
+      matchScore: 0,
+      proColor: 0,
+      proDesc: 0,
+      contra: 0
+    };
+  }
+
+  let matchScore = 0;
+  let proColor = 0;
+  let proDesc = 0;
+  if (metrics.colorOk) {
+    proColor = basePro * COLOR_MATCH_WEIGHT * metrics.stabilityMultiplier * metrics.econf;
+    matchScore += COLOR_MATCH_WEIGHT;
+  }
+  if (metrics.descOk) {
+    proDesc = basePro * TYPE_MATCH_WEIGHT * metrics.stabilityMultiplier * metrics.econf;
+    matchScore += TYPE_MATCH_WEIGHT;
+  }
+
+  let contra = 0;
+  if (
+    allowContra &&
+    metrics.isStableA &&
+    metrics.isStableB &&
+    baseContra > 0 &&
+    matchScore <= CONTRA_MISMATCH_THRESHOLD
+  ) {
+    contra = baseContra * (1 - matchScore) * metrics.econf;
+  }
+
+  return {
+    matchScore,
+    proColor,
+    proDesc,
+    contra
+  };
+}
+
+function collectGarmentsByCategory(clothing, targetCategory) {
+  if (!clothing || typeof clothing !== 'object') {
+    return [];
+  }
+  const garments = [];
+  for (const slot of ['top', 'jacket']) {
+    const item = clothing[slot];
+    if (!isUsableClothingItem(item)) continue;
+    const category = getGarmentCategory(slot, item.description);
+    if (category === targetCategory) {
+      garments.push({ slot, item });
+    }
+  }
+  return garments;
+}
+
+function scoreCrossSlotOuterMatches({
+  newClothing,
+  groupClothing,
+  visibilityFactor,
+  lightingUncertainty,
+  breakdown
+}) {
+  const newOuter = collectGarmentsByCategory(newClothing, 'outer_layer');
+  const groupOuter = collectGarmentsByCategory(groupClothing, 'outer_layer');
+  if (!newOuter.length || !groupOuter.length) {
+    return 0;
+  }
+
+  const usedGroupIndices = new Set();
+  let totalPro = 0;
+
+  for (const newEntry of newOuter) {
+    let bestMatch = null;
+    let bestIndex = -1;
+    for (let i = 0; i < groupOuter.length; i += 1) {
+      if (usedGroupIndices.has(i)) continue;
+      const groupEntry = groupOuter[i];
+      if (newEntry.slot === groupEntry.slot) continue; // already handled by direct slot comparison
+
+      const metrics = buildClothingMetrics(
+        newEntry.item,
+        groupEntry.item,
+        visibilityFactor,
+        lightingUncertainty
+      );
+      if (!metrics) continue;
+
+      const basePro =
+        (STABLE_CLOTHING_PRO_WEIGHTS[newEntry.slot] || 0) +
+        (STABLE_CLOTHING_PRO_WEIGHTS[groupEntry.slot] || 0) +
+        CROSS_SLOT_OUTER_LAYER_BONUS;
+      if (basePro <= 0) continue;
+
+      const contribution = computeClothingContribution({
+        basePro,
+        baseContra: 0,
+        metrics,
+        allowContra: false
+      });
+      const proTotal = contribution.proColor + contribution.proDesc;
+      if (proTotal <= 0) continue;
+
+      if (!bestMatch || proTotal > bestMatch) {
+        bestMatch = contribution;
+        bestIndex = i;
+      }
+    }
+
+    if (bestMatch && bestIndex >= 0) {
+      usedGroupIndices.add(bestIndex);
+      const proTotal = bestMatch.proColor + bestMatch.proDesc;
+      breakdown.clothingPro += proTotal;
+      totalPro += proTotal;
+    }
+  }
+
+  return totalPro;
+}
+
 /**
  * Compute separate pro and contra scores between a new description and a canonical group description.
  * Returns unbounded pro/contra scores plus a rough domain breakdown.
@@ -166,52 +345,51 @@ function computeProContraScores(newSchema, groupCanonical) {
   const lightingUncertainty = Number(newSchema.lighting_uncertainty) || 0;
 
   // Clothing pros/cons.
-  const clothingSlots = ['top', 'jacket', 'trousers', 'shoes', 'dress'];
-  for (const slot of clothingSlots) {
-    const newSlot = newClothing[slot];
-    const groupSlot = groupClothing[slot];
-    if (!newSlot || !groupSlot || typeof newSlot !== 'object' || typeof groupSlot !== 'object') {
-      continue;
-    }
-    if (newSlot.description === 'unknown' || groupSlot.description === 'unknown') {
-      continue;
-    }
+    for (const slot of CLOTHING_SLOTS) {
+      const newSlot = newClothing[slot];
+      const groupSlot = groupClothing[slot];
+      if (!isUsableClothingItem(newSlot) || !isUsableClothingItem(groupSlot)) {
+        continue;
+      }
 
-    const econf = effectiveConfidence(newSlot.confidence, groupSlot.confidence) * visibilityFactor;
-    if (econf <= 0) continue;
+      const newCategory = getGarmentCategory(slot, newSlot.description);
+      const groupCategory = getGarmentCategory(slot, groupSlot.description);
+      if (newCategory && groupCategory && newCategory !== groupCategory) {
+        // Different garment categories mapped into the same slot (e.g., shirt vs. blazer) – skip penalizing.
+        continue;
+      }
 
-    const isStableNew = newSlot.permanence === 'stable';
-    const isStableGroup = groupSlot.permanence === 'stable';
+      const metrics = buildClothingMetrics(newSlot, groupSlot, visibilityFactor, lightingUncertainty);
+      if (!metrics) continue;
 
-    const colorOk = areColorsEquivalent(newSlot.color, groupSlot.color, lightingUncertainty);
-    const descOk = substringTokenMatch(newSlot.description, groupSlot.description);
-    const colorScore = colorOk ? 1 : 0;
-    const descScore = descOk ? 1 : 0;
-    const slotSim = (colorScore * 0.6) + (descScore * 0.4);
-
-    let stabilityMultiplier = 1;
-    if (newSlot.permanence === 'removable' || groupSlot.permanence === 'removable') {
-      stabilityMultiplier = 0.3;
-    } else if (newSlot.permanence === 'possibly_removable' || groupSlot.permanence === 'possibly_removable') {
-      stabilityMultiplier = 0.6;
-    }
-
-    const basePro = STABLE_CLOTHING_PRO_WEIGHTS[slot] || 0;
-    const baseContra = STABLE_CLOTHING_CONTRA_WEIGHTS[slot] || 0;
-
-    if (slotSim > 0 && basePro > 0) {
-      const contrib = basePro * slotSim * stabilityMultiplier * econf;
-      proScore += contrib;
-      breakdown.clothingPro += contrib;
+      const basePro = STABLE_CLOTHING_PRO_WEIGHTS[slot] || 0;
+      const baseContra = STABLE_CLOTHING_CONTRA_WEIGHTS[slot] || 0;
+      const contribution = computeClothingContribution({
+        basePro,
+        baseContra,
+        metrics
+      });
+      const proTotal = contribution.proColor + contribution.proDesc;
+      if (proTotal > 0) {
+        proScore += proTotal;
+        breakdown.clothingPro += proTotal;
+      }
+      if (contribution.contra > 0) {
+        contraScore += contribution.contra;
+        breakdown.clothingContra += contribution.contra;
+      }
     }
 
-    // Strong contradictions on stable clothing only.
-    if (isStableNew && isStableGroup && slotSim <= 0.2 && baseContra > 0) {
-      const contraContrib = baseContra * (1 - slotSim) * econf;
-      contraScore += contraContrib;
-      breakdown.clothingContra += contraContrib;
+    const outerLayerBonus = scoreCrossSlotOuterMatches({
+      newClothing,
+      groupClothing,
+      visibilityFactor,
+      lightingUncertainty,
+      breakdown
+    });
+    if (outerLayerBonus > 0) {
+      proScore += outerLayerBonus;
     }
-  }
 
   // Rare / distinctive marks and rare clothing.
   const newMarks = Array.isArray(newSchema.distinctive_marks) ? newSchema.distinctive_marks : [];
@@ -697,6 +875,7 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
 module.exports = {
   generateStablePersonDescription,
   evaluateDescriptionGrouping,
-  GROUPING_MATCH_THRESHOLD
+  GROUPING_MATCH_THRESHOLD,
+  computeProContraScores
 };
 
