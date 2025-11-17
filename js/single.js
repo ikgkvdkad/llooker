@@ -647,11 +647,17 @@ async function clearAllSelections() {
 
         if (!response.ok) {
             const errorText = await response.text().catch(() => '');
+            console.error('clearAllSelections: API call failed', {
+                status: response.status,
+                statusText: response.statusText,
+                body: errorText
+            });
             throw new Error(errorText || `HTTP ${response.status}`);
         }
 
         const payload = await response.json().catch(() => null);
         if (!payload || payload.status !== 'ok') {
+            console.error('clearAllSelections: malformed response payload', { payload });
             throw new Error(payload?.error || 'Malformed response from clear API.');
         }
 
