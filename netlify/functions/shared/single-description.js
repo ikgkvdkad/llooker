@@ -13,6 +13,72 @@ const TIE_DELTA = 6;
 const PRO_MIN = 120;      // minimum proScore to consider a group
 const CONTRA_MAX = 40;    // maximum contraScore tolerated
 
+const FATAL_GATE_ENABLED = (process.env.SINGLE_FATAL_GATE ?? 'on') !== 'off';
+const FATAL_CONFIDENCE_PRODUCT_THRESHOLD = (() => {
+  const raw = Number(process.env.SINGLE_FATAL_CONFIDENCE_PRODUCT_THRESHOLD);
+  if (Number.isFinite(raw)) {
+    return Math.max(0, Math.min(1, raw));
+  }
+  return 0.49; // ~= 0.7 * 0.7
+})();
+const FATAL_MARK_MIN_CONFIDENCE = (() => {
+  const raw = Number(process.env.SINGLE_FATAL_MARK_MIN_CONFIDENCE);
+  if (Number.isFinite(raw)) {
+    return Math.max(0, Math.min(100, raw));
+  }
+  return 70;
+})();
+const CLOTHING_PRO_CAP_RATIO = (() => {
+  const raw = Number(process.env.CLOTHING_PRO_CAP_RATIO);
+  if (Number.isFinite(raw) && raw > 0) {
+    return raw;
+  }
+  return 0.6;
+})();
+const CLOTHING_PRO_CAP = (() => {
+  const raw = Number(process.env.CLOTHING_PRO_CAP);
+  if (Number.isFinite(raw) && raw >= 0) {
+    return raw;
+  }
+  return Math.round(PRO_MIN * CLOTHING_PRO_CAP_RATIO);
+})();
+const PRO_SOFT_MAX = (() => {
+  const raw = Number(process.env.PRO_SOFT_MAX);
+  if (Number.isFinite(raw) && raw > 0) {
+    return raw;
+  }
+  return 220;
+})();
+const CONTRA_SOFT_MAX = (() => {
+  const raw = Number(process.env.CONTRA_SOFT_MAX);
+  if (Number.isFinite(raw) && raw > 0) {
+    return raw;
+  }
+  return 120;
+})();
+const NORMALIZED_SCORE_SCALE = 100;
+const NORM_PRO_MIN = (() => {
+  const raw = Number(process.env.NORM_PRO_MIN);
+  if (Number.isFinite(raw)) {
+    return Math.max(0, Math.min(100, raw));
+  }
+  return 60;
+})();
+const NORM_CONTRA_MAX = (() => {
+  const raw = Number(process.env.NORM_CONTRA_MAX);
+  if (Number.isFinite(raw)) {
+    return Math.max(0, Math.min(100, raw));
+  }
+  return 40;
+})();
+const TEXT_SHORTLIST_LIMIT = (() => {
+  const raw = Number(process.env.TEXT_SHORTLIST_LIMIT);
+  if (Number.isFinite(raw) && raw > 0) {
+    return Math.floor(raw);
+  }
+  return 3;
+})();
+
 // Clothing weights (stable items dominate)
 const STABLE_CLOTHING_PRO_WEIGHTS = {
   top: 40,
@@ -77,13 +143,54 @@ const COLOR_EQUIVALENCE_GROUPS = [
   ['dark_blonde', 'blonde', 'light_brown']
 ];
 
-function effectiveConfidence(newConfidence, groupConfidence) {
-  const nc = Number(newConfidence);
-  const gc = Number(groupConfidence);
-  if (!Number.isFinite(nc) || !Number.isFinite(gc)) {
+const LOWER_GARMENT_KEYWORDS = {
+  full_length: ['pant', 'pants', 'jean', 'jeans', 'slack', 'trouser', 'trousers', 'chino', 'chinos', 'jogger', 'joggers', 'cargo'],
+  skirt: ['skirt'],
+  shorts: ['short', 'shorts', 'bermuda'],
+  one_piece: ['dress', 'gown', 'romper', 'jumper', 'onesie']
+};
+
+const ABSENCE_KEYWORDS = ['no ', 'none', 'without', 'absent'];
+
+const FATAL_MISMATCH_TYPES = {
+  LOWER_GARMENT: 'lower_garment',
+  HAIR_COLOR: 'hair_color',
+  GENDER: 'gender',
+  AGE: 'age',
+  MARK: 'mark'
+};
+
+function confidenceProduct(valueA, valueB) {
+  const a = Number(valueA);
+  const b = Number(valueB);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) {
     return 0;
   }
-  return Math.max(0, Math.min(1, (nc / 100) * (gc / 100)));
+  return Math.max(0, Math.min(1, (a / 100) * (b / 100)));
+}
+
+function effectiveConfidence(newConfidence, groupConfidence) {
+  return confidenceProduct(newConfidence, groupConfidence);
+}
+
+function normalizeScore(value, cap, scale = NORMALIZED_SCORE_SCALE) {
+  const safeValue = Math.max(0, Number(value) || 0);
+  const safeCap = Math.max(1, Number(cap) || 1);
+  const ratio = safeValue / (safeValue + safeCap);
+  return Math.max(0, Math.min(scale, ratio * scale));
+}
+
+function computeNormalizedProbability(normPro, normContra) {
+  const pro = Math.max(0, Math.min(100, Number(normPro) || 0));
+  const contra = Math.max(0, Math.min(100, Number(normContra) || 0));
+  const probability = pro * (1 - contra / 100);
+  return Math.max(0, Math.min(100, Math.round(probability)));
+}
+
+function toOneDecimal(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return 0;
+  return Math.round(num * 10) / 10;
 }
 
 function areColorsEquivalent(c1, c2, lightingUncertainty) {
@@ -112,6 +219,283 @@ function substringTokenMatch(s1, s2) {
   const tokens = String(s1).toLowerCase().split(/\s+/).filter(Boolean);
   const haystack = String(s2).toLowerCase();
   return tokens.some((tok) => haystack.includes(tok));
+}
+
+function createEmptyBreakdown() {
+  return {
+    clothingPro: 0,
+    clothingProApplied: 0,
+    clothingProCap: CLOTHING_PRO_CAP,
+    clothingProRaw: 0,
+    clothingContra: 0,
+    rarePro: 0,
+    rareContra: 0,
+    physicalPro: 0,
+    physicalContra: 0,
+    hairPro: 0,
+    hairContra: 0
+  };
+}
+
+function normalizeText(value) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  return value.trim().toLowerCase();
+}
+
+function includesKeyword(text, keywords) {
+  if (!text || !keywords || !keywords.length) {
+    return false;
+  }
+  return keywords.some((kw) => text.includes(kw));
+}
+
+function describeLowerGarmentFamily(family) {
+  if (family === 'full_length') return 'full-length pants/jeans';
+  if (family === 'skirt') return 'skirt';
+  if (family === 'shorts') return 'shorts';
+  if (family === 'one_piece') return 'dress/one-piece';
+  return family || 'unknown';
+}
+
+function classifyLowerGarment(schema) {
+  if (!schema || typeof schema !== 'object') {
+    return null;
+  }
+  const clothing = schema.clothing && typeof schema.clothing === 'object' ? schema.clothing : {};
+  const dress = clothing.dress;
+  if (isUsableClothingItem(dress)) {
+    const desc = normalizeText(dress.description);
+    if (desc && desc !== 'unknown') {
+      return {
+        family: 'one_piece',
+        label: describeLowerGarmentFamily('one_piece'),
+        confidence: Number(dress.confidence) || 0
+      };
+    }
+  }
+  const trousers = clothing.trousers;
+  if (!isUsableClothingItem(trousers)) {
+    return null;
+  }
+  const desc = normalizeText(trousers.description);
+  if (!desc || desc === 'unknown') {
+    return null;
+  }
+  const confidence = Number(trousers.confidence) || 0;
+  for (const [family, keywords] of Object.entries(LOWER_GARMENT_KEYWORDS)) {
+    if (includesKeyword(desc, keywords)) {
+      return {
+        family,
+        label: describeLowerGarmentFamily(family),
+        confidence
+      };
+    }
+  }
+  return null;
+}
+
+function areLowerFamiliesContradictory(a, b) {
+  if (!a || !b || a === b) {
+    return false;
+  }
+  const pantsFamilies = new Set(['full_length']);
+  const nonPantsFamilies = new Set(['skirt', 'shorts', 'one_piece']);
+  return (
+    (pantsFamilies.has(a) && nonPantsFamilies.has(b)) ||
+    (pantsFamilies.has(b) && nonPantsFamilies.has(a))
+  );
+}
+
+function hasAbsenceKeyword(text) {
+  if (!text) return false;
+  return ABSENCE_KEYWORDS.some((kw) => text.includes(kw));
+}
+
+function summarizeDistinctiveMarkState(schema) {
+  const marks = Array.isArray(schema?.distinctive_marks) ? schema.distinctive_marks : [];
+  const summary = {
+    tattooPresent: 0,
+    tattooAbsent: 0,
+    scarPresent: 0,
+    scarAbsent: 0
+  };
+  for (const mark of marks) {
+    if (!mark || typeof mark !== 'object') continue;
+    const conf = Number(mark.confidence);
+    if (!Number.isFinite(conf) || conf < FATAL_MARK_MIN_CONFIDENCE) continue;
+    const type = normalizeText(mark.type);
+    const desc = normalizeText(mark.description);
+    if (!type || !desc || desc === 'unknown') continue;
+    const indicatesAbsence = hasAbsenceKeyword(desc);
+    if (type === 'tattoo') {
+      if (indicatesAbsence) {
+        summary.tattooAbsent = Math.max(summary.tattooAbsent, conf);
+      } else {
+        summary.tattooPresent = Math.max(summary.tattooPresent, conf);
+      }
+    } else if (type === 'scar') {
+      if (indicatesAbsence) {
+        summary.scarAbsent = Math.max(summary.scarAbsent, conf);
+      } else {
+        summary.scarPresent = Math.max(summary.scarPresent, conf);
+      }
+    }
+  }
+  return summary;
+}
+
+function buildFatalResult(type, detail, confidencePair) {
+  return {
+    type,
+    detail,
+    confidencePair: Number.isFinite(confidencePair)
+      ? Number(confidencePair.toFixed(2))
+      : null
+  };
+}
+
+function detectDistinctiveMarkFatal(newSchema, canonical) {
+  const newMarks = summarizeDistinctiveMarkState(newSchema);
+  const groupMarks = summarizeDistinctiveMarkState(canonical);
+  const checks = [
+    {
+      label: 'tattoo',
+      newPresence: newMarks.tattooPresent,
+      newAbsence: newMarks.tattooAbsent,
+      groupPresence: groupMarks.tattooPresent,
+      groupAbsence: groupMarks.tattooAbsent
+    },
+    {
+      label: 'scar',
+      newPresence: newMarks.scarPresent,
+      newAbsence: newMarks.scarAbsent,
+      groupPresence: groupMarks.scarPresent,
+      groupAbsence: groupMarks.scarAbsent
+    }
+  ];
+
+  for (const entry of checks) {
+    const pairPresenceVsAbsence = confidenceProduct(entry.newPresence, entry.groupAbsence);
+    if (pairPresenceVsAbsence >= FATAL_CONFIDENCE_PRODUCT_THRESHOLD) {
+      return buildFatalResult(
+        FATAL_MISMATCH_TYPES.MARK,
+        `${entry.label} present vs explicitly absent`,
+        pairPresenceVsAbsence
+      );
+    }
+    const pairAbsenceVsPresence = confidenceProduct(entry.groupPresence, entry.newAbsence);
+    if (pairAbsenceVsPresence >= FATAL_CONFIDENCE_PRODUCT_THRESHOLD) {
+      return buildFatalResult(
+        FATAL_MISMATCH_TYPES.MARK,
+        `${entry.label} present vs explicitly absent`,
+        pairAbsenceVsPresence
+      );
+    }
+  }
+
+  return null;
+}
+
+function detectFatalMismatch(newSchema, canonical) {
+  if (!FATAL_GATE_ENABLED) {
+    return null;
+  }
+  if (!newSchema || typeof newSchema !== 'object' || !canonical || typeof canonical !== 'object') {
+    return null;
+  }
+
+  const lowerNew = classifyLowerGarment(newSchema);
+  const lowerGroup = classifyLowerGarment(canonical);
+  if (lowerNew && lowerGroup && areLowerFamiliesContradictory(lowerNew.family, lowerGroup.family)) {
+    const pairConf = confidenceProduct(lowerNew.confidence, lowerGroup.confidence);
+    if (pairConf >= FATAL_CONFIDENCE_PRODUCT_THRESHOLD) {
+      return buildFatalResult(
+        FATAL_MISMATCH_TYPES.LOWER_GARMENT,
+        `${lowerNew.label} vs ${lowerGroup.label}`,
+        pairConf
+      );
+    }
+  }
+
+  const hairNew = newSchema?.hair?.color;
+  const hairGroup = canonical?.hair?.color;
+  if (
+    hairNew?.value &&
+    hairGroup?.value &&
+    hairNew.value !== 'unknown' &&
+    hairGroup.value !== 'unknown'
+  ) {
+    const pairConf = confidenceProduct(hairNew.confidence, hairGroup.confidence);
+    if (pairConf >= FATAL_CONFIDENCE_PRODUCT_THRESHOLD) {
+      const lightingUncertainty = Number(newSchema?.lighting_uncertainty) || 0;
+      if (!areColorsEquivalent(hairNew.value, hairGroup.value, lightingUncertainty)) {
+        return buildFatalResult(
+          FATAL_MISMATCH_TYPES.HAIR_COLOR,
+          `${hairNew.value} vs ${hairGroup.value}`,
+          pairConf
+        );
+      }
+    }
+  }
+
+  const genderNew = newSchema?.gender_presentation;
+  const genderGroup = canonical?.gender_presentation;
+  if (
+    genderNew?.value &&
+    genderGroup?.value &&
+    genderNew.value !== 'unknown' &&
+    genderGroup.value !== 'unknown' &&
+    genderNew.value !== genderGroup.value
+  ) {
+    const pairConf = confidenceProduct(genderNew.confidence, genderGroup.confidence);
+    if (pairConf >= FATAL_CONFIDENCE_PRODUCT_THRESHOLD) {
+      return buildFatalResult(
+        FATAL_MISMATCH_TYPES.GENDER,
+        `${genderNew.value} vs ${genderGroup.value}`,
+        pairConf
+      );
+    }
+  }
+
+  const ageNew = newSchema?.age_band;
+  const ageGroup = canonical?.age_band;
+  if (
+    ageNew?.value &&
+    ageGroup?.value &&
+    ageNew.value !== 'unknown' &&
+    ageGroup.value !== 'unknown'
+  ) {
+    const pairConf = confidenceProduct(ageNew.confidence, ageGroup.confidence);
+    if (pairConf >= FATAL_CONFIDENCE_PRODUCT_THRESHOLD) {
+      const compatible = ageNew.value === ageGroup.value || ageAdjacent(ageNew.value, ageGroup.value);
+      if (!compatible) {
+        return buildFatalResult(
+          FATAL_MISMATCH_TYPES.AGE,
+          `${ageNew.value} vs ${ageGroup.value}`,
+          pairConf
+        );
+      }
+    }
+  }
+
+  const markFatal = detectDistinctiveMarkFatal(newSchema, canonical);
+  if (markFatal) {
+    return markFatal;
+  }
+
+  return null;
+}
+
+function formatFatalMismatchMessage(fatal) {
+  if (!fatal) {
+    return '';
+  }
+  const confText = Number.isFinite(fatal.confidencePair)
+    ? ` (conf_pair=${fatal.confidencePair.toFixed(2)})`
+    : '';
+  return `Fatal mismatch: ${fatal.detail}${confText}.`;
 }
 
 function ageAdjacent(a, b) {
@@ -300,38 +684,18 @@ function scoreCrossSlotOuterMatches({
  */
 function computeProContraScores(newSchema, groupCanonical) {
   if (!newSchema || typeof newSchema !== 'object' || !groupCanonical || typeof groupCanonical !== 'object') {
-    return {
-      proScore: 0,
-      contraScore: 0,
-      breakdown: {
-        clothingPro: 0,
-        clothingContra: 0,
-        rarePro: 0,
-        rareContra: 0,
-        physicalPro: 0,
-        physicalContra: 0,
-        hairPro: 0,
-        hairContra: 0
-      },
-      fatalGenderMismatch: false
-    };
+  return {
+    proScore: 0,
+    contraScore: 0,
+    breakdown: createEmptyBreakdown()
+  };
   }
 
-  const breakdown = {
-    clothingPro: 0,
-    clothingContra: 0,
-    rarePro: 0,
-    rareContra: 0,
-    physicalPro: 0,
-    physicalContra: 0,
-    hairPro: 0,
-    hairContra: 0
-  };
+  const breakdown = createEmptyBreakdown();
+  let clothingProAccumulator = 0;
 
   let proScore = 0;
   let contraScore = 0;
-  let fatalGenderMismatch = false;
-
   const visibleConfidence = Number(newSchema.visible_confidence) || 0;
   const visibilityFactor = Math.max(0.3, Math.min(1, visibleConfidence / 100));
 
@@ -370,26 +734,33 @@ function computeProContraScores(newSchema, groupCanonical) {
         metrics
       });
       const proTotal = contribution.proColor + contribution.proDesc;
-      if (proTotal > 0) {
-        proScore += proTotal;
-        breakdown.clothingPro += proTotal;
-      }
+        if (proTotal > 0) {
+          clothingProAccumulator += proTotal;
+          breakdown.clothingPro += proTotal;
+        }
       if (contribution.contra > 0) {
         contraScore += contribution.contra;
         breakdown.clothingContra += contribution.contra;
       }
     }
 
-    const outerLayerBonus = scoreCrossSlotOuterMatches({
-      newClothing,
-      groupClothing,
-      visibilityFactor,
-      lightingUncertainty,
-      breakdown
-    });
-    if (outerLayerBonus > 0) {
-      proScore += outerLayerBonus;
-    }
+  const outerLayerBonus = scoreCrossSlotOuterMatches({
+    newClothing,
+    groupClothing,
+    visibilityFactor,
+    lightingUncertainty,
+    breakdown
+  });
+  if (outerLayerBonus > 0) {
+    clothingProAccumulator += outerLayerBonus;
+  }
+
+  const clothingProApplied = Math.min(clothingProAccumulator, CLOTHING_PRO_CAP);
+  if (clothingProApplied > 0) {
+    proScore += clothingProApplied;
+  }
+  breakdown.clothingProRaw = clothingProAccumulator;
+  breakdown.clothingProApplied = clothingProApplied;
 
   // Rare / distinctive marks and rare clothing.
   const newMarks = Array.isArray(newSchema.distinctive_marks) ? newSchema.distinctive_marks : [];
@@ -430,13 +801,19 @@ function computeProContraScores(newSchema, groupCanonical) {
         breakdown.rarePro += contrib;
       }
     } else {
-      const missingRare = newMarks.some((nm) => {
-        if (!nm || typeof nm !== 'object') return false;
-        if (gmType && nm.type && gmType !== nm.type) return false;
-        return nm.description === 'unknown' && Number(nm.confidence) >= 80;
-      });
-      if (missingRare) {
-        const contraContrib = RARE_CONTRA_BASE * (rarity / 100) * visibilityFactor;
+      let missingConfidence = 0;
+      for (const nm of newMarks) {
+        if (!nm || typeof nm !== 'object') continue;
+        if (gmType && nm.type && gmType !== nm.type) continue;
+        const desc = normalizeText(nm.description);
+        if (desc && desc !== 'unknown' && !hasAbsenceKeyword(desc)) continue;
+        const econfMissing = effectiveConfidence(nm.confidence, gmConf) * visibilityFactor;
+        if (econfMissing > missingConfidence) {
+          missingConfidence = econfMissing;
+        }
+      }
+      if (missingConfidence > 0) {
+        const contraContrib = RARE_CONTRA_BASE * (rarity / 100) * missingConfidence;
         contraScore += contraContrib;
         breakdown.rareContra += contraContrib;
       }
@@ -482,13 +859,12 @@ function computeProContraScores(newSchema, groupCanonical) {
         breakdown.physicalContra += contraContrib;
       }
     } else {
-      if (field === 'gender_presentation') {
-        // Gender mismatch is near-fatal.
-        const fatalContra = (PHYSICAL_CONTRA_WEIGHTS.gender_presentation || 120) * econf;
-        contraScore += fatalContra;
-        breakdown.physicalContra += fatalContra;
-        fatalGenderMismatch = true;
-      } else if (wContra > 0) {
+        if (field === 'gender_presentation') {
+          // Gender mismatch is near-fatal (handled earlier by fatal gate but still penalize).
+          const fatalContra = (PHYSICAL_CONTRA_WEIGHTS.gender_presentation || 120) * econf;
+          contraScore += fatalContra;
+          breakdown.physicalContra += fatalContra;
+        } else if (wContra > 0) {
         const contraContrib = wContra * econf;
         contraScore += contraContrib;
         breakdown.physicalContra += contraContrib;
@@ -566,8 +942,7 @@ function computeProContraScores(newSchema, groupCanonical) {
   return {
     proScore,
     contraScore,
-    breakdown,
-    fatalGenderMismatch
+    breakdown
   };
 }
 
@@ -770,16 +1145,38 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
     const groupId = group.group_id;
     const memberCount = Number(group.group_member_count) || 0;
 
-    const { proScore, contraScore, breakdown, fatalGenderMismatch } =
+    const fatalMismatch = detectFatalMismatch(newDescriptionSchema, canonical);
+    if (fatalMismatch) {
+      scored.push({
+        groupId,
+        memberCount,
+        proScore: 0,
+        contraScore: Number.POSITIVE_INFINITY,
+        normPro: 0,
+        normContra: NORMALIZED_SCORE_SCALE,
+        probability: 0,
+        breakdown: createEmptyBreakdown(),
+        fatalMismatch
+      });
+      continue;
+    }
+
+    const { proScore, contraScore, breakdown } =
       computeProContraScores(newDescriptionSchema, canonical);
+    const normPro = normalizeScore(proScore, PRO_SOFT_MAX);
+    const normContra = normalizeScore(contraScore, CONTRA_SOFT_MAX);
+    const probability = computeNormalizedProbability(normPro, normContra);
 
     scored.push({
       groupId,
       memberCount,
       proScore,
       contraScore,
+      normPro,
+      normContra,
+      probability,
       breakdown,
-      fatalGenderMismatch
+      fatalMismatch: null
     });
   }
 
@@ -791,34 +1188,64 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
     };
   }
 
-  // Apply pro/contra gates.
-  const survivors = scored.filter((g) => g.proScore >= PRO_MIN && g.contraScore <= CONTRA_MAX);
+  // Apply normalized gates.
+  const survivors = scored.filter(
+    (g) => !g.fatalMismatch && g.normPro >= NORM_PRO_MIN && g.normContra <= NORM_CONTRA_MAX
+  );
+  let shortlist = [];
 
   if (!survivors.length) {
     // Find the best overall candidate for explanation purposes.
     scored.sort((a, b) => b.proScore - a.proScore);
     const candidate = scored[0];
-    const explanation = candidate
-      ? `No group passed thresholds. Best candidate had proScore=${Math.round(candidate.proScore)}, contraScore=${Math.round(candidate.contraScore)}.`
-      : '';
+    let explanation = '';
+    if (candidate?.fatalMismatch) {
+      explanation = formatFatalMismatchMessage(candidate.fatalMismatch);
+    } else if (candidate) {
+      explanation = `No group passed thresholds. Best candidate had proScore=${Math.round(candidate.proScore)}, contraScore=${Math.round(candidate.contraScore)}.`;
+    }
 
     return {
       bestGroupId: null,
       bestGroupProbability: 0,
-      explanation
+      explanation,
+      shortlist
     };
   }
 
-  survivors.sort((a, b) => b.proScore - a.proScore);
+  survivors.sort((a, b) => {
+    if (b.probability !== a.probability) {
+      return b.probability - a.probability;
+    }
+    if (b.normPro !== a.normPro) {
+      return b.normPro - a.normPro;
+    }
+    if (a.normContra !== b.normContra) {
+      return a.normContra - b.normContra;
+    }
+    if (b.memberCount !== a.memberCount) {
+      return b.memberCount - a.memberCount;
+    }
+    return 0;
+  });
+  shortlist = survivors.slice(0, TEXT_SHORTLIST_LIMIT).map((entry) => ({
+    groupId: entry.groupId,
+    probability: entry.probability,
+    normPro: toOneDecimal(entry.normPro),
+    normContra: toOneDecimal(entry.normContra),
+    proScore: Math.round(entry.proScore),
+    contraScore: Math.round(entry.contraScore),
+    memberCount: entry.memberCount
+  }));
   const top = survivors[0];
-  const tied = survivors.filter((g) => Math.abs(top.proScore - g.proScore) <= TIE_DELTA);
+  const tied = survivors.filter((g) => Math.abs(top.probability - g.probability) <= TIE_DELTA);
 
   let best = top;
   if (tied.length > 1) {
     tied.sort((a, b) => {
-      // Prefer groups with lower contraScore, then higher memberCount.
-      if (a.contraScore !== b.contraScore) {
-        return a.contraScore - b.contraScore;
+      // Prefer groups with lower normalized contra, then higher member count.
+      if (a.normContra !== b.normContra) {
+        return a.normContra - b.normContra;
       }
       if (b.memberCount !== a.memberCount) {
         return b.memberCount - a.memberCount;
@@ -830,12 +1257,9 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
 
   const pro = Math.round(best.proScore);
   const contra = Math.round(best.contraScore);
-
-  // Derive a friendly 0–100 "likelihood" purely for UI.
-  const denominator = best.proScore + best.contraScore + 50;
-  const probability = denominator > 0
-    ? Math.max(0, Math.min(100, Math.round((best.proScore / denominator) * 100)))
-    : 0;
+  const normPro = toOneDecimal(best.normPro);
+  const normContra = toOneDecimal(best.normContra);
+  const bestProbability = best.probability;
 
   const bd = best.breakdown || {};
   const clothingPro = Math.round(bd.clothingPro || 0);
@@ -848,8 +1272,16 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
   const hairContra = Math.round(bd.hairContra || 0);
   const rareContra = Math.round(bd.rareContra || 0);
 
+  let clothingCapNote = '';
+  if (
+    typeof bd.clothingProRaw === 'number' &&
+    typeof bd.clothingProApplied === 'number' &&
+    bd.clothingProRaw > bd.clothingProApplied
+  ) {
+    clothingCapNote = ` (capped at ${Math.round(bd.clothingProApplied)} of ${Math.round(bd.clothingProRaw)})`;
+  }
   const proParts = [];
-  if (clothingPro > 0) proParts.push(`clothing ${clothingPro}`);
+  if (clothingPro > 0) proParts.push(`clothing ${clothingPro}${clothingCapNote}`);
   if (physicalPro > 0) proParts.push(`physical ${physicalPro}`);
   if (hairPro > 0) proParts.push(`hair ${hairPro}`);
   if (rarePro > 0) proParts.push(`rare ${rarePro}`);
@@ -863,12 +1295,16 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
   const proText = proParts.length ? proParts.join(', ') : 'none';
   const contraText = contraParts.length ? contraParts.join(', ') : 'none';
 
-  const explanation = `proScore=${pro}, contraScore=${contra}. Pros: ${proText}. Contras: ${contraText}.`;
+  const explanation = [
+    `normPro=${normPro}, normContra=${normContra}, probability=${bestProbability}%.`,
+    `Raw proScore=${pro}, contraScore=${contra}. Pros: ${proText}. Contras: ${contraText}.`
+  ].join(' ');
 
   return {
     bestGroupId: best.groupId ?? null,
-    bestGroupProbability: probability,
-    explanation
+    bestGroupProbability: bestProbability,
+    explanation,
+    shortlist
   };
 }
 

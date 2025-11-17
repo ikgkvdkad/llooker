@@ -8,6 +8,11 @@ const {
   evaluateDescriptionGrouping,
   GROUPING_MATCH_THRESHOLD
 } = require('./shared/single-description.js');
+const { verifyShortlistWithVision } = require('./shared/vision-verification.js');
+const {
+  collectGroupsWithRepresentatives,
+  buildVisionSummary
+} = require('./shared/grouping-helpers.js');
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -90,6 +95,14 @@ exports.handler = async (event) => {
     };
   }
 
+  const selectionCapturedAtIso = (() => {
+    const value = row.captured_at || null;
+    if (!value) return null;
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toISOString();
+  })();
+
   let description;
   try {
     description = await generateStablePersonDescription(row.image_data_url);
@@ -116,67 +129,111 @@ exports.handler = async (event) => {
   let groupingDebugForResponse = null;
   let groupingProbabilityForUpdate = null;
   let groupingExplanationForUpdate = null;
+  let groupsMap = new Map();
+  let shortlist = [];
+  let visionOutcome = null;
 
   try {
     // Only assign or re-evaluate a group using structured description.
-    const groupsResult = await pool.query(
-      `
-        SELECT person_group_id, description_json
-        FROM ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME}
-        WHERE description_json IS NOT NULL
-          AND person_group_id IS NOT NULL
-          AND id <> $1
-      `,
-      [id]
-    );
+      const groupsResult = await pool.query(
+        `
+          SELECT id,
+                 person_group_id,
+                 description_json,
+                 image_data_url,
+                 captured_at,
+                 created_at
+          FROM ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME}
+          WHERE description_json IS NOT NULL
+            AND person_group_id IS NOT NULL
+            AND id <> $1
+        `,
+        [id]
+      );
 
-    const rows = groupsResult.rows || [];
-    const groups = [];
-    const memberCounts = new Map();
-    for (const r of rows) {
-      const gid = r.person_group_id;
-      if (!gid || !r.description_json) continue;
-      const key = String(gid);
-      memberCounts.set(key, (memberCounts.get(key) || 0) + 1);
-    }
-    for (const r of rows) {
-      const gid = r.person_group_id;
-      const canonical = r.description_json;
-      if (!gid || !canonical) continue;
-      const key = String(gid);
-      groups.push({
-        group_id: gid,
-        group_canonical: canonical,
-        group_member_count: memberCounts.get(key) || 1
-      });
-    }
+      const rows = groupsResult.rows || [];
+      const collection = collectGroupsWithRepresentatives(rows);
+      const groups = collection.groups;
+      groupsMap = collection.groupsMap;
 
-    const groupingResult = await evaluateDescriptionGrouping(description.schema, groups);
-    const bestGroupId = Number.isFinite(Number(groupingResult.bestGroupId))
-      ? Number(groupingResult.bestGroupId)
-      : null;
-    const bestGroupProbability = Number.isFinite(Number(groupingResult.bestGroupProbability))
-      ? Math.max(0, Math.min(100, Math.round(Number(groupingResult.bestGroupProbability))))
-      : null;
-    const explanation = groupingResult.explanation && typeof groupingResult.explanation === 'string'
-      ? groupingResult.explanation.trim()
-      : '';
+      const groupingResult = await evaluateDescriptionGrouping(description.schema, groups);
+      const bestGroupId = Number.isFinite(Number(groupingResult.bestGroupId))
+        ? Number(groupingResult.bestGroupId)
+        : null;
+      const bestGroupProbability = Number.isFinite(Number(groupingResult.bestGroupProbability))
+        ? Math.max(0, Math.min(100, Math.round(Number(groupingResult.bestGroupProbability))))
+        : null;
+      const explanation = groupingResult.explanation && typeof groupingResult.explanation === 'string'
+        ? groupingResult.explanation.trim()
+        : '';
+      shortlist = Array.isArray(groupingResult.shortlist) ? groupingResult.shortlist : [];
 
-    // Rely on the pro/contra thresholds inside evaluateDescriptionGrouping.
-    if (bestGroupId) {
-      personGroupId = bestGroupId;
-    }
+      let finalGroupId = bestGroupId;
+      let finalProbability = bestGroupProbability;
+      const explanationPieces = [];
+      if (explanation) {
+        explanationPieces.push(explanation);
+      }
 
-    groupingProbabilityForUpdate = bestGroupProbability;
-    groupingExplanationForUpdate = explanation || null;
+      if (shortlist.length) {
+        try {
+          visionOutcome = await verifyShortlistWithVision({
+            shortlist,
+            newSelection: {
+              imageDataUrl: row.image_data_url,
+              descriptionSchema: description.schema,
+              capturedAt: selectionCapturedAtIso
+            },
+            groupsById: groupsMap
+          });
+        } catch (visionError) {
+          console.error('Vision verification failed for updated selection:', {
+            id,
+            message: visionError?.message,
+            stack: visionError?.stack
+          });
+          visionOutcome = {
+            approvedGroupId: null,
+            comparisons: [],
+            applied: true,
+            reason: 'vision_exception',
+            error: visionError?.message || 'Vision helper crashed'
+          };
+        }
 
-    groupingDebugForResponse = {
-      newDescription: description.schema,
-      groups,
-      bestGroupId,
-      bestGroupProbability,
-      explanation
-    };
+        const visionSummary = buildVisionSummary(visionOutcome, groupsMap);
+        if (visionSummary) {
+          explanationPieces.push(visionSummary);
+        }
+
+        if (!visionOutcome?.applied) {
+          finalGroupId = null;
+          finalProbability = 0;
+        } else if (visionOutcome.approvedGroupId) {
+          finalGroupId = visionOutcome.approvedGroupId;
+        } else {
+          finalGroupId = null;
+          finalProbability = 0;
+        }
+      }
+
+      if (finalGroupId) {
+        personGroupId = finalGroupId;
+      }
+
+      groupingProbabilityForUpdate = finalProbability;
+      const combinedExplanation = explanationPieces.filter(Boolean).join(' ').trim();
+      groupingExplanationForUpdate = combinedExplanation || null;
+
+      groupingDebugForResponse = {
+        newDescription: description.schema,
+        groups,
+        shortlist,
+        bestGroupId,
+        bestGroupProbability,
+        explanation: groupingExplanationForUpdate,
+        vision: visionOutcome
+      };
   } catch (groupError) {
     console.error('Failed to evaluate grouping for updated single selection:', {
       id,
