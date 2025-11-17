@@ -8,6 +8,11 @@ const DEFAULT_ANALYSES_TABLE_NAME = 'portrait_analyses';
 const ANALYSES_TABLE_ENV_KEY = 'ANALYSES_TABLE';
 const PG_TABLE_NOT_FOUND = '42P01';
 const PG_INSUFFICIENT_PRIVILEGE = '42501';
+const PG_FEATURE_NOT_SUPPORTED = '0A000';
+
+function isTruncateDisallowed(error) {
+  return error?.code === PG_INSUFFICIENT_PRIVILEGE || error?.code === PG_FEATURE_NOT_SUPPORTED;
+}
 
 function resolveAnalysesTableName() {
   const configured = process.env[ANALYSES_TABLE_ENV_KEY];
@@ -95,9 +100,10 @@ exports.handler = async (event) => {
       singleTableTruncated = true;
       console.info('clear-single-selections: truncated single selection table.');
     } catch (truncateError) {
-      if (truncateError?.code === PG_INSUFFICIENT_PRIVILEGE) {
+      if (isTruncateDisallowed(truncateError)) {
         console.warn(
-          `Insufficient privilege to truncate ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME}. Falling back to DELETE.`
+          `Unable to truncate ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME}; falling back to DELETE.`,
+          { code: truncateError?.code, message: truncateError?.message }
         );
         const deleteResult = await client.query(
           `DELETE FROM ${SINGLE_CAMERA_SELECTIONS_TABLE_NAME};`
@@ -154,9 +160,10 @@ exports.handler = async (event) => {
         analysesTableTruncated = true;
         console.info('clear-single-selections: truncated analyses table.');
       } catch (truncateError) {
-        if (truncateError?.code === PG_INSUFFICIENT_PRIVILEGE) {
+        if (isTruncateDisallowed(truncateError)) {
           console.warn(
-            `Insufficient privilege to truncate ${ANALYSES_TABLE_NAME}. Falling back to DELETE.`
+            `Unable to truncate ${ANALYSES_TABLE_NAME}; falling back to DELETE.`,
+            { code: truncateError?.code, message: truncateError?.message }
           );
           try {
             const deleteResult = await client.query(`DELETE FROM ${ANALYSES_TABLE_NAME};`);
