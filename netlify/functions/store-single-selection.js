@@ -159,29 +159,15 @@ let createdNewGroupId = null;
       }
 
       if (shortlist.length) {
-        try {
-          visionOutcome = await verifyShortlistWithVision({
-            shortlist,
-            newSelection: {
-              imageDataUrl,
-              descriptionSchema: descriptionResult ? descriptionResult.schema : null,
-              capturedAt: capturedAtIso
-            },
-            groupsById: groupsMap
-          });
-        } catch (visionError) {
-          console.error('Vision verification failed for single selection:', {
-            message: visionError?.message,
-            stack: visionError?.stack
-          });
-          visionOutcome = {
-            approvedGroupId: null,
-            comparisons: [],
-            applied: true,
-            reason: 'vision_exception',
-            error: visionError?.message || 'Vision helper crashed'
-          };
-        }
+        visionOutcome = await verifyShortlistWithVision({
+          shortlist,
+          newSelection: {
+            imageDataUrl,
+            descriptionSchema: descriptionResult ? descriptionResult.schema : null,
+            capturedAt: capturedAtIso
+          },
+          groupsById: groupsMap
+        });
 
         const visionSummary = buildVisionSummary(visionOutcome, groupsMap);
         if (visionSummary) {

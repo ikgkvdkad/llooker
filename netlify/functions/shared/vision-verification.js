@@ -17,14 +17,7 @@ const VISION_ACCEPT_SIMILARITY = (() => {
 })();
 const VISION_ACCEPT_CONFIDENCE = (process.env.VISION_ACCEPT_CONFIDENCE || 'high').toLowerCase();
 
-let visionMatchModulePromise = null;
-
-function loadVisionMatchModule() {
-  if (!visionMatchModulePromise) {
-    visionMatchModulePromise = import('./vision-match.js');
-  }
-  return visionMatchModulePromise;
-}
+const { performVisionMatch } = require('./vision-match.js');
 
 function buildPhotoPayload(imageDataUrl, schema, capturedAt) {
   if (!imageDataUrl) {
@@ -85,7 +78,6 @@ async function verifyShortlistWithVision({ shortlist, newSelection, groupsById }
     };
   }
 
-  const { performVisionMatch } = await loadVisionMatchModule();
   const openai = new OpenAI({ apiKey });
   const comparisons = [];
   const groupMap = ensureMap(groupsById);

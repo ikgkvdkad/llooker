@@ -1,4 +1,4 @@
-export const DEFAULT_VISION_MODEL = 'gpt-4o-mini';
+const DEFAULT_VISION_MODEL = 'gpt-4o-mini';
 
 function formatTimeContext(candidate, reference) {
   const time1 = candidate?.capturedAt ? new Date(candidate.capturedAt) : null;
@@ -17,7 +17,7 @@ function formatTimeContext(candidate, reference) {
   };
 }
 
-export function summariseSubject(subject = {}) {
+function summariseSubject(subject = {}) {
   const gender = subject.gender || 'unknown-gender';
   const ageRange = subject.ageRange || subject.ageBucket || 'unknown-age';
   const build = subject.build || subject.bodyType || 'unknown-build';
@@ -37,7 +37,7 @@ export function summariseSubject(subject = {}) {
   return `Gender: ${gender}. Age: ${ageRange}. Build: ${build}. Skin tone: ${skinTone}. Hair: ${hairSummary}. Eyewear: ${eyewear}. Headwear: ${headwear}. Distinguishing features: ${distinguishing}.`;
 }
 
-export function summariseClothing(clothing = {}, accessories = {}, carriedItems = []) {
+function summariseClothing(clothing = {}, accessories = {}, carriedItems = []) {
   const formatItem = (item = {}) => {
     if (!item || typeof item !== 'object') {
       return 'unknown';
@@ -75,7 +75,7 @@ export function summariseClothing(clothing = {}, accessories = {}, carriedItems 
   ].join('\n');
 }
 
-  export function buildComparisonPrompt(candidate, reference) {
+function buildComparisonPrompt(candidate, reference) {
   const time = formatTimeContext(candidate, reference);
   const subjectSummary1 = summariseSubject(candidate.analysis?.subject || {});
   const subjectSummary2 = summariseSubject(reference.analysis?.subject || {});
@@ -158,7 +158,7 @@ Examples:
   };
 }
 
-export async function performVisionMatch(openai, candidate, reference, options = {}) {
+async function performVisionMatch(openai, candidate, reference, options = {}) {
   if (!candidate?.imageDataUrl || !reference?.imageDataUrl) {
     throw new Error('Both candidate and reference require imageDataUrl for vision comparison.');
   }
@@ -213,3 +213,11 @@ export async function performVisionMatch(openai, candidate, reference, options =
       timeDiffMinutes: timeDiffMinutes !== null ? Math.round(timeDiffMinutes) : null
     };
 }
+
+module.exports = {
+  DEFAULT_VISION_MODEL,
+  performVisionMatch,
+  buildComparisonPrompt,
+  summariseSubject,
+  summariseClothing
+};
