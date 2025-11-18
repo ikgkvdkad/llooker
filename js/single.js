@@ -46,6 +46,24 @@ const DESCRIPTION_CLARITY_EMPTY_TEXT = 'Clarity score not available for this pho
 const SINGLE_UPLOAD_LABEL = 'Subject';
 const pendingSingleUploads = [];
 let isProcessingSingleUpload = false;
+const VISION_TOGGLE_KEY = 'llooker_vision_enabled';
+
+function isVisionEnabled() {
+    try {
+        const stored = localStorage.getItem(VISION_TOGGLE_KEY);
+        return stored === null ? true : stored === 'true';
+    } catch {
+        return true;
+    }
+}
+
+function setVisionEnabled(enabled) {
+    try {
+        localStorage.setItem(VISION_TOGGLE_KEY, String(Boolean(enabled)));
+    } catch (error) {
+        console.warn('Failed to store vision toggle state:', error);
+    }
+}
 
 function toOneDecimalLocal(value) {
     const num = Number(value);
@@ -845,7 +863,8 @@ async function saveCurrentSelection({ viewportOverride = null } = {}) {
         viewport: viewportForSave,
         signature,
         capturedAt: capturedAtIso,
-        mode: 'single'
+        mode: 'single',
+        visionEnabled: isVisionEnabled()
     };
 
     try {
@@ -1279,6 +1298,15 @@ function initSinglePage() {
     if (clearButton) {
         clearButton.addEventListener('click', () => {
             void clearAllSelections();
+        });
+    }
+
+    // Vision toggle
+    const visionToggle = document.getElementById('visionToggle');
+    if (visionToggle) {
+        visionToggle.checked = isVisionEnabled();
+        visionToggle.addEventListener('change', () => {
+            setVisionEnabled(visionToggle.checked);
         });
     }
 

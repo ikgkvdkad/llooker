@@ -95,6 +95,7 @@ exports.handler = async (event) => {
     : null;
   const signature = typeof payload.signature === 'string' ? payload.signature.slice(0, 512) : null;
   const mode = typeof payload.mode === 'string' ? payload.mode.trim().toLowerCase().slice(0, 32) : 'single';
+  const visionEnabled = payload.visionEnabled !== false;
 
   const descriptionResult = await generateStablePersonDescription(imageDataUrl);
   const newSchemaClarity = descriptionResult && descriptionResult.schema
@@ -158,7 +159,7 @@ let createdNewGroupId = null;
         explanationPieces.push(explanation);
       }
 
-      if (shortlist.length) {
+      if (shortlist.length && visionEnabled) {
         visionOutcome = await verifyShortlistWithVision({
           shortlist,
           newSelection: {
@@ -183,6 +184,12 @@ let createdNewGroupId = null;
           finalGroupId = null;
           finalProbability = 0;
         }
+      } else if (shortlist.length && !visionEnabled) {
+        // Vision disabled: auto-assign to top shortlist candidate
+        const topCandidate = shortlist[0];
+        finalGroupId = topCandidate.groupId;
+        finalProbability = GROUPING_MATCH_THRESHOLD;
+        explanationPieces.push(`Vision verification disabled. Auto-assigned to group ${topCandidate.groupId} (top text-match candidate with ${topCandidate.matchedTraits?.length || 0}/9 traits).`);
       }
 
       if (finalGroupId) {
