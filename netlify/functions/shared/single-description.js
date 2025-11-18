@@ -62,7 +62,7 @@ const NORM_PRO_MIN = (() => {
   if (Number.isFinite(raw)) {
     return Math.max(0, Math.min(100, raw));
   }
-  return 50; // allow strong-but-limited descriptions to survive shortlist gate
+  return 35; // real-world same-person photos score 35-45 normalized
 })();
 const NORM_CONTRA_MAX = (() => {
   const raw = Number(process.env.NORM_CONTRA_MAX);
