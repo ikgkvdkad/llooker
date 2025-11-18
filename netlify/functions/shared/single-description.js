@@ -1,8 +1,8 @@
 const OPENAI_MODEL = 'gpt-4o-mini';
 const GROUPING_MATCH_THRESHOLD = 60;
 
-// Stable trait matching - these must be compatible for a match
-const STABLE_TRAIT_THRESHOLD = 0.7; // 70% of stable traits must match
+// Stable trait matching - minimum matches needed for shortlist
+const STABLE_TRAIT_THRESHOLD = 0.5; // 50% of stable traits must match (5 of 9)
 
 // Color equivalence groups for matching
 const COLOR_EQUIVALENCE = [
@@ -37,101 +37,42 @@ function valuesMatch(val1, val2) {
 function checkStableCompatibility(schema1, schema2) {
   const checks = [];
   
-  // Gender must match
+  // Only gender is truly fatal
   const genderMatch = valuesMatch(schema1.gender, schema2.gender);
   if (genderMatch === false) {
     return { compatible: false, reason: 'gender_mismatch', details: `${schema1.gender} vs ${schema2.gender}` };
   }
   if (genderMatch === true) checks.push('gender');
   
-  // Hair color must be compatible
+  // Everything else: count matches but don't reject on mismatches
+  // Let vision decide if differences are real or just AI inconsistency
+  
   const hairMatch = colorsMatch(schema1.hair_color, schema2.hair_color);
-  if (hairMatch === false) {
-    return { compatible: false, reason: 'hair_color_mismatch', details: `${schema1.hair_color} vs ${schema2.hair_color}` };
-  }
   if (hairMatch === true) checks.push('hair_color');
   
-  // Hair length should be compatible
   const hairLengthMatch = valuesMatch(schema1.hair_length, schema2.hair_length);
-  if (hairLengthMatch === false) {
-    return { compatible: false, reason: 'hair_length_mismatch', details: `${schema1.hair_length} vs ${schema2.hair_length}` };
-  }
   if (hairLengthMatch === true) checks.push('hair_length');
   
-  // Build should match
   const buildMatch = valuesMatch(schema1.build, schema2.build);
-  if (buildMatch === false) {
-    return { compatible: false, reason: 'build_mismatch', details: `${schema1.build} vs ${schema2.build}` };
-  }
   if (buildMatch === true) checks.push('build');
   
-  // Skin tone should match
   const skinMatch = valuesMatch(schema1.skin_tone, schema2.skin_tone);
-  if (skinMatch === false) {
-    return { compatible: false, reason: 'skin_tone_mismatch', details: `${schema1.skin_tone} vs ${schema2.skin_tone}` };
-  }
   if (skinMatch === true) checks.push('skin_tone');
   
-  // Age should be compatible (allow adjacent ranges)
   const age1 = schema1.age_range;
   const age2 = schema2.age_range;
-  if (age1 && age2 && age1 !== 'unknown' && age2 !== 'unknown') {
-    const ageOrder = ['18-24', '25-34', '35-44', '45-54', '55+'];
-    const idx1 = ageOrder.indexOf(age1);
-    const idx2 = ageOrder.indexOf(age2);
-    if (idx1 >= 0 && idx2 >= 0) {
-      if (Math.abs(idx1 - idx2) > 1) {
-        return { compatible: false, reason: 'age_mismatch', details: `${age1} vs ${age2}` };
-      }
-      if (idx1 === idx2) checks.push('age');
-    }
+  if (age1 && age2 && age1 !== 'unknown' && age2 !== 'unknown' && age1 === age2) {
+    checks.push('age');
   }
   
-  // Top color must match (core outfit)
   const topMatch = colorsMatch(schema1.top_color, schema2.top_color);
-  if (topMatch === false) {
-    return { compatible: false, reason: 'top_color_mismatch', details: `${schema1.top_color} vs ${schema2.top_color}` };
-  }
   if (topMatch === true) checks.push('top_color');
   
-  // Bottom color must match (core outfit)
   const bottomMatch = colorsMatch(schema1.bottom_color, schema2.bottom_color);
-  if (bottomMatch === false) {
-    return { compatible: false, reason: 'bottom_color_mismatch', details: `${schema1.bottom_color} vs ${schema2.bottom_color}` };
-  }
   if (bottomMatch === true) checks.push('bottom_color');
   
-  // Shoes color should match
   const shoesMatch = colorsMatch(schema1.shoes_color, schema2.shoes_color);
-  if (shoesMatch === false) {
-    return { compatible: false, reason: 'shoes_color_mismatch', details: `${schema1.shoes_color} vs ${schema2.shoes_color}` };
-  }
   if (shoesMatch === true) checks.push('shoes_color');
-  
-  // Check bottom type (shorts vs pants is fatal)
-  const bottom1 = (schema1.bottom_description || '').toLowerCase();
-  const bottom2 = (schema2.bottom_description || '').toLowerCase();
-  if (bottom1 && bottom2 && bottom1 !== 'unknown' && bottom2 !== 'unknown') {
-    const isShorts1 = bottom1.includes('short');
-    const isPants1 = bottom1.includes('pant') || bottom1.includes('jean') || bottom1.includes('trouser');
-    const isSkirt1 = bottom1.includes('skirt');
-    const isDress1 = bottom1.includes('dress');
-    
-    const isShorts2 = bottom2.includes('short');
-    const isPants2 = bottom2.includes('pant') || bottom2.includes('jean') || bottom2.includes('trouser');
-    const isSkirt2 = bottom2.includes('skirt');
-    const isDress2 = bottom2.includes('dress');
-    
-    if ((isShorts1 && isPants2) || (isPants1 && isShorts2)) {
-      return { compatible: false, reason: 'bottom_type_mismatch', details: `${bottom1} vs ${bottom2}` };
-    }
-    if ((isSkirt1 && !isSkirt2 && (isPants2 || isShorts2)) || (isSkirt2 && !isSkirt1 && (isPants1 || isShorts1))) {
-      return { compatible: false, reason: 'bottom_type_mismatch', details: `${bottom1} vs ${bottom2}` };
-    }
-    if ((isDress1 && !isDress2 && (isPants2 || isShorts2)) || (isDress2 && !isDress1 && (isPants1 || isShorts1))) {
-      return { compatible: false, reason: 'outfit_class_mismatch', details: `${bottom1} vs ${bottom2}` };
-    }
-  }
   
   return { compatible: true, matchedTraits: checks };
 }
