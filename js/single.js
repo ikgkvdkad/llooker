@@ -862,6 +862,7 @@ async function saveCurrentSelection({ viewportOverride = null } = {}) {
             capturedAt: selectionMeta.capturedAt || capturedAtIso,
             description: selectionMeta.description || '',
             descriptionSchema: selectionMeta.descriptionSchema || null,
+            descriptionClarity: selectionMeta.descriptionClarity || null,
             groupingProbability: Number.isFinite(Number(selectionMeta.groupingProbability))
                 ? Number(selectionMeta.groupingProbability)
                 : null,
