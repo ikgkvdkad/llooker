@@ -111,25 +111,29 @@ Photo 2 discriminators: ${JSON.stringify(discriminators2)}
 
   Step 0 — Fatal-mismatch check (do this first). If ANY fatal mismatch is present, set probability = 0 and return immediately with an explanation naming the fatal mismatch.
 
-  Fatal mismatches (examples):
-  - Different major lower-body garment category (skirt/dress/shorts vs full-length pants/jeans).
+  Fatal mismatches (ONLY these, nothing else):
+  - Different major lower-body garment category (skirt/dress vs full-length pants/jeans vs shorts) — but "jeans" and "pants" are the same category.
   - Different major outfit class (dress/one-piece vs separate top+bottom).
-  - Clear gender-presentation conflict.
-  - Clear age-band conflict (non-overlapping age estimates).
-  - Opposite footwear state if visible (barefoot vs wearing shoes/heels) when footwear is described.
+  - Clear gender-presentation conflict (male vs female).
+  - Clear age-band conflict (child vs adult, or 20s vs 60s — but 50s vs 60s is NOT fatal).
 
-  Do NOT treat absent mention of a trait as fatal unless the trait is explicitly described differently in both descriptions (e.g., "wearing jeans" vs "wearing a skirt").
+  Do NOT treat as fatal:
+  - Removable accessories (hats, bags, scarves) — people can take these off between photos.
+  - Footwear description variations ("shoes" vs "sneakers" vs "boots" — these are all footwear).
+  - Minor clothing color variations due to lighting ("dark blue" vs "navy" vs "black").
+  - Absent mention of a trait in one photo but present in another (only fatal if BOTH explicitly describe it differently).
 
   TASK:
   Determine the probability (0-100%) that these are photos of the SAME PERSON.
 
 CRITICAL RULES:
   1. Gender mismatch = 0% (fatal).
-  2. Outfits captured within short time (~hours) must align in dominant colours, layers, and footwear.
-  3. Hair colour/length/style and notable accessories must align.
-  4. Build, age range, and skin tone must be compatible.
-  5. Carried items or standout accessories are strong differentiators.
-  6. When uncertain, be conservative (prefer false negative over false positive).
+  2. For photos taken within minutes (time difference < 5 min), allow for removable items (hats, bags) to differ.
+  3. Core outfit (top + bottom colors and types) must align for short time windows.
+  4. Hair color/length must be compatible (but "black" vs "dark brown" is compatible).
+  5. Build, age range, and skin tone must be compatible.
+  6. Footwear type variations ("shoes" vs "sneakers") are NOT grounds for rejection if everything else matches.
+  7. When photos are taken seconds/minutes apart and all permanent traits match, prefer match over rejection.
 
 COMPARISON PRIORITIES (in order):
 1. Gender

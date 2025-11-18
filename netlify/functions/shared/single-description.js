@@ -1361,7 +1361,15 @@ async function evaluateDescriptionGrouping(newDescriptionSchema, existingGroups)
 
   if (!survivors.length) {
     // Find the best overall candidate for explanation purposes.
-    scored.sort((a, b) => b.proScore - a.proScore);
+    // Prioritize non-fatal groups, then sort by proScore.
+    scored.sort((a, b) => {
+      const aFatal = a.fatalMismatch ? 1 : 0;
+      const bFatal = b.fatalMismatch ? 1 : 0;
+      if (aFatal !== bFatal) {
+        return aFatal - bFatal; // non-fatal first
+      }
+      return b.proScore - a.proScore;
+    });
     const candidate = scored[0];
     let explanation = '';
     if (candidate?.fatalMismatch) {
