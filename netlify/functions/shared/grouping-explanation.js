@@ -54,24 +54,6 @@ function unpackExplanationWithDetails(packed) {
   };
 }
 
-function describeFatalMismatch(fatal) {
-  if (!fatal || typeof fatal !== 'object') {
-    return null;
-  }
-  const parts = [];
-  if (fatal.type) {
-    const label = fatal.type.replace(/_/g, ' ');
-    parts.push(label);
-  }
-  if (fatal.detail) {
-    parts.push(fatal.detail);
-  }
-  if (Number.isFinite(fatal.confidencePair)) {
-    parts.push(`conf_pair=${fatal.confidencePair}`);
-  }
-  return parts.join(' · ') || null;
-}
-
 function summarizeBestCandidate(candidate, groupsMap, newImageClarity = null) {
   if (!candidate || typeof candidate !== 'object') {
     return null;
@@ -79,21 +61,20 @@ function summarizeBestCandidate(candidate, groupsMap, newImageClarity = null) {
   const meta = groupsMap instanceof Map
     ? (groupsMap.get(String(candidate.groupId)) || {})
     : {};
+  
+  const incompatibilityReason = candidate.compatible === false && candidate.reason
+    ? `${candidate.reason.replace(/_/g, ' ')}: ${candidate.details || ''}`
+    : null;
+  
   return {
     groupId: candidate.groupId ?? null,
     memberCount: Number(candidate.memberCount) || 0,
-    proScore: Math.round(candidate.proScore || 0),
-    contraScore: Math.round(candidate.contraScore || 0),
-    normPro: toOneDecimal(candidate.normPro),
-    normContra: toOneDecimal(candidate.normContra),
-    probability: Number.isFinite(Number(candidate.probability))
-      ? Math.round(Number(candidate.probability))
-      : null,
-    fatalMismatchReason: describeFatalMismatch(candidate.fatalMismatch) || null,
+    compatible: candidate.compatible !== false,
+    incompatibilityReason,
+    matchedTraits: candidate.matchedTraits || [],
+    matchRatio: Number.isFinite(Number(candidate.matchRatio)) ? Math.round(Number(candidate.matchRatio) * 100) : null,
     groupClarity: typeof candidate.groupClarity === 'number' ? candidate.groupClarity : null,
     newImageClarity: Number.isFinite(Number(newImageClarity)) ? Math.round(Number(newImageClarity)) : null,
-    fallbackReason: candidate.fallbackReason || null,
-    breakdown: candidate.breakdown || null,
     representativeImage: meta.representativeImage || null,
     representativeSelectionId: meta.representativeSelectionId || null,
     representativeCapturedAt: meta.representativeCapturedAt || null

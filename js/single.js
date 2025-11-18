@@ -126,43 +126,28 @@ function renderGroupingDetails(container, details) {
         return;
     }
     container.classList.remove('is-empty');
-    const rawScores = details.rawScores || {};
-    container.appendChild(createDetailSection(
-        'Raw scores',
-        `pro ${rawScores.pro ?? 'unknown'} vs contra ${rawScores.contra ?? 'unknown'}`
-    ));
-
-    const normalized = details.normalized || {};
-    container.appendChild(createDetailSection(
-        'Normalized',
-        `normPro ${normalized.normPro ?? 'unknown'} / ≥${normalized.requiredNormPro ?? 'n/a'}, normContra ${normalized.normContra ?? 'unknown'} / ≤${normalized.requiredNormContra ?? 'n/a'}, probability ${normalized.probability ?? 'unknown'}%`
-    ));
-
-    const proList = buildContributionList(details.proContributions);
-    container.appendChild(createDetailSection(
-        'Supporting evidence',
-        proList || 'No strong supporting cues were detected.'
-    ));
-
-    const contraList = buildContributionList(details.contraContributions);
-    container.appendChild(createDetailSection(
-        'Conflicting cues',
-        contraList || 'No major conflicts were recorded.'
-    ));
-
-    if (details.clarity && (details.clarity.newImage !== null || details.clarity.canonical !== null)) {
+    
+    if (details.matchedTraits && Array.isArray(details.matchedTraits)) {
+        const traitsList = details.matchedTraits.length 
+            ? details.matchedTraits.join(', ')
+            : 'none';
         container.appendChild(createDetailSection(
-            'Image clarity',
-            `incoming ${details.clarity.newImage ?? 'unknown'} vs canonical ${details.clarity.canonical ?? 'unknown'}`
+            'Matched stable traits',
+            traitsList
         ));
     }
-
-    if (details.fallbackApplied) {
+    
+    if (Number.isFinite(details.matchRatio) && Number.isFinite(details.requiredMatches)) {
         container.appendChild(createDetailSection(
-            'Override applied',
-            details.fallbackReason === 'clarity_override'
-                ? 'Accepted despite thresholds because the new photo is significantly clearer than the group reference.'
-                : 'Accepted via fallback despite thresholds.'
+            'Match threshold',
+            `${details.matchedTraits?.length || 0} of 9 stable traits matched (need ≥${details.requiredMatches})`
+        ));
+    }
+    
+    if (details.reason) {
+        container.appendChild(createDetailSection(
+            'Reason',
+            details.reason.replace(/_/g, ' ')
         ));
     }
 }
@@ -211,10 +196,16 @@ function renderBestCandidate(container, candidate, probabilityValue) {
 
     const lines = [
         candidate.groupId ? `Group ID: ${candidate.groupId}` : null,
-        `Raw scores: pro ${candidate.proScore ?? 'n/a'} vs contra ${candidate.contraScore ?? 'n/a'}`,
-        `Normalized: normPro ${candidate.normPro ?? 'n/a'}, normContra ${candidate.normContra ?? 'n/a'}, probability ${candidate.probability ?? 'n/a'}%`,
         `Members: ${candidate.memberCount ?? 0}`,
-        candidate.fatalMismatchReason ? `Fatal mismatch: ${candidate.fatalMismatchReason}` : null,
+        candidate.compatible === false && candidate.incompatibilityReason
+            ? `Incompatible: ${candidate.incompatibilityReason}`
+            : null,
+        candidate.matchedTraits && Array.isArray(candidate.matchedTraits)
+            ? `Matched traits: ${candidate.matchedTraits.join(', ') || 'none'}`
+            : null,
+        candidate.matchRatio !== null && candidate.matchRatio !== undefined
+            ? `Match ratio: ${candidate.matchRatio}%`
+            : null,
         (candidate.newImageClarity !== null || candidate.groupClarity !== null)
             ? `Clarity: new ${candidate.newImageClarity ?? 'n/a'} vs canonical ${candidate.groupClarity ?? 'n/a'}`
             : null
@@ -226,11 +217,6 @@ function renderBestCandidate(container, candidate, probabilityValue) {
         meta.appendChild(entry);
     });
 
-    if (candidate.fallbackReason === 'clarity_override') {
-        const note = document.createElement('div');
-        note.textContent = 'Accepted via clarity override (new photo significantly clearer).';
-        meta.appendChild(note);
-    }
 
     if (candidate.representativeCapturedAt) {
         const timeEntry = document.createElement('div');

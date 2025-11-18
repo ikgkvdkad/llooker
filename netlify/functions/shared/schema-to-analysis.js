@@ -26,17 +26,51 @@ function convertClothingItem(item) {
 }
 
 function buildClothingAnalysis(schema) {
-  const clothing = schema?.clothing && typeof schema.clothing === 'object' ? schema.clothing : {};
-  const dominantColors = Array.isArray(clothing.dominantColors)
-    ? clothing.dominantColors.filter(Boolean)
-    : [];
+  if (!schema || typeof schema !== 'object') {
+    return {
+      dominantColors: [],
+      top: null,
+      bottom: null,
+      outerwear: null,
+      footwear: null
+    };
+  }
+  
+  const topColor = normalizeString(schema.top_color);
+  const bottomColor = normalizeString(schema.bottom_color);
+  const shoesColor = normalizeString(schema.shoes_color);
+  const jacketColor = normalizeString(schema.jacket_color);
+  
+  const dominantColors = [topColor, bottomColor, jacketColor]
+    .filter(c => c && c !== 'unknown')
+    .slice(0, 3);
+  
   return {
     dominantColors,
-    top: convertClothingItem(clothing.top),
-    bottom: convertClothingItem(clothing.trousers),
-    outerwear: convertClothingItem(clothing.jacket),
-    footwear: convertClothingItem(clothing.shoes),
-    dress: convertClothingItem(clothing.dress)
+    top: {
+      category: normalizeString(schema.top_description) || 'unknown',
+      colors: topColor && topColor !== 'unknown' ? [topColor] : [],
+      pattern: null,
+      style: null
+    },
+    bottom: {
+      category: normalizeString(schema.bottom_description) || 'unknown',
+      colors: bottomColor && bottomColor !== 'unknown' ? [bottomColor] : [],
+      pattern: null,
+      style: null
+    },
+    outerwear: {
+      category: normalizeString(schema.jacket_description) || 'unknown',
+      colors: jacketColor && jacketColor !== 'unknown' ? [jacketColor] : [],
+      pattern: null,
+      style: null
+    },
+    footwear: {
+      category: normalizeString(schema.shoes_description) || 'unknown',
+      colors: shoesColor && shoesColor !== 'unknown' ? [shoesColor] : [],
+      pattern: null,
+      style: null
+    }
   };
 }
 
@@ -82,19 +116,18 @@ function schemaToVisionAnalysis(schema) {
   }
 
   const accessoriesList = Array.isArray(schema.accessories) ? schema.accessories : [];
-  const hair = schema.hair && typeof schema.hair === 'object' ? schema.hair : {};
 
   return {
     subject: {
-      gender: schema.gender_presentation?.value || 'unknown',
-      ageRange: schema.age_band?.value || schema.age_band || 'unknown',
-      build: schema.build?.value || 'unknown',
-      bodyType: schema.build?.value || 'unknown',
-      skinTone: schema.skin_tone?.value || 'unknown',
+      gender: normalizeString(schema.gender) || 'unknown',
+      ageRange: normalizeString(schema.age_range) || 'unknown',
+      build: normalizeString(schema.build) || 'unknown',
+      bodyType: normalizeString(schema.build) || 'unknown',
+      skinTone: normalizeString(schema.skin_tone) || 'unknown',
       hair: {
-        color: hair.color?.value || 'unknown',
-        length: hair.length?.value || 'unknown',
-        style: hair.style?.value || 'unknown'
+        color: normalizeString(schema.hair_color) || 'unknown',
+        length: normalizeString(schema.hair_length) || 'unknown',
+        style: normalizeString(schema.hair_style) || 'unknown'
       },
       eyewear: pickAccessory(accessoriesList, 'glasses'),
       headwear: pickAccessory(accessoriesList, 'hat'),
@@ -102,7 +135,7 @@ function schemaToVisionAnalysis(schema) {
     },
     clothing: buildClothingAnalysis(schema),
     accessories: buildAccessoriesMap(accessoriesList),
-    carriedItems: Array.isArray(schema.carried_items) ? schema.carried_items.filter(Boolean) : []
+    carriedItems: []
   };
 }
 
