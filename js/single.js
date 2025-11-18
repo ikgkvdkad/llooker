@@ -377,7 +377,7 @@ function renderSelectionRow(selection) {
         ? selection.groupingExplanation.trim()
         : '';
     const groupingExplanationDetails = selection.groupingExplanationDetails || null;
-    const rawClarity = Number.isFinite(Number(selection.descriptionClarity))
+    const rawClarity = (selection.descriptionClarity !== null && selection.descriptionClarity !== undefined && Number.isFinite(Number(selection.descriptionClarity)))
         ? Number(selection.descriptionClarity)
         : Number(selection.descriptionSchema?.image_clarity);
     const descriptionClarity = normalizeClarityValue(rawClarity);
