@@ -118,8 +118,7 @@ Photo 2 discriminators: ${JSON.stringify(discriminators2)}
   - Clear age-band conflict (child vs adult, or 20s vs 60s — but 50s vs 60s is NOT fatal).
 
   Do NOT treat as fatal:
-  - Removable accessories (hats, bags, scarves) — people can take these off between photos.
-  - Footwear description variations ("shoes" vs "sneakers" vs "boots" — these are all footwear).
+  - Removable accessories (hats, bags, scarves) — people can take these off.
   - Minor clothing color variations due to lighting ("dark blue" vs "navy" vs "black").
   - Absent mention of a trait in one photo but present in another (only fatal if BOTH explicitly describe it differently).
 
@@ -128,12 +127,11 @@ Photo 2 discriminators: ${JSON.stringify(discriminators2)}
 
 CRITICAL RULES:
   1. Gender mismatch = 0% (fatal).
-  2. For photos taken within minutes (time difference < 5 min), allow for removable items (hats, bags) to differ.
-  3. Core outfit (top + bottom colors and types) must align for short time windows.
+  2. Removable accessories (hats, bags, scarves) can differ between photos of the same person.
+  3. Core outfit (top + bottom colors and types) must align.
   4. Hair color/length must be compatible (but "black" vs "dark brown" is compatible).
   5. Build, age range, and skin tone must be compatible.
-  6. Footwear type variations ("shoes" vs "sneakers") are NOT grounds for rejection if everything else matches.
-  7. When photos are taken seconds/minutes apart and all permanent traits match, prefer match over rejection.
+  6. When uncertain, be conservative (prefer false negative over false positive).
 
 COMPARISON PRIORITIES (in order):
 1. Gender
