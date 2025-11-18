@@ -18,6 +18,7 @@ const {
   packExplanationWithDetails,
   summarizeBestCandidate
 } = require('./shared/grouping-explanation.js');
+const { allocatePersonGroupId } = require('./shared/person-group.js');
 
 function cloneDetails(details) {
   if (!details || typeof details !== 'object') {
@@ -109,6 +110,7 @@ exports.handler = async (event) => {
   let groupsMap = new Map();
   let shortlist = [];
   let visionOutcome = null;
+let createdNewGroupId = null;
 
   try {
     // Build canonical descriptions per existing person group using structured description_json.
@@ -199,6 +201,18 @@ exports.handler = async (event) => {
 
       if (finalGroupId) {
         personGroupIdForInsert = finalGroupId;
+      } else {
+        try {
+          createdNewGroupId = await allocatePersonGroupId(pool);
+          finalGroupId = createdNewGroupId;
+          personGroupIdForInsert = createdNewGroupId;
+          explanationPieces.push(`Started new group ${createdNewGroupId} because no existing group matched.`);
+        } catch (groupAllocError) {
+          console.error('Failed to allocate new person group id:', {
+            message: groupAllocError?.message,
+            stack: groupAllocError?.stack
+          });
+        }
       }
 
       const bestCandidateSummary = summarizeBestCandidate(
@@ -233,14 +247,34 @@ exports.handler = async (event) => {
         explanation: groupingExplanationTextForResponse,
         explanationDetails: groupingExplanationDetailsForResponse || null,
         bestCandidate: bestCandidateSummaryForResponse || groupingResult.bestCandidate || null,
-        vision: visionOutcome
+        vision: visionOutcome,
+        createdNewGroupId
       };
   } catch (groupingError) {
     console.error('Failed to evaluate grouping for single selection:', {
       message: groupingError?.message,
       stack: groupingError?.stack
     });
-    // Fall back to treating this as a new group; personGroupIdForInsert stays null.
+    if (!personGroupIdForInsert) {
+      try {
+        createdNewGroupId = await allocatePersonGroupId(pool);
+        personGroupIdForInsert = createdNewGroupId;
+        groupingExplanationTextForResponse = `Started new group ${createdNewGroupId} (grouping evaluation failed).`;
+        groupingExplanationDetailsForResponse = groupingExplanationDetailsForResponse || null;
+      } catch (fallbackError) {
+        console.error('Failed to allocate fallback person group id after grouping error:', {
+          message: fallbackError?.message,
+          stack: fallbackError?.stack
+        });
+      }
+    }
+  }
+
+  if (!groupingExplanationForInsert && groupingExplanationTextForResponse) {
+    groupingExplanationForInsert = packExplanationWithDetails(
+      groupingExplanationTextForResponse,
+      groupingExplanationDetailsForResponse || null
+    );
   }
 
   const hasStructuredDescription = descriptionResult && descriptionResult.schema && descriptionResult.naturalSummary;
@@ -271,8 +305,10 @@ exports.handler = async (event) => {
 
     let finalGroupId = record?.person_group_id ?? null;
 
-    // If this was a new person (no group match), use the selection id as its group id.
     if (!finalGroupId && record?.id) {
+      console.warn('Selection missing person_group_id after insert; falling back to selection id.', {
+        selectionId: record.id
+      });
       finalGroupId = record.id;
       try {
         await pool.query(
@@ -284,7 +320,7 @@ exports.handler = async (event) => {
           [finalGroupId, record.id]
         );
       } catch (updateError) {
-        console.error('Failed to assign person_group_id for new single selection:', {
+        console.error('Failed to backfill person_group_id for new single selection:', {
           id: record.id,
           message: updateError?.message,
           stack: updateError?.stack
@@ -309,7 +345,8 @@ exports.handler = async (event) => {
           groupingProbability: record?.grouping_probability ?? null,
           groupingExplanation: groupingExplanationTextForResponse,
           groupingExplanationDetails: groupingExplanationDetailsForResponse || null,
-          bestCandidate: bestCandidateSummaryForResponse || null
+          bestCandidate: bestCandidateSummaryForResponse || null,
+          createdNewGroupId: createdNewGroupId ?? null
         }
       })
     };
